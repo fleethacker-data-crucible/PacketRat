@@ -1,6 +1,11 @@
-# Secrets and machine-specific configuration
-Config/*.env
-!Config/*.env.example
+# Never commit local or potentially sensitive email data
+Logs/
+*.log
+*.tmp
+*.bak
+# Tokens / credentials / private configuration
+Config/mailhawk.env
+Config/*.local
 .env
 .env.*
 !.env.example
@@ -8,9 +13,9 @@ Config/*.env
 *.p12
 *.pem
 *.key
-# Local mail content, reports and logs
-Logs/
-*.log
-*.tmp
-.DS_Store
+*.secret
+# Workspace artifacts
+.vscode/
+.idea/
 Thumbs.db
+.DS_Store
