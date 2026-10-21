@@ -1,0 +1,16 @@
+# Secrets and machine-specific configuration
+Config/*.env
+!Config/*.env.example
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+# Local mail content, reports and logs
+Logs/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
