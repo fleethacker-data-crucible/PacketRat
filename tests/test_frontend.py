@@ -5,6 +5,7 @@ import http.server
 import socketserver
 import threading
 import base64
+import tempfile
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -23,7 +24,7 @@ def run():
         server_thread.start()
         try:
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+                browser = playwright.chromium.launch(headless=True,args=['--no-sandbox'])
                 page = browser.new_page(viewport={'width': 1450, 'height': 960},device_scale_factor=1)
                 errors=[]
                 page.on('pageerror', lambda err:errors.append(str(err)))
@@ -48,14 +49,22 @@ def run():
                 assert page.locator('#demoBanner').is_visible()
                 assert page.locator('.brand img').evaluate('(img) => img.naturalWidth') > 0
                 assert page.locator('.hero-art img').evaluate('(img) => img.naturalWidth') > 0
-                page.screenshot(path='/mnt/data/mailhawk_v2/overview-preview.png',full_page=True)
+                page.screenshot(path=str(Path(tempfile.gettempdir())/'mailhawk-overview-smoke.png'),full_page=True)
+                page.locator('#priorityList .item-title').first.click()
+                page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode')")
+                page.locator('[data-metric="high"]').click()
+                assert page.locator('#triage').is_visible()
+                assert page.locator('#queue .item').count()==2
+                page.locator('[data-filter="all"]').click()
                 page.locator('.sidebar [data-view="triage"]').click()
                 assert page.locator('#triage').is_visible()
                 assert page.locator('#queue .item').count()==4
+                page.locator('#queue [data-priority-key]').first.select_option('Low')
+                page.wait_for_function("document.getElementById('notice').textContent.includes('Priority updated')")
                 page.locator('#queueSearch').fill('milestone')
                 assert page.locator('#queue .item').count()==1
                 page.locator('#queueSearch').fill('')
-                page.screenshot(path='/mnt/data/mailhawk_v2/queue-preview.png',full_page=True)
+                page.screenshot(path=str(Path(tempfile.gettempdir())/'mailhawk-queue-smoke.png'),full_page=True)
                 page.once('dialog', lambda dialog: dialog.accept('Sample false positive'))
                 page.locator('#queue [data-act="dismiss"]').first.click()
                 page.wait_for_function("document.getElementById('mDismiss').textContent === '1'")
@@ -68,9 +77,22 @@ def run():
                 assert page.locator('#draftDialog').is_visible()
                 page.locator('#generateDraft').click()
                 page.wait_for_function("document.getElementById('draftBody').value.length > 30")
+                assert page.locator('#draftOptions .draft-option').count()==2
+                page.locator('[data-draft-option="B"]').click()
+                assert 'appreciate' in page.locator('#draftBody').input_value()
+                page.locator('#draftBody').fill('Customized option B.')
+                page.locator('[data-draft-option="A"]').click()
+                page.locator('[data-draft-option="B"]').click()
+                assert page.locator('#draftBody').input_value()=='Customized option B.'
                 page.locator('#closeDialog').click()
                 page.get_by_role('button',name='Configuration').click()
                 assert page.locator('#settings').is_visible()
+                assert page.locator('#rulesList .rule-row').count() == 5
+                page.locator('#addRule').click()
+                assert page.locator('#rulesList .rule-row').count() == 6
+                page.locator('#saveRules').click()
+                page.wait_for_function("document.getElementById('rulesStatus').textContent.includes('Saved')")
+                assert page.locator('#rulesList .rule-row').count() == 6
                 assert page.locator('#credentialSource').is_visible()
                 assert not page.locator('#manualTokenFields').is_visible()
                 page.locator('#credentialSource').select_option('Manual')
@@ -79,6 +101,8 @@ def run():
                 page.locator('#applyCredentials').click()
                 assert page.locator('#credentialToken').input_value() == ''
                 assert 'Demo mode' in page.locator('#notice').inner_text()
+                page.locator('[data-view="report"]').click()
+                assert page.locator('#reportText h2').count() >= 3
                 assert not errors, f'Browser errors: {errors}'
                 browser.close()
         finally:

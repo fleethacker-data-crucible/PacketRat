@@ -24,6 +24,7 @@ function Get-MailHawkStore {
             UpdatedAt   = (Get-Date).ToString('o')
             Dismissals  = @()   # EntryID or fingerprint -> reason
             Checklist   = @()   # tracked must-reply items
+            Rules       = @(Get-MailHawkDefaultRules)  # editable deterministic triage policy
         }
     }
     try {
@@ -31,6 +32,7 @@ function Get-MailHawkStore {
         $obj = $raw | ConvertFrom-Json
         if (-not $obj.Dismissals) { $obj | Add-Member -NotePropertyName Dismissals -NotePropertyValue @() -Force }
         if (-not $obj.Checklist)  { $obj | Add-Member -NotePropertyName Checklist  -NotePropertyValue @() -Force }
+        $null=Initialize-MailHawkRules -Store $obj
         return $obj
     } catch {
         Write-Warning "MailHawk store unreadable, starting fresh: $($_.Exception.Message)"
@@ -39,6 +41,7 @@ function Get-MailHawkStore {
             UpdatedAt   = (Get-Date).ToString('o')
             Dismissals  = @()
             Checklist   = @()
+            Rules       = @(Get-MailHawkDefaultRules)
         }
     }
 }
@@ -152,8 +155,15 @@ function Merge-MailHawkChecklist {
             $existing.Subject   = $item.Subject
             $existing.From      = $item.From
             $existing.Why       = $item.Why
-            $existing.Urgency   = $item.Urgency
+            $existing | Add-Member -NotePropertyName SuggestedUrgency -NotePropertyValue ([string]$item.Urgency) -Force
+            if (-not $existing.PriorityOverride) { $existing.Urgency = $item.Urgency }
+            $existing | Add-Member -NotePropertyName TriageSource -NotePropertyValue ([string]$item.TriageSource) -Force
+            $existing | Add-Member -NotePropertyName RuleName -NotePropertyValue ([string]$item.RuleName) -Force
+            if ($existing.PriorityOverride) {
+                $existing.TriageSource = 'Manual'
+            }
             $existing.EntryID   = $item.EntryID
+            $existing | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue $false -Force
             $existing.LastSeen  = (Get-Date).ToString('o')
             if ($existing.Status -eq 'open' -or -not $existing.Status) {
                 $existing.Status = 'open'
@@ -166,6 +176,12 @@ function Merge-MailHawkChecklist {
                 From      = $item.From
                 Why       = $item.Why
                 Urgency   = $item.Urgency
+                PriorityOverride = $false
+                RuleSuppressed = $false
+                SuggestedUrgency = [string]$item.Urgency
+                TriageSource = $(if($item.TriageSource){[string]$item.TriageSource}else{'AI'})
+                RuleName = [string]$item.RuleName
+                FromEmail = [string]$item.FromEmail
                 Status    = 'open'   # open | in_progress | done | dismissed
                 CreatedAt = (Get-Date).ToString('o')
                 LastSeen  = (Get-Date).ToString('o')
@@ -199,6 +215,50 @@ function Set-MailHawkChecklistStatus {
             break
         }
     }
+    Save-MailHawkStore -Store $Store -Root $Root
+    return $Store
+}
+
+
+function Set-MailHawkChecklistPriority {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][string]$Key,
+        [ValidateSet('High','Medium','Low')][string]$Urgency,
+        [string]$Root
+    )
+    $found=$false
+    foreach($item in @($Store.Checklist)){
+        if([string]$item.Key -cne $Key){continue}
+        $item.Urgency=$Urgency
+        $item | Add-Member -NotePropertyName PriorityOverride -NotePropertyValue $true -Force
+        $item | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue $false -Force
+        $item | Add-Member -NotePropertyName TriageSource -NotePropertyValue 'Manual' -Force
+        $item | Add-Member -NotePropertyName RuleName -NotePropertyValue '' -Force
+        $item.LastSeen=(Get-Date).ToString('o')
+        $found=$true
+        break
+    }
+    if(-not $found){throw 'Unknown checklist item'}
+    Save-MailHawkStore -Store $Store -Root $Root
+    return $Store
+}
+
+function Clear-MailHawkChecklistPriorityOverride {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$Key,[string]$Root)
+    $found=$false
+    foreach($item in @($Store.Checklist)){
+        if([string]$item.Key -cne $Key){continue}
+        $item | Add-Member -NotePropertyName PriorityOverride -NotePropertyValue $false -Force
+        if(@('High','Medium','Low') -contains [string]$item.SuggestedUrgency){$item.Urgency=[string]$item.SuggestedUrgency}
+        $item | Add-Member -NotePropertyName TriageSource -NotePropertyValue 'AI' -Force
+        $item | Add-Member -NotePropertyName RuleName -NotePropertyValue '' -Force
+        $found=$true
+        break
+    }
+    if(-not $found){throw 'Unknown checklist item'}
     Save-MailHawkStore -Store $Store -Root $Root
     return $Store
 }

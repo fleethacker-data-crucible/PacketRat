@@ -10,7 +10,7 @@
 param([ValidateRange(0,65535)][int]$Port=8766,[switch]$NoBrowser,[switch]$Demo)
 $ErrorActionPreference='Stop'
 $Root=$PSScriptRoot
-foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
+foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','MailHawkRules','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-MailHawkInboxAnalysis.ps1')
@@ -118,6 +118,26 @@ function Invoke-MailHawkApi {
           if(@('open','in_progress','done') -notcontains [string]$Data.status){throw 'Invalid status'}
           $null=Set-MailHawkChecklistStatus -Store $store -Key $key -Status ([string]$Data.status) -Root $Root
           return @{ok=$true;store=(Get-MailHawkStore -Root $Root)}
+      }
+      '/api/priority' {
+          $key=[string]$Data.key
+          if(-not (Find-MailHawkItem $store $key)){throw 'Unknown checklist item'}
+          $priority=[string]$Data.urgency
+          if(@('High','Medium','Low') -cnotcontains $priority){throw 'Choose High, Medium or Low'}
+          $store=Set-MailHawkChecklistPriority -Store $store -Key $key -Urgency $priority -Root $Root
+          return @{ok=$true;store=$store}
+      }
+      '/api/priority/reset' {
+          $key=[string]$Data.key
+          if(-not (Find-MailHawkItem $store $key)){throw 'Unknown checklist item'}
+          $store=Clear-MailHawkChecklistPriorityOverride -Store $store -Key $key -Root $Root
+          return @{ok=$true;store=$store}
+      }
+      '/api/rules' {
+          if($null -eq $Data.rules){throw 'Rules payload is required'}
+          $rules=@($Data.rules)
+          $store=Set-MailHawkRules -Store $store -Rules $rules -Root $Root
+          return @{ok=$true;store=$store}
       }
       '/api/dismiss' {
           $key=[string]$Data.key;$item=Find-MailHawkItem $store $key

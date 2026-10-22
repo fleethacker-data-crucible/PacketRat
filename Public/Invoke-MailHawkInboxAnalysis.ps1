@@ -121,7 +121,7 @@ function Invoke-MailHawkInboxAnalysis {
     $emailPayload = $summary.Emails | ForEach-Object {
         [pscustomobject]@{
             Index = $_.Index; Fingerprint = $_.Fingerprint; EntryID = $_.EntryID
-            Received = $_.Received; FromName = $_.FromName; FromEmail = $_.FromEmail
+            Received = $_.Received; FromName = $_.FromName; FromEmail = $_.FromEmail; IsDirect = [bool]$_.IsDirect
             Subject = $_.Subject; UnRead = $_.UnRead; Importance = $_.Importance
             AppearsReplied = $_.AppearsReplied; ReplyEvidence = $_.ReplyEvidence
             UserDismissed = $_.UserDismissed; BodyPreview = $_.BodyPreview
@@ -162,6 +162,7 @@ OUTPUT PART 1 - JSON (must appear first):
 @@@MAILHAWK_JSON_END@@@
 
 Include in must_reply: security/DLP alerts, mandatory training, SAAR/access requests, direct questions, tasking that still needs action.
+Explicit user rules are applied separately after classification; don't fabricate rule decisions. A .mil sender alone does not imply a task.
 Exclude: newsletters, automated digests, user-dismissed, solidly replied threads.
 
 OUTPUT PART 2 - Markdown with these headings:
@@ -171,12 +172,16 @@ OUTPUT PART 2 - Markdown with these headings:
 ## 4. Already Appears Replied / No Action Needed
 ## 5. Skipped / Caution
 ## 6. Quick Summary
+Use normal Markdown headings, bullets, and tables where helpful. Do not wrap the report in Markdown blockquotes (>), code fences, or duplicate response alternatives.
 '@
 
     $userPrompt = @"
 Inbox snapshot: $($summary.GeneratedAt)
 Provider: $($summary.Provider)
 Analyzed: $($summary.AnalyzedCount)  Skipped: $($summary.SkippedCount)  User-dismissed: $dismissedCount
+
+CURRENT EDITABLE TRIAGE RULES (for context; local rules are enforced after you answer):
+$(@($store.Rules|Where-Object Enabled|Select-Object Name,Match,Value,Effect)|ConvertTo-Json -Depth 4 -Compress)
 
 PRIOR USER DISMISSALS (do not re-recommend):
 $priorDismissals
@@ -195,6 +200,8 @@ $emailJson
     $ai = Invoke-MailHawkChat -Messages $messages -Profile $Profile -Model $Model -MaxTokens 8192 -Temperature 0.1
     $rawText = [string]$ai.Text
 
+    # Raw model responses may contain mail content; do not write them unless explicitly opted in.
+    if ($env:MAILHAWK_SAVE_RAW_AI -eq '1') {
     try {
         $logDir = Join-Path $Root 'Logs'
         if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
@@ -203,6 +210,7 @@ $emailJson
         [System.IO.File]::WriteAllText($rawPath, $rawText, $utf8NoBom)
         Write-MailHawkLogSafe -Level INFO -Message ("Raw AI response saved: {0} ({1} chars)" -f $rawPath, $rawText.Length) -Root $Root
     } catch {}
+    }
 
     $mustReply = @()
     if ($rawText -match '(?s)@@@MAILHAWK_JSON_BEGIN@@@(.*)@@@MAILHAWK_JSON_END@@@') {
@@ -228,7 +236,7 @@ $emailJson
     }
 
     $reportMd = [regex]::Replace($rawText, '(?s)@@@MAILHAWK_JSON_BEGIN@@@.*?@@@MAILHAWK_JSON_END@@@', '').Trim()
-    $reportMd = [regex]::Replace($reportMd, '[^\x09\x0A\x0D\x20-\x7E]', '')
+    # Preserve readable punctuation, Unicode and report structure; the browser escapes HTML.
 
     if ($mustReply.Count -eq 0) {
         Write-MailHawkLogSafe -Level WARN -Message 'No structured JSON must_reply; trying markdown fallback parser' -Root $Root
@@ -236,6 +244,27 @@ $emailJson
         Write-MailHawkLogSafe -Level INFO -Message ("Fallback extracted {0} must-reply items" -f $mustReply.Count) -Root $Root
     }
 
+    # Rule matches use real mailbox identity, never LLM-generated EntryIDs.
+    $ruleResult=Invoke-MailHawkRuleTriage -Emails @($summary.Emails) -Suggested @($mustReply) -Store $store
+    $mustReply=@($ruleResult.Items)
+    # Keep rule exclusions reversible. Never overwrite a user's manual priority.
+    $currentKeys=@{}
+    foreach($mail in @($summary.Emails)){if($mail.Fingerprint){$currentKeys[[string]$mail.Fingerprint]=$true}}
+    $excluded=@{}
+    foreach($key in @($ruleResult.SuppressedKeys)){$excluded[[string]$key]=$true}
+    foreach($item in @($store.Checklist)){
+        $key=[string]$item.Key
+        if(-not $currentKeys.ContainsKey($key)){continue}
+        $skip=$excluded.ContainsKey($key) -and -not [bool]$item.PriorityOverride
+        $item | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue ([bool]$skip) -Force
+        $item | Add-Member -NotePropertyName RuleSuppressedBy -NotePropertyValue $(if($skip){[string]$ruleResult.SuppressedReasons[$key]}else{''}) -Force
+    }
+    Save-MailHawkStore -Store $store -Root $Root
+
+    if($ruleResult.Matched -gt 0){
+        $reportMd += "`n`n## Applied triage policy`n"
+        $reportMd += ("{0} rule matches evaluated. Review Rules to change defaults or add rules. Manual priority overrides persist." -f $ruleResult.Matched)
+    }
     if ($mustReply.Count -gt 0) {
         $store = Merge-MailHawkChecklist -Store $store -Items $mustReply -Root $Root
         Write-MailHawkLogSafe -Level INFO -Message ("Checklist merged with {0} items" -f $mustReply.Count) -Root $Root
