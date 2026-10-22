@@ -44,7 +44,7 @@ function ConvertFrom-MailHawkDraftAlternatives {
     }
     if($options.Count -eq 0){
         # GenAI markdown, e.g. "### Option A", "**Response B:**", "Draft 1:".
-        $header='(?im)^\s*(?:#{1,5}\s*)?(?:\*\*)?\s*(?:option|response|draft|version)\s*([AB12])\s*(?:\*\*)?\s*[:.)\-–]?\s*(.*)$'
+        $header='(?im)^[ \t]*(?:#{1,5}[ \t]*)?(?:\*\*)?(?:option|response|draft|version)[ \t]+([AB12])(?:[ \t]*[:.)-])?[^\r\n]*'
         $matches=[regex]::Matches($raw,$header)
         if($matches.Count -ge 2){
             for($i=0;$i -lt [Math]::Min($matches.Count,3);$i++){
