@@ -21,7 +21,7 @@ if(($machinePolicy -and $machinePolicy -ne 'Undefined') -or ($userPolicy -and $u
 }
 if($PSVersionTable.PSVersion.Major -lt 5){$failures.Add('Windows PowerShell 5.1 or later is required.')}
 $required=@(
-  'Start-MailHawk-Web.ps1','Start-MailHawk-Web.bat',
+  'Start-MailHawk-Web.ps1','MailHawk.bat','MailHawk-CLI.bat',
   'Web/index.html','Web/app.js','Web/style.css',
   'Web/mailhawk-logo.png','Web/mailhawk-icon.png',
   'Private/ArcBridge.ps1','Private/MailHawkLlm.ps1',

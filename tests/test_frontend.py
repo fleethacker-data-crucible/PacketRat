@@ -71,6 +71,14 @@ def run():
                 page.locator('#closeDialog').click()
                 page.get_by_role('button',name='Configuration').click()
                 assert page.locator('#settings').is_visible()
+                assert page.locator('#credentialSource').is_visible()
+                assert not page.locator('#manualTokenFields').is_visible()
+                page.locator('#credentialSource').select_option('Manual')
+                assert page.locator('#manualTokenFields').is_visible()
+                page.locator('#credentialToken').fill('TEST-ONLY-DO-NOT-USE')
+                page.locator('#applyCredentials').click()
+                assert page.locator('#credentialToken').input_value() == ''
+                assert 'Demo mode' in page.locator('#notice').inner_text()
                 assert not errors, f'Browser errors: {errors}'
                 browser.close()
         finally:

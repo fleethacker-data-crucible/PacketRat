@@ -71,17 +71,43 @@ function Find-MailHawkItem($Store,[string]$Key){
 function Invoke-MailHawkApi {
     param([string]$Route,$Data)
     if($Route -eq '/api/health') {return @{ok=$true;service='MailHawk';mode='local';version='2.0'}}
+    if($Route -eq '/api/credentials/status') {return @{ok=$true;credentials=(Get-MailHawkCredentialStatus)}}
     $store=Get-MailHawkStore -Root $Root
     switch($Route){
       '/api/state' {
           $summary=if($script:LastResult){$script:LastResult}else{$null}
-          return @{ok=$true;store=$store;report=if($summary){$summary.Report}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
+          return @{ok=$true;store=$store;credentials=(Get-MailHawkCredentialStatus);report=if($summary){$summary.Report}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
+      }
+      '/api/credentials' {
+          $source=[string]$Data.source
+          if($source -cnotin @('ARC','Manual')){throw 'Select ARC or Manual as the credential source.'}
+          $profile=[string]$Data.profile
+          if($profile -cnotin @('GenAi','Grok')){throw 'Select GenAi or Grok for a manual token.'}
+          $tokenText=if($null -eq $Data.token){''}else{[string]$Data.token}
+          $status=Set-MailHawkCredentialConfiguration -Source $source -Profile $profile -Token $tokenText
+          return @{ok=$true;credentials=$status}
+      }
+      '/api/credentials/check' {
+          $requested=if($Data.profile -in @('GenAi','Grok')){[string]$Data.profile}else{'GenAi'}
+          # Resolve locally only. Never return token, contact an AI endpoint,
+          # or fetch user mailbox data from this diagnostic route.
+          $resolved=Get-MailHawkLlmConfig -Profile $requested
+          $null=Get-MailHawkLlmToken -ForProfile $resolved.Profile
+          return @{ok=$true;profile=$resolved.Profile;credentialAvailable=$true;note='Credential resolved locally; remote endpoint not tested.'}
+      }
+      '/api/credentials/clear' {
+          $status=Clear-MailHawkManualTokens
+          return @{ok=$true;credentials=$status}
       }
       '/api/analyze' {
           $profile=if(@('Auto','Grok','GenAi') -contains $Data.profile){$Data.profile}else{'Auto'}
           $provider=if(@('COM','Graph') -contains $Data.provider){$Data.provider}else{'COM'}
           $max=[Math]::Max(1,[Math]::Min(150,[int]$Data.maxEmails))
           $days=[Math]::Max(1,[Math]::Min(90,[int]$Data.daysBack))
+          # Fail before scanning Outlook if the chosen AI credential source is unusable.
+          # Profile Auto is resolved to the actual endpoint before checking its token.
+          $llmProfile=(Get-MailHawkLlmConfig -Profile $profile).Profile
+          $null=Get-MailHawkLlmToken -ForProfile $llmProfile
           $script:LastResult=Invoke-MailHawkInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root
           $run=$script:LastResult
           return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;store=(Get-MailHawkStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
@@ -185,7 +211,7 @@ try {
           Send-MailHawkText $stream 403 '{"ok":false,"error":"Invalid host"}';continue
       }
       if($path -match '^/api/'){
-          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health')){
+          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status')){
               Send-MailHawkText $stream 405 '{"ok":false,"error":"POST required"}';continue
           }
           if($method -eq 'POST'){

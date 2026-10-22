@@ -8,6 +8,62 @@ $script:MailHawkLlmDefaults = @{
     GenAiModel = 'gemini-3.8-flash'
 }
 
+# Runtime-only credential selection. Never write manually entered tokens to files.
+$script:MailHawkCredentialSource = 'ARC'
+$script:MailHawkManualTokens = @{ GenAi = $null; Grok = $null }
+
+function Get-MailHawkCredentialStatus {
+    [CmdletBinding()]
+    param()
+    $arcFound = $false
+    if (Get-Command Find-MailHawkArcRoot -ErrorAction SilentlyContinue) {
+        $arcFound = [bool](Find-MailHawkArcRoot)
+    }
+    return @{
+        source = $script:MailHawkCredentialSource
+        manual = @{
+            GenAi = -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.GenAi)
+            Grok = -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.Grok)
+        }
+        arcDetected = $arcFound
+        arcItems = @{
+            GenAi = Resolve-MailHawkArcServiceName -Profile GenAi
+            Grok = Resolve-MailHawkArcServiceName -Profile Grok
+        }
+    }
+}
+
+function Set-MailHawkCredentialConfiguration {
+    [CmdletBinding()]
+    param(
+        [ValidateSet('ARC','Manual')][string]$Source,
+        [ValidateSet('GenAi','Grok')][string]$Profile = 'GenAi',
+        [AllowEmptyString()][string]$Token = ''
+    )
+    if ($Source -eq 'ARC') {
+        $script:MailHawkManualTokens.GenAi = $null
+        $script:MailHawkManualTokens.Grok = $null
+    } elseif (-not [string]::IsNullOrWhiteSpace($Token)) {
+        if ($Token.Length -gt 8192 -or $Token -match '[\r\n\x00-\x1F]') {
+            throw 'Manual token is invalid (length/control characters).'
+        }
+        $clean = $Token.Trim().Trim("'").Trim('"')
+        if ($clean -match '^(?i)Bearer\s+(.+)$') { $clean = $Matches[1].Trim() }
+        if ([string]::IsNullOrWhiteSpace($clean)) { throw 'Manual token cannot be blank.' }
+        $script:MailHawkManualTokens[$Profile] = $clean
+    }
+    $script:MailHawkCredentialSource = $Source
+    return Get-MailHawkCredentialStatus
+}
+
+function Clear-MailHawkManualTokens {
+    [CmdletBinding()]
+    param()
+    $script:MailHawkManualTokens.GenAi = $null
+    $script:MailHawkManualTokens.Grok = $null
+    return Get-MailHawkCredentialStatus
+}
+
 function Get-MailHawkLlmConfig {
     [CmdletBinding()]
     param(
@@ -22,6 +78,11 @@ function Get-MailHawkLlmConfig {
     if ($Profile -eq 'Auto') {
         if ($url -match 'databricks\.mil|serving-endpoints') { $resolved = 'Grok' }
         elseif ($url -match 'genai\.mil') { $resolved = 'GenAi' }
+        elseif ($script:MailHawkCredentialSource -eq 'Manual' -and
+                [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.GenAi) -and
+                -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.Grok)) {
+            $resolved = 'Grok'
+        }
         elseif (-not [string]::IsNullOrWhiteSpace($env:DATABRICKS_TOKEN) -and [string]::IsNullOrWhiteSpace($env:GENAI_TOKEN)) {
             $resolved = 'Grok'
         }
@@ -76,6 +137,15 @@ function Get-MailHawkLlmToken {
         $envTarget = 'DATABRICKS_TOKEN'
     }
 
+    # Manual credentials are session-only and never fall back to environment or ARC.
+    if ($script:MailHawkCredentialSource -eq 'Manual') {
+        $manual = [string]$script:MailHawkManualTokens[$ForProfile]
+        if ([string]::IsNullOrWhiteSpace($manual)) {
+            throw ("No manual token configured for {0}. Open Configuration > Credentials, select Manual, enter an approved token and click Apply." -f $ForProfile)
+        }
+        return $manual
+    }
+
     # 1) Profile-specific env token
     $existing = [Environment]::GetEnvironmentVariable($envTarget)
     if (-not [string]::IsNullOrWhiteSpace($existing)) {
@@ -115,7 +185,7 @@ function Get-MailHawkLlmToken {
         }
     }
 
-    throw ("No LLM token found for profile {0}. Set {1} in mailhawk.env, or ARC services genapi / advana-api via Projects\arc (pm.ps1)." -f $ForProfile, $envTarget)
+    throw ("No managed LLM token available for {0}. Check ARC is installed/unlocked with service {1}, or switch to Manual under MailHawk Configuration > Credentials." -f $ForProfile, $arcItem)
 }
 
 function Invoke-MailHawkChat {
