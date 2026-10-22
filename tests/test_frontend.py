@@ -93,8 +93,6 @@ def run():
                 page.locator('#saveRules').click()
                 page.wait_for_function("document.getElementById('rulesStatus').textContent.includes('Saved')")
                 assert page.locator('#rulesList .rule-row').count() == 6
-                page.locator('[data-view="report"]').click()
-                assert page.locator('#reportText h2').count() >= 3
                 assert page.locator('#credentialSource').is_visible()
                 assert not page.locator('#manualTokenFields').is_visible()
                 page.locator('#credentialSource').select_option('Manual')
@@ -103,6 +101,8 @@ def run():
                 page.locator('#applyCredentials').click()
                 assert page.locator('#credentialToken').input_value() == ''
                 assert 'Demo mode' in page.locator('#notice').inner_text()
+                page.locator('[data-view="report"]').click()
+                assert page.locator('#reportText h2').count() >= 3
                 assert not errors, f'Browser errors: {errors}'
                 browser.close()
         finally:
