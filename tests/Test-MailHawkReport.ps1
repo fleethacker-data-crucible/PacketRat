@@ -2,6 +2,7 @@
 # Offline report parsing and identity tests; no Outlook, ARC or LLM network access.
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
+. (Join-Path $root 'Private/MailHawkProtocol.ps1')
 . (Join-Path $root 'Private/MailHawkReport.ps1')
 . (Join-Path $root 'Private/MailHawkLlm.ps1')
 . (Join-Path $root 'Public/Invoke-MailHawkInboxAnalysis.ps1')
@@ -60,10 +61,12 @@ Assert-ReportTest ((ConvertTo-MailHawkLlmText -Value $gemini) -eq 'Gemini report
 function Invoke-MailHawkChat {
     param([object[]]$Messages,[string]$Profile,[int]$MaxTokens,[double]$Temperature)
     if($Messages[1].content -notmatch 'Scope: 3. Must Reply'){throw 'Wrong section scope'}
-    return [pscustomobject]@{Text="## Suggested next steps`n> Confirm deadline against source.";Profile='Demo';Model='Fake'}
+    return [pscustomobject]@{Text='<<<MAILHAWK_INSIGHT_V1>>>'+[char]10+'{"version":"MAILHAWK_INSIGHT_V1","title":"Suggested next steps","summary":"Confirm the deadline against the source.","items":[{"email_index":1,"text":"Review the actual email."}]}' +[char]10+'<<<END_MAILHAWK_INSIGHT_V1>>>';Profile='Demo';Model='Fake'}
 }
-$run=[pscustomobject]@{Report=$markdown}
+$run=[pscustomobject]@{Report=$markdown;ReportItems=$items}
 $generated=Invoke-MailHawkReportFollowup -Analysis $run -Mode Actions -SectionId 'section-0' -Profile Auto
 Assert-ReportTest ($generated.Content -match 'Suggested next steps') 'Scoped follow-up returned'
 Assert-ReportTest ($generated.Section -eq '3. Must Reply') 'Correct section selected'
+Assert-ReportTest ($generated.Version -eq 'MAILHAWK_INSIGHT_V1') 'Structured generated report contract'
+Assert-ReportTest ($generated.Content -match '\[Email #1\]') 'Generated insight uses verified source reference'
 Write-Host 'Report source validation, fallback and follow-up tests passed' -ForegroundColor Green
