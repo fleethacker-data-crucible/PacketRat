@@ -278,7 +278,7 @@ function Open-MailHawkMailItem {
 function Join-MailHawkReplyHtml {
     param([string]$ExistingHtml,[string]$DraftText)
     if(-not $DraftText.Trim()){throw 'Empty reply.'}
-    $match=[regex]::Match($ExistingHtml,'(?is)<body`b[^>]*>')
+    $match=[regex]::Match($ExistingHtml,'(?is)<body\b[^>]*>')
     if(-not $match.Success){throw 'Outlook HTML body unavailable.'}
     $encoded=[System.Net.WebUtility]::HtmlEncode($DraftText)
     $encoded=$encoded.Replace("`r`n","`n").Replace("`r","`n").Replace("`n",'<br />')
@@ -296,7 +296,7 @@ function New-MailHawkOutlookReplyDraft {
     $reply=$item.Reply()
     $reply.Display()
     $html=[string]$reply.HTMLBody
-    if([int]$reply.BodyFormat -eq 2 -and $html -match '(?is)<body`b'){
+    if([int]$reply.BodyFormat -eq 2 -and $html -match '(?is)<body\b'){
         $reply.HTMLBody=Join-MailHawkReplyHtml -ExistingHtml $html -DraftText $Body
     }else{
         $reply.Body=$Body+"`r`n`r`n"+[string]$reply.Body
