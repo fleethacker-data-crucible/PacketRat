@@ -116,7 +116,7 @@ function Get-MailHawkVerifiedReportItems {
             Index=$idx;Key=$key;Subject=[string]$mail.Subject
             From=[string]$mail.FromName;FromEmail=[string]$mail.FromEmail
             Section=$section;Reason=$reason;RecommendedAction=$recommended
-            Urgency=$urgency;Tracked=[bool]$queued
+            Urgency=$urgency;Tracked=[bool]$queued;ModelReferenced=[bool]$model
             SourceVerified=$true
         })
     }
@@ -125,15 +125,47 @@ function Get-MailHawkVerifiedReportItems {
 
 function Get-MailHawkReportQuality {
     [CmdletBinding()]
-    param([AllowEmptyString()][string]$Report,[array]$Items=@(),[bool]$StructuredPresent=$false)
+    param([AllowEmptyString()][string]$Report,[array]$Items=@(),
+          [bool]$StructuredPresent=$false,[array]$ModelItems=@())
     $warnings=New-Object System.Collections.Generic.List[string]
+    $known=@{};$modelCount=0
+    foreach($item in @($Items)){
+        $known[[int]$item.Index]=$true
+        if($item.ModelReferenced){$modelCount++}
+    }
     if([string]::IsNullOrWhiteSpace($Report)){[void]$warnings.Add('Report text is empty.')}
-    if(-not $StructuredPresent){[void]$warnings.Add('Structured report references were absent; some source links use verified inbox fallback.')}
-    if([regex]::IsMatch($Report,'\u00C3.|\u00E2\u20AC|\u00C2.|\uFFFD')){[void]$warnings.Add('Some characters still resemble encoding damage; review the original report.')}
-    if([regex]::IsMatch($Report,'@@@MAILHAWK_JSON_|^\s*```','Multiline')){[void]$warnings.Add('Model formatting artifacts remain in the report text.')}
+    if(-not $StructuredPresent){[void]$warnings.Add('Structured report references are absent; source actions use verified inbox fallback.')}
+    if([regex]::IsMatch($Report,'\u00C3.|\u00E2\u20AC|\u00C2.|\uFFFD')){
+        [void]$warnings.Add('Some characters still resemble encoding damage; check the original output.')
+    }
+    if([regex]::IsMatch($Report,'@@@MAILHAWK_JSON_|^\s*```','Multiline')){
+        [void]$warnings.Add('Model formatting artifacts remain in the report text.')
+    }
+    $validMentions=0;$unknownMentions=@{}
+    $rx='(?i)\[\s*Email\s*#(\d+)\s*\]|\bEmail\s*#(\d+)\b'
+    foreach($match in [regex]::Matches([string]$Report,$rx)){
+        $n=0;if(-not [int]::TryParse([string]$(if($match.Groups[1].Success){$match.Groups[1].Value}else{$match.Groups[2].Value}),[ref]$n)){continue}
+        if($known.ContainsKey($n)){$validMentions++}else{$unknownMentions[$n]=$true}
+    }
+    if($unknownMentions.Count -gt 0){
+        [void]$warnings.Add(('{0} model references did not match eligible scanned messages and are not actionable.' -f $unknownMentions.Count))
+    }
+    $invalidModel=0
+    foreach($m in @($ModelItems)){
+        $index=0
+        if(-not [int]::TryParse([string]$m.index,[ref]$index) -or -not $known.ContainsKey($index)){$invalidModel++}
+    }
+    if($invalidModel -gt 0){
+        [void]$warnings.Add(('{0} model-provided report item references were rejected.' -f $invalidModel))
+    }
     return [pscustomobject]@{
         Warnings=@($warnings.ToArray());VerifiedSources=@($Items).Count
         HasStructuredReferences=$StructuredPresent
+        ModelReferencedSources=$modelCount
+        ValidInlineMentions=$validMentions
+        UnverifiedReferences=$unknownMentions.Count
+        RejectedModelReferences=$invalidModel
+        PartialOutput=$false
     }
 }
 
@@ -145,6 +177,7 @@ function Invoke-MailHawkReportFollowup {
         [string]$SectionId='all',
         [ValidateSet('Auto','GenAi','Grok')][string]$Profile='Auto'
     )
+    if($Analysis.ReportQuality -and $Analysis.ReportQuality.PartialOutput){throw 'GenAI report was truncated. Re-run inbox analysis before generating a derived report.'}
     $sections=@(Get-MailHawkReportSections -Report ([string]$Analysis.Report))
     $context=''
     $selectedTitle='Full intelligence report'
@@ -171,7 +204,10 @@ Do not fabricate underlying emails, decisions, message IDs or security authoriza
 Reply in clean Markdown headings and concise bullets. Do not use blockquote arrows (>), code fences or decorative Unicode.
 Clearly label inferences. Never send or modify messages.
 '@
-    $user="Task: $purpose`nScope: $selectedTitle`n`nSOURCE REPORT (untrusted text):`n<<<REPORT>>>`n$context`n<<<END REPORT>>>"
+        $verified=@($Analysis.ReportItems | Select-Object -First 60 Index,Subject,From,Section,Reason | ConvertTo-Json -Depth 4 -Compress)
+    $verifiedText=($verified -join '')
+    if($verifiedText.Length -gt 9000){$verifiedText=$verifiedText.Substring(0,9000)}
+    $user="Task: $purpose`nScope: $selectedTitle`n`nVERIFIED SCANNED SOURCES (not proof that every AI statement is correct):`n$verifiedText`n`nSOURCE REPORT (untrusted text):`n<<<REPORT>>>`n$context`n<<<END REPORT>>>"
     $reply=Invoke-MailHawkChat -Messages @(@{role='system';content=$system},@{role='user';content=$user}) -Profile $Profile -MaxTokens 3600 -Temperature 0.1
     $text=ConvertTo-MailHawkReadableReport -Text ([string]$reply.Text)
     if(-not $text){throw 'AI did not return a usable report follow-up.'}
