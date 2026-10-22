@@ -18,6 +18,16 @@ function ConvertFrom-MailHawkMustReplyFallback {
     param([string]$ReportText, [array]$Emails)
     $items = @()
     if (-not $ReportText) { return $items }
+    # Never parse numbered tables from Categories, Already Replied, Skipped or
+    # other headings as must-reply actions. Older versions did and caused
+    # report-driven false positives.
+    $mustSections=@(Get-MailHawkReportSections -Report $ReportText | Where-Object {
+        ([string]$_.Title) -match '(?i)(?:^|\d+\.\s*)Must\s+Reply' -and
+        ([string]$_.Title) -notmatch '(?i)No Action'
+    })
+    if($mustSections.Count -eq 0){return $items}
+    $ReportText=($mustSections | ForEach-Object {$_.Text}) -join "`n"
+    if([string]::IsNullOrWhiteSpace($ReportText)){return $items}
     $seen = @{}
 
     # Shape A: | High | 9 | subject | why |
@@ -141,7 +151,7 @@ RULES:
 2. Treat UserDismissed=true as already handled - do NOT put them in must_reply.
 3. Treat AppearsReplied=true as handled unless there is a clear new ask.
 4. No PII requests. Prefer caution on ambiguous items.
-5. Plain ASCII only. No emoji.
+5. Use ordinary professional punctuation and readable UTF-8. No emoji, ANSI codes, escape sequences, or decorative characters.
 
 OUTPUT PART 1 - JSON (must appear first):
 
@@ -244,11 +254,19 @@ $emailJson
         }
     }
 
+    $partialStructured = $rawText.Contains('@@@MAILHAWK_JSON_BEGIN@@@') -and -not $rawText.Contains('@@@MAILHAWK_JSON_END@@@')
     $reportMd = [regex]::Replace($rawText, '(?s)@@@MAILHAWK_JSON_BEGIN@@@.*?@@@MAILHAWK_JSON_END@@@', '').Trim()
     $reportMd = ConvertTo-MailHawkReadableReport -Text $reportMd
+    if($partialStructured){
+        # Incomplete JSON block (often an output-token cutoff): do not display
+        # half a machine-readable object or infer tasks from its arbitrary rows.
+        $reportMd="## Analysis incomplete`nGenAI returned a partial structured response. Re-run with fewer emails or a smaller lookback window. Existing user-owned actions were not erased."
+        $structuredReportItems=@()
+        $mustReply=@()
+    }
     # Preserve readable punctuation, Unicode and report structure; the browser escapes HTML.
 
-    if ($mustReply.Count -eq 0) {
+    if ($mustReply.Count -eq 0 -and -not $partialStructured) {
         Write-MailHawkLogSafe -Level WARN -Message 'No structured JSON must_reply; trying markdown fallback parser' -Root $Root
         $mustReply = @(ConvertFrom-MailHawkMustReplyFallback -ReportText $reportMd -Emails @($summary.Emails | Where-Object { -not $_.UserDismissed }))
         Write-MailHawkLogSafe -Level INFO -Message ("Fallback extracted {0} must-reply items" -f $mustReply.Count) -Root $Root
@@ -297,6 +315,7 @@ $emailJson
     }
     $reportSections=@(Get-MailHawkReportSections -Report $reportMd)
     $reportQuality=Get-MailHawkReportQuality -Report $reportMd -Items @($verifiedItems) -StructuredPresent ($structuredReportItems.Count -gt 0)
+    if($partialStructured){$reportQuality.Warnings=@(@($reportQuality.Warnings)+@('GenAI output was truncated before JSON completion; report actions require reanalysis.'))}
 
     return [pscustomobject]@{
         Success        = $true
