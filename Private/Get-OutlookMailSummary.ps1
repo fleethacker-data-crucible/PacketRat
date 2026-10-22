@@ -130,6 +130,30 @@ function Get-MailHawkInboxSummary {
             $fromEmail = [string]$item.SenderEmailAddress
         } catch {}
 
+        # Resolve Exchange senders to SMTP; otherwise .mil domain rules may miss them.
+        if ($fromEmail -notmatch '@' -and $item.Sender) {
+            try {
+                $exchangeSender = $item.Sender.GetExchangeUser()
+                if ($exchangeSender -and $exchangeSender.PrimarySmtpAddress) {
+                    $fromEmail = [string]$exchangeSender.PrimarySmtpAddress
+                }
+            } catch {}
+        }
+        # IsDirect is true only when the recipient can be verified from the
+        # current Outlook identity or explicit operator-provided email address.
+        $isDirect=$false
+        try {
+            $toLine=[string]$item.To
+            $userEmail=[string]$env:MAILHAWK_USER_EMAIL
+            $userName=''
+            try {$userName=[string]$ns.CurrentUser.Name} catch {}
+            try {
+                $exchangeUser=$ns.CurrentUser.AddressEntry.GetExchangeUser()
+                if($exchangeUser -and $exchangeUser.PrimarySmtpAddress){$userEmail=[string]$exchangeUser.PrimarySmtpAddress}
+            }catch{}
+            if($userEmail -and $toLine.IndexOf($userEmail,[StringComparison]::OrdinalIgnoreCase) -ge 0){$isDirect=$true}
+            elseif($userName -and $toLine.IndexOf($userName,[StringComparison]::OrdinalIgnoreCase) -ge 0){$isDirect=$true}
+        }catch{}
         $subject = ''
         try { $subject = [string]$item.Subject } catch {}
 
@@ -197,6 +221,7 @@ function Get-MailHawkInboxSummary {
             Received          = $received.ToString('yyyy-MM-dd HH:mm')
             FromName          = $fromName
             FromEmail         = $fromEmail
+            IsDirect          = $isDirect
             Subject           = $subject
             UnRead            = $unread
             Importance        = $importance
