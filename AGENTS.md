@@ -6,3 +6,9 @@ Before changing any Windows workstation launcher, read docs/NAUTILUS_LAUNCH_STAN
 ## Stable launcher and AI credential contract
 
 Exactly two user-facing BAT files in the root: `MailHawk.bat` for browser GUI (`demo`, `diagnostics` subcommands) and `MailHawk-CLI.bat` for console. Do not add new root BAT launchers for each mode. Maintain two AI credential paths: ARC/approved environment and GUI-entered manual session token (never persist the latter or return it from an API). Before inbox analysis, fail fast if the selected provider has no usable token. Future changes must preserve token-handling safeguards and workstation policy compliance.
+
+## AI output and email signature contract
+
+Before modifying prompts, parsers, drafting or report UI, read `docs/AI_WIRE_PROTOCOL_V1.md`. Model outputs must use strict, versioned envelopes: exactly one `MAILHAWK_DRAFT_V1` subject/body reply, one `MAILHAWK_REPORT_V1` JSON report with deterministic sections, and `MAILHAWK_INSIGHT_V1` for follow-up report generations. Reject malformed or truncated envelopes instead of dumping raw model text. Never trust model-provided Outlook message IDs or execute HTML from report fields.
+
+Outlook's existing authenticated account reply signature must be preserved after displaying the reply inspector, with reviewed AI text inserted *before* that content. The model never authors or duplicates the user's signature. The original reply subject stays unchanged unless the user explicitly elects an override. No automatic sending. Add Windows PowerShell 5.1 and browser regression tests for protocol changes.
