@@ -70,8 +70,41 @@ function filteredQueue(){
  const priority={High:0,Medium:1,Low:2},sort=$('sortOrder').value;
  return items.sort((a,b)=>sort==='subject'?String(a.Subject).localeCompare(String(b.Subject)):sort==='recent'?String(b.LastSeen||b.CreatedAt||'').localeCompare(String(a.LastSeen||a.CreatedAt||'')):(priority[a.Urgency]??3)-(priority[b.Urgency]??3));
 }
+function formatInline(value){
+ return escapeHtml(value).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
+}
+function renderIntelligence(text){
+ if(!String(text||'').trim())return '<p class="report-placeholder">Run Analyze inbox to generate a structured briefing.</p>';
+ let raw=String(text).replace(/@@@MAILHAWK_JSON_BEGIN@@@[\s\S]*?@@@MAILHAWK_JSON_END@@@/g,'').replace(/\r/g,'');
+ if(!raw.includes('\n')&&raw.includes('\\n'))raw=raw.replace(/\\n/g,'\n');
+ const lines=raw.split('\n').map(l=>l.replace(/^\s*(?:>\s*)+/,'').replace(/^\s*\\>/,'').trimEnd());
+ const html=[];let inList=false,inSection=false;
+ const closeList=()=>{if(inList){html.push('</ul>');inList=false}};
+ const closeSection=()=>{closeList();if(inSection){html.push('</section>');inSection=false}};
+ const cells=line=>line.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(x=>x.trim());
+ const separator=line=>/^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
+ for(let i=0;i<lines.length;i++){
+  const line=lines[i].trim();
+  if(!line){closeList();continue}
+  if(/^```/.test(line))continue;
+  const heading=line.match(/^#{1,5}\s+(.+)$/);
+  if(heading){closeSection();html.push('<section class="report-section"><h2>'+formatInline(heading[1])+'</h2>');inSection=true;continue}
+  if(/^[-*_]{3,}$/.test(line)){closeList();html.push('<hr>');continue}
+  if(line.startsWith('|')&&i+1<lines.length&&separator(lines[i+1])){
+    closeList();let rows=[];const headers=cells(line);i+=2;
+    for(;i<lines.length&&lines[i].trim().startsWith('|');i++)rows.push(cells(lines[i]));
+    i--;html.push('<div class="report-table-wrap"><table class="report-table"><thead><tr>'+headers.map(x=>'<th>'+formatInline(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+headers.map((h,j)=>'<td>'+formatInline(row[j]||'')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>');continue;
+  }
+  const bullet=line.match(/^(?:[-*•]\s+|\d+[.)]\s+)(.*)$/);
+  if(bullet){if(!inList){html.push('<ul class="report-list">');inList=true}html.push('<li>'+formatInline(bullet[1])+'</li>');continue}
+  closeList();
+  if(/^\*\*[^*]+:\*\*/.test(line)){html.push('<p class="report-emphasis">'+formatInline(line)+'</p>');continue}
+  html.push('<p>'+formatInline(line)+'</p>');
+ }
+ closeSection();return html.join('');
+}
 function render(){const items=store.Checklist||[],dismissed=store.Dismissals||[],active=items.filter(x=>x.Status==='open'||x.Status==='in_progress');$('mOpen').textContent=active.length;$('mHigh').textContent=active.filter(x=>x.Urgency==='High').length;$('mDone').textContent=items.filter(x=>x.Status==='done').length;$('mDismiss').textContent=dismissed.length;$('navCount').textContent=active.length;
- $('priorityList').innerHTML=active.length?active.slice().sort((a,b)=>({High:0,Medium:1,Low:2}[a.Urgency]??3)-({High:0,Medium:1,Low:2}[b.Urgency]??3)).slice(0,4).map(x=>itemRow(x)).join(''):empty('Your radar is clear. Run an inbox analysis to discover new actions.');const results=filteredQueue();$('queueTotal').textContent=`${results.length} item${results.length===1?'':'s'}`;$('queue').innerHTML=results.length?results.map(x=>itemRow(x,true)).join(''):empty('No actions match these filters.');$('dismissList').innerHTML=dismissed.length?dismissed.map(x=>`<article class="item"><span class="priority low">Filtered</span><div class="item-body"><strong>${escapeHtml(x.Subject)}</strong><small>${escapeHtml(x.From)} · ${escapeHtml(x.Reason)}</small></div><div class="item-actions"><button data-act="restore" data-key="${escapeHtml(x.Key)}">Restore</button></div></article>`).join(''):empty('No dismissed items. You can dismiss false positives from the action queue.');$('reportText').textContent=report||'No analysis in this session. Select “Analyze inbox” to begin.';$('brief').textContent=report?report.replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportProfile').textContent=lastRun?.Profile||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
+ $('priorityList').innerHTML=active.length?active.slice().sort((a,b)=>({High:0,Medium:1,Low:2}[a.Urgency]??3)-({High:0,Medium:1,Low:2}[b.Urgency]??3)).slice(0,4).map(x=>itemRow(x)).join(''):empty('Your radar is clear. Run an inbox analysis to discover new actions.');const results=filteredQueue();$('queueTotal').textContent=`${results.length} item${results.length===1?'':'s'}`;$('queue').innerHTML=results.length?results.map(x=>itemRow(x,true)).join(''):empty('No actions match these filters.');$('dismissList').innerHTML=dismissed.length?dismissed.map(x=>`<article class="item"><span class="priority low">Filtered</span><div class="item-body"><strong>${escapeHtml(x.Subject)}</strong><small>${escapeHtml(x.From)} · ${escapeHtml(x.Reason)}</small></div><div class="item-actions"><button data-act="restore" data-key="${escapeHtml(x.Key)}">Restore</button></div></article>`).join(''):empty('No dismissed items. You can dismiss false positives from the action queue.');$('reportText').innerHTML=renderIntelligence(report);$('brief').textContent=report?report.replace(/^[\s>]+/gm,'').replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportProfile').textContent=lastRun?.Profile||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
 function updateCredentialPanel(){
  const source=$('credentialSource').value;
  $('manualTokenFields').classList.toggle('hidden',source!=='Manual');
