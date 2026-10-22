@@ -4,6 +4,7 @@ $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'Private/MailHawkStore.ps1')
 . (Join-Path $root 'Private/MailHawkRules.ps1')
+. (Join-Path $root 'Private/MailHawkProtocol.ps1')
 . (Join-Path $root 'Private/MailHawkDraft.ps1')
 
 function Assert-MailHawk($Condition,[string]$Message) {
@@ -35,19 +36,7 @@ try {
       [pscustomobject]@{Id='custom-domain';Name='Review navy domains';Enabled=$true;Match='SenderDomain';Value='navy.mil';Effect='Medium'}
     ) -Root $testRoot
     Assert-MailHawk (@((Get-MailHawkStore -Root $testRoot).Rules).Count -eq 1) 'custom rule persisted'
-    $json='{"responses":[{"label":"Concise","body":"Hello, thank you."},{"label":"Collaborative","body":"Thank you for the update. I will review it."}]}'
-    $drafts=@(ConvertFrom-MailHawkDraftAlternatives -Text $json)
-    Assert-MailHawk ($drafts.Count -eq 2) 'JSON response A/B parsed'
-    Assert-MailHawk ($drafts[1].Body -match 'review') 'option B text'
-    $markdown=@'
-### Option A:
-> > Hello, thanks.
-### Option B:
-> I will review the request.
-'@
-    $drafts=@(ConvertFrom-MailHawkDraftAlternatives -Text $markdown)
-    Assert-MailHawk ($drafts.Count -eq 2) 'Markdown options parsed'
-    Assert-MailHawk ($drafts[0].Body -eq 'Hello, thanks.') 'blockquote chevrons stripped'
+    # Wire-envelope and Outlook-signature tests run in Test-MailHawkProtocol.ps1.
     Write-Host 'MailHawk local rules and draft parsing tests passed' -ForegroundColor Green
 } finally {
     Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
