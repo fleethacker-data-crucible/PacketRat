@@ -306,15 +306,33 @@ $emailJson
     $verifiedItems=@(Get-MailHawkVerifiedReportItems -Emails @($summary.Emails) -ModelItems @($structuredReportItems) -MustReply @($mustReply))
     $trackedKeys=@{}
     foreach($action in @($store.Checklist)){if($action.Key){$trackedKeys[[string]$action.Key]=$action}}
+    $suppressedKeys=@{}
+    foreach($key in @($ruleResult.SuppressedKeys)){$suppressedKeys[[string]$key]=$true}
+    $contradictions=0
     foreach($source in $verifiedItems){
+        $isSuppressed=$suppressedKeys.ContainsKey([string]$source.Key)
+        $suppressedBy=if($isSuppressed){[string]$ruleResult.SuppressedReasons[[string]$source.Key]}else{''}
+        $isManual=$false
+        $effectiveStatus='Not tracked'
         if($trackedKeys.ContainsKey([string]$source.Key)){
             $source.Tracked=$true
             $action=$trackedKeys[[string]$source.Key]
             $source.Urgency=[string]$action.Urgency
+            $isManual=[bool]$action.PriorityOverride
+            $effectiveStatus=[string]$action.Status
+            if($isManual){$isSuppressed=$false;$suppressedBy=''}
         }
+        $source | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue ([bool]$isSuppressed) -Force
+        $source | Add-Member -NotePropertyName RuleSuppressedBy -NotePropertyValue $suppressedBy -Force
+        $source | Add-Member -NotePropertyName ManuallyPrioritized -NotePropertyValue $isManual -Force
+        $source | Add-Member -NotePropertyName EffectiveStatus -NotePropertyValue $effectiveStatus -Force
+        if($source.Section -eq 'Must Reply' -and $isSuppressed){$contradictions++}
     }
     $reportSections=@(Get-MailHawkReportSections -Report $reportMd)
     $reportQuality=Get-MailHawkReportQuality -Report $reportMd -Items @($verifiedItems) -StructuredPresent ($structuredReportItems.Count -gt 0) -ModelItems @($structuredReportItems)
+    if($contradictions -gt 0){
+        $reportQuality.Warnings=@(@($reportQuality.Warnings)+@("$contradictions AI must-reply recommendations were excluded by active user rules; see verified sources for the effective disposition."))
+    }
     if($partialStructured){$reportQuality.Warnings=@(@($reportQuality.Warnings)+@('GenAI output was truncated before JSON completion; report actions require reanalysis.'))}
     if($partialStructured){$reportQuality.PartialOutput=$true}
 
