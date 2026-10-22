@@ -136,14 +136,96 @@ async function applyCredentialSource(){
  }catch(error){notify(error.message,true);}
  finally{$('credentialToken').value='';}
 }
+const ruleConditions=[
+ ['SecurityAction','Security / mandatory action'],
+ ['DirectMilRequest','Verified direct .mil request'],
+ ['DirectRequest','Verified direct request'],
+ ['AlreadyReplied','Already replied without new ask'],
+ ['AutomatedDigest','Automated digest or newsletter'],
+ ['MilSender','Any .mil sender'],
+ ['SenderDomain','Sender domain'],
+ ['SenderContains','Sender address contains'],
+ ['SubjectContains','Subject contains'],
+ ['BodyContains','Message preview contains']
+];
+function ruleSelect(values,current){
+ return values.map(([value,name])=>'<option value="'+escapeHtml(value)+'"'+(value===current?' selected':'')+'>'+escapeHtml(name)+'</option>').join('');
+}
+function renderRules(){
+ const target=$('rulesList');if(!target)return;
+ if(!ruleDraft)ruleDraft=(store.Rules?.length?store.Rules:defaultRules).map(x=>({...x}));
+ const effects=[['High','High priority'],['Medium','Medium priority'],['Low','Low priority'],['Skip','Exclude suggestion']];
+ target.innerHTML=ruleDraft.length?ruleDraft.map((r,i)=>{
+   const id=escapeHtml(r.Id),name=escapeHtml(r.Name),value=escapeHtml(r.Value||'');
+   return '<div class="rule-row" data-rule-id="'+id+'">'+
+    '<div class="rule-row-heading"><label class="rule-toggle"><input type="checkbox" data-rule-field="Enabled"'+(r.Enabled?' checked':'')+'> Enabled</label>'+
+    '<span class="rule-order">'+(i+1)+' / '+ruleDraft.length+'</span>'+
+    '<button data-rule-move="up" data-rule-id="'+id+'" aria-label="Move rule up"'+(i===0?' disabled':'')+'>↑</button>'+
+    '<button data-rule-move="down" data-rule-id="'+id+'" aria-label="Move rule down"'+(i===ruleDraft.length-1?' disabled':'')+'>↓</button>'+
+    '<button data-rule-remove="'+id+'" aria-label="Remove rule">✕</button></div>'+
+    '<div class="rule-fields"><label>Name<input data-rule-field="Name" maxlength="90" value="'+name+'"></label>'+
+    '<label>When<select data-rule-field="Match">'+ruleSelect(ruleConditions,r.Match)+'</select></label>'+
+    '<label>Match value<input data-rule-field="Value" maxlength="160" placeholder="For custom matches" value="'+value+'"></label>'+
+    '<label>Then<select data-rule-field="Effect">'+ruleSelect(effects,r.Effect)+'</select></label></div>'+
+    '<p class="rule-hint">'+(r.Match==='DirectMilRequest'?'Requires confirmed recipient match and a request; .mil alone is not urgent.':
+     r.Match==='SenderDomain'?'Use a domain such as navy.mil without @.':
+     r.Match==='SubjectContains'?'Case-insensitive literal phrase.':
+     r.Match==='BodyContains'?'Uses only the limited message preview.':
+     r.Match==='AutomatedDigest'?'Excludes routine digests, not known mandatory/security requests.':
+     'Rules apply in displayed order. First matching rule wins.')+'</p></div>';
+ }).join(''):'<p class="empty">No rules configured. AI classification still runs.</p>';
+}
+function noteRules(message){$('rulesStatus').textContent=message||'Edits are not active until saved.';}
+function setRuleField(node){
+ const row=node.closest('[data-rule-id]');if(!row)return;
+ const current=ruleDraft?.find(r=>r.Id===row.dataset.ruleId);
+ if(!current)return;
+ const field=node.dataset.ruleField;
+ if(!['Name','Match','Value','Effect','Enabled'].includes(field))return;
+ current[field]=field==='Enabled'?node.checked:node.value;
+ noteRules('Unsaved changes. Select Save rules to apply them to future inbox analyses.');
+}
+function addCustomRule(){
+ if(!ruleDraft)ruleDraft=[];
+ if(ruleDraft.length>=30)return notify('Maximum 30 rules.',true);
+ ruleDraft.push({Id:'custom-'+Date.now().toString(36)+'-'+ruleDraft.length,Name:'New custom rule',Enabled:true,Match:'SenderDomain',Value:'navy.mil',Effect:'Medium'});
+ renderRules();noteRules('New rule added. Edit and save it to activate.');
+}
+async function saveTriageRules(){
+ if(!ruleDraft)return;
+ for(const r of ruleDraft){
+   if(!r.Name?.trim())return notify('Every rule needs a name.',true);
+   if(['SenderDomain','SenderContains','SubjectContains','BodyContains'].includes(r.Match)&&!r.Value?.trim())return notify('Provide a match value for '+r.Name,true);
+ }
+ try{
+  const x=await api('rules',{rules:ruleDraft});
+  store=x.store||store;ruleDraft=(store.Rules||[]).map(r=>({...r}));
+  renderRules();noteRules('Saved. New triage rules apply on your next analysis.');
+  notify('Rules saved. Existing manual priorities are preserved.');
+ }catch(error){notify(error.message,true)}
+}
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('mailhawk-prefs',JSON.stringify(cfg))}catch{}return cfg}
 function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('mailhawk-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
 function setBusy(flag,label){busy=flag;const button=$('analyze');button.disabled=flag;button.innerHTML=flag?'<span>◌</span> Analyzing…':'<span>✦</span> Analyze inbox <span class="button-arrow">↗</span>';$('engineStatus').textContent=flag?label||'Running analysis':demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis'}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>{filter=el.dataset.filter;document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b===el));render()}));$('queueSearch').addEventListener('input',render);$('sortOrder').addEventListener('change',render);
 $('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){draftKey=key;$('draftSubject').textContent=store.Checklist.find(x=>x.Key===key)?.Subject||'No subject';$('draftBody').value='';$('instruction').value='';$('draftDialog').showModal();return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
-$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});$('draftBody').value=x.draft?.Draft||'';notify('Draft ready for review. Nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(report));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});$('credentialSource').addEventListener('change',updateCredentialPanel);
+$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});$('draftBody').value=x.draft?.Draft||'';notify('Draft ready for review. Nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(report));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
+$('addRule').addEventListener('click',addCustomRule);
+$('resetRules').addEventListener('click',()=>{ruleDraft=defaultRules.map(r=>({...r}));renderRules();noteRules('Suggested defaults restored in editor; click Save rules to apply.')});
+$('saveRules').addEventListener('click',saveTriageRules);
+document.addEventListener('change',e=>{if(e.target.matches('[data-rule-field]'))setRuleField(e.target)});
+document.addEventListener('input',e=>{if(e.target.matches('input[data-rule-field]'))setRuleField(e.target)});
+document.addEventListener('click',e=>{
+ const del=e.target.closest('[data-rule-remove]'),move=e.target.closest('[data-rule-move]');
+ if(del){ruleDraft=ruleDraft.filter(x=>x.Id!==del.dataset.ruleRemove);renderRules();noteRules('Rule removed in editor; save to activate.');return}
+ if(move){const i=ruleDraft.findIndex(x=>x.Id===move.dataset.ruleId),j=i+(move.dataset.ruleMove==='up'?-1:1);
+  if(i<0||j<0||j>=ruleDraft.length)return;
+  [ruleDraft[i],ruleDraft[j]]=[ruleDraft[j],ruleDraft[i]];renderRules();noteRules('Rule order changed; save to activate.');
+ }
+});
+$('credentialSource').addEventListener('change',updateCredentialPanel);
 $('applyCredentials').addEventListener('click',applyCredentialSource);
 $('checkCredentials').addEventListener('click',async()=>{
  if(demo){notify('Demo mode uses sample data and does not test credentials.');return;}
