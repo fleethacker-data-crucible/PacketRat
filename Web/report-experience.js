@@ -135,11 +135,12 @@
   return list.map(it=>{
    const key=escapeHtml(it.Key||''),subject=escapeHtml(it.Subject||'(No subject)'),idx=Number(it.Index);
    const tracked=trackedKeys?.has(String(it.Key))||it.Tracked;
-   const status=tracked?'Tracked action':'Source verified';
+   const status=it.ManuallyPrioritized?'Manually prioritized':it.RuleSuppressed?'Excluded by rule':tracked?'Tracked action':'Source verified';
    return '<article class="report-source-item" data-report-source="'+idx+'">'+
     '<div class="report-source-meta"><span class="report-source-index">#'+idx+'</span> <span class="report-source-section">'+escapeHtml(it.Section||'Source inbox')+'</span> <span class="report-source-status">'+status+'</span></div>'+
     '<button type="button" class="report-source-title" data-report-open="'+key+'">'+subject+'</button>'+
     '<p class="report-source-detail">'+escapeHtml(it.From||'')+' · '+escapeHtml(it.Reason||'')+'</p>'+
+    (it.RuleSuppressed?'<p class="report-source-warning">Rule exclusion: '+escapeHtml(it.RuleSuppressedBy||'Matched a filtering rule')+'. You can explicitly track this message.</p>':'')+
     (it.RecommendedAction?'<p class="report-source-suggestion">Suggested: '+escapeHtml(it.RecommendedAction)+'</p>':'')+
     '<div class="report-source-actions"><button type="button" data-report-open="'+key+'">Open Outlook ↗</button>'+
     '<button type="button" data-report-draft="'+key+'">✧ Draft reply</button>'+
