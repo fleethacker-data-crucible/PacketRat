@@ -25,7 +25,7 @@ if(Test-Path $envFile){
 $script:LastResult=$null
 $script:Nonce=[guid]::NewGuid().ToString('N')
 $script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png'}
-$script:AllowedAssets=@('index.html','app.js','style.css','mailhawk-logo.png','mailhawk-icon.png')
+$script:AllowedAssets=@('index.html','app.js','report-experience.js','style.css','mailhawk-logo.png','mailhawk-icon.png')
 $script:UTF8=New-Object System.Text.UTF8Encoding $false
 
 function Send-MailHawkResponse {
