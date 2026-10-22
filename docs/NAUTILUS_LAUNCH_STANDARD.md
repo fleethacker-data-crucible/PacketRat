@@ -22,4 +22,10 @@ Purpose: keep PowerShell/browser apps consistent with proven ARC and Cascade lau
 
 ## Troubleshooting
 
-Run Start-MailHawk-Diagnostics.bat first. It reports policy context without modifying policy, collecting mail, or reading credentials. If Windows policy refuses process-scoped launching, use the approved signing or software-delivery channel instead of security-control evasion.
+Run MailHawk.bat diagnostics first. It reports policy context without modifying policy, collecting mail, or reading credentials. If Windows policy refuses process-scoped launching, use the approved signing or software-delivery channel instead of security-control evasion.
+
+## MailHawk current launcher contract
+
+The only user-facing Windows batch files are `MailHawk.bat` (browser GUI, `demo`, and `diagnostics` subcommands) and `MailHawk-CLI.bat` (console mode). Root `Start-MailHawk-*.bat` files have been removed. The `.ps1` PowerShell hosts remain internal application components.
+
+For ARC instability, the browser Configuration workspace supports explicit **ARC / configured environment** or **Manual · current session** token selection. The latter is memory-only in the running PowerShell process and must be authorized for the target workstation and data classification.
