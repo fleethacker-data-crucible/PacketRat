@@ -6,7 +6,7 @@ function ConvertTo-MailHawkCleanDraft {
     param([AllowEmptyString()][string]$Text)
     if(-not $Text){return ''}
     $clean=$Text -replace '\r\n?', "`n"
-    $clean=[regex]::Replace($clean,'(?m)^\s*>\s?','')
+    $clean=[regex]::Replace($clean,'(?m)^\s*(?:>\s*)+','')
     $clean=[regex]::Replace($clean,'(?m)^\s*#{1,5}\s+(?:Draft|Response|Option|Version)\s+[AB12]\s*[:.\-]?\s*$','')
     $clean=[regex]::Replace($clean,'(?m)^\s*```(?:json|text|markdown)?\s*$','')
     $clean=[regex]::Replace($clean,'(?m)^\s*\*\*(.+?)\*\*\s*$','$1')
@@ -58,6 +58,7 @@ function ConvertFrom-MailHawkDraftAlternatives {
             }
         }
     }
+    if($parsed -and $options.Count -eq 0){throw 'AI returned JSON without a recognizable draft; please regenerate.'}
     if($options.Count -eq 0){
         $clean=ConvertTo-MailHawkCleanDraft -Text $raw
         [void]$options.Add([pscustomobject]@{Id='A';Label='Suggested response';Body=$clean})
