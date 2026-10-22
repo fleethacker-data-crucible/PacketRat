@@ -53,7 +53,7 @@ function ConvertFrom-MailHawkDraftAlternatives {
                 $body=ConvertTo-MailHawkCleanDraft -Text $raw.Substring($start,$end-$start)
                 if(-not $body){continue}
                 $headerText=[string]$matches[$i].Groups[2].Value
-                $label=if($headerText.Trim()){([regex]::Replace($headerText,'^[\s:*()\-]+|[\s:*()\-]+}else{if($i -eq 0){'Concise'}else{'Collaborative'}}
+                $label=if($headerText.Trim()){[regex]::Replace($headerText,'^[\s:*()\-]+|[\s:*()\-]+$','')}else{if($i -eq 0){'Concise'}else{'Collaborative'}}
                 [void]$options.Add([pscustomobject]@{Id=[string][char](65+$options.Count);Label=$label.Substring(0,[Math]::Min($label.Length,80));Body=$body})
             }
         }
