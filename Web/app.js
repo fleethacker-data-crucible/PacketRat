@@ -60,14 +60,31 @@ function demoReportItems(){
   RecommendedAction:'',Urgency:'Unrated',Tracked:false,SourceVerified:true});
  return linked;
 }
+function demoStructuredReport(){
+ return [
+  {Id:'categories',Title:'1. Categories',Summary:'Triage overview: 3 action requests and 1 completed response.',Items:[
+    {EmailIndex:1,Text:'Approval needs review.'},{EmailIndex:2,Text:'Confirm project milestone dates.'}]},
+  {Id:'groups',Title:'2. Groups',Summary:'Work is grouped by required follow-up.',Items:[
+    {EmailIndex:3,Text:'Document review and comments requested.'}]},
+  {Id:'must_reply',Title:'3. Must Reply',Summary:'Three pending requests need human review.',Items:[
+    {EmailIndex:1,Text:'Donâ€™t assume access was approved.'},
+    {EmailIndex:2,Text:'Confirm timing â€“ dates remain unverified.'},
+    {EmailIndex:3,Text:'Review the revised document.'}]},
+  {Id:'already_replied',Title:'4. Already Replied / No Action Needed',Summary:'One reply was completed; one FYI is untracked.',Items:[
+    {EmailIndex:4,Text:'Original question was already answered.'},
+    {EmailIndex:5,Text:'Routine schedule FYI only.'}]},
+  {Id:'skipped',Title:'5. Skipped / Caution',Summary:'Source verification is required before acting.',Items:[]},
+  {Id:'quick_summary',Title:'6. Quick Summary',Summary:'Review three active tasks; no real Outlook or AI data was used.',Items:[]}
+ ];
+}
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
 function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
 function demoPersist(){sessionStorage.setItem('mailhawk-demo-store',JSON.stringify(store));}
 async function api(route,data){
- if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
+ if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
   if(route==='credentials/status')return {ok:true,credentials:{source:'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
    if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
-   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
+   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
   if(route==='report/generate'){
    const modes={Brief:'Leadership briefing',Actions:'Prioritized action plan',Risks:'Risk and uncertainty review',Explain:'Plain-language explanation'};
@@ -80,7 +97,12 @@ async function api(route,data){
   if(route==='status'){if(!item)throw Error('Unknown demo item');item.Status=data.status;demoPersist();return {ok:true,store}}
   if(route==='dismiss'){if(!item)throw Error('Unknown demo item');item.Status='dismissed';store.Dismissals=[...store.Dismissals.filter(x=>x.Key!==key),{Key:key,Subject:item.Subject,From:item.From,Reason:data.reason||'No action needed'}];demoPersist();return {ok:true,store}}
   if(route==='restore'){store.Dismissals=store.Dismissals.filter(x=>x.Key!==key);if(item)item.Status='open';demoPersist();return {ok:true,store}}
-  if(route==='draft'){const a='Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a specific deadline I should prioritize.\n\nBest regards';const b='I appreciate you reaching out. I can take a closer look and would welcome any additional context or timing requirements you would like me to consider.\n\nThank you.';return {ok:true,draft:{Draft:a,Options:[{Id:'A',Label:'Concise',Body:a},{Id:'B',Label:'Collaborative',Body:b}],Profile:'Demo',OutputTokenBudget:20000}}}
+  if(route==='draft'){return {ok:true,draft:{
+    Version:'MAILHAWK_DRAFT_V1',Subject:'RE: '+String(item?.Subject||'Request'),
+    Body:'Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a deadline I should prioritize.',
+    Draft:'Thank you for the update. I will review the details and follow up with you shortly.',
+    SignatureSource:'OutlookReply',Profile:'Demo',OutputTokenBudget:20000
+   }}}
   if(route==='open'||route==='open-draft')return {ok:true,demoOnly:true};
   throw Error('Unknown demo action');
  }
