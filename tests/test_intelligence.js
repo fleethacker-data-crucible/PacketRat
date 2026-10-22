@@ -31,6 +31,20 @@ assert(!rendered.includes('<script>'),'No HTML execution');
 assert(rendered.includes('<table'),'Markdown table');
 assert(rendered.includes('<button'),'Interactive report links');
 assert(rendered.includes('report-section-action'),'Section generation actions');
+const structured=[
+ {Id:'categories',Title:'Categories',Summary:'One request.',Items:[{EmailIndex:1,Text:'Confirm <approval> & details.'}]},
+ {Id:'groups',Title:'Groups',Summary:'',Items:[]},
+ {Id:'must_reply',Title:'Must Reply',Summary:'Donâ€™t delay.',Items:[{EmailIndex:2,Text:'Review FYI.'},{EmailIndex:999,Text:'Fabricated index.'}]},
+ {Id:'already_replied',Title:'Already Replied',Summary:'',Items:[]},
+ {Id:'skipped',Title:'Skipped',Summary:'',Items:[]},
+ {Id:'quick_summary',Title:'Quick Summary',Summary:'Human review required.',Items:[]}
+];
+const structuredHtml=ui.renderStructured(structured,samples,structured.map((x,i)=>({Id:'section-'+i,Title:x.Title})));
+assert(structuredHtml.includes('Confirm &lt;approval&gt; &amp; details.'),'Plain text escaped');
+assert(structuredHtml.includes('data-report-open-index="1"'),'Verified structured source clickable');
+assert(!structuredHtml.includes('data-report-open-index="999"'),'Unverified structured source not clickable');
+assert(structuredHtml.includes('Don’t delay.'),'Structured text gets encoding normalization');
+assert(structuredHtml.includes('data-report-generate-section="section-2"'),'Deterministic scoped generator');
 const out=ui.renderSources(samples,new Set(['verified-1']),'');
 assert(out.includes('data-report-draft="verified-1"'),'Draft action for verified source');
 assert(out.includes('data-report-track="verified-2"'),'Track action only for untracked source');
@@ -42,4 +56,10 @@ assert(list.includes('<ul'),'Bullets and numbered actions');
 for(const id of ['reportQuality','reportScope','reportMode','generateReport','reportGenerated','reportSourceSearch','reportSources','reportText'])
  assert(html.includes('id="'+id+'"'),'Missing report control '+id);
 assert(html.includes('src="report-experience.js"'),'Renderer must be loaded');
+assert(html.includes('id="draftSubjectSuggested"'),'One AI subject entry');
+assert(html.includes('id="draftApplySubject"'),'Subject override explicit');
+assert(html.includes('id="draftBody"'),'One editable body');
+assert(!html.includes('id="draftOptions"'),'Alternative tabs removed');
+assert(app.includes('initializeSingleDraft'),'Single draft frontend parser');
+assert(!app.includes('initializeDraftAlternatives'),'Legacy multiple draft UI absent');
 console.log('Verified interactive report, sanitization and security contract passed');

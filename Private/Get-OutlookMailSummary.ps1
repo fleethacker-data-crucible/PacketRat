@@ -275,31 +275,47 @@ function Open-MailHawkMailItem {
     }
 }
 
+function Join-MailHawkReplyHtml {
+    param([string]$ExistingHtml,[string]$DraftText)
+    if(-not $DraftText.Trim()){throw 'Empty reply.'}
+    $match=[regex]::Match($ExistingHtml,'(?is)<body\b[^>]*>')
+    if(-not $match.Success){throw 'Outlook HTML body unavailable.'}
+    $encoded=[System.Net.WebUtility]::HtmlEncode($DraftText)
+    $encoded=$encoded.Replace("`r`n","`n").Replace("`r","`n").Replace("`n",'<br />')
+    $offset=$match.Index+$match.Length
+    return $ExistingHtml.Substring(0,$offset)+'<div>'+$encoded+'</div><div><br /></div>'+$ExistingHtml.Substring($offset)
+}
 function New-MailHawkOutlookReplyDraft {
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$EntryID,
-        [string]$Body,
-        [switch]$Display,
-        [switch]$SaveOnly
-    )
-    $conn = Connect-MailHawkOutlook
-    $item = $conn.Namespace.GetItemFromID($EntryID)
-    if ($null -eq $item) { throw "No item found for EntryID." }
-
-    $reply = $item.Reply()
-    if ($Body) {
-        try {
-            if ($reply.BodyFormat -eq 2) {
-                $reply.HTMLBody = ($Body -replace "`r?`n", '<br>') + '<br><br>' + $reply.HTMLBody
-            } else {
-                $reply.Body = $Body + "`r`n`r`n" + $reply.Body
-            }
-        } catch {
-            $reply.Body = $Body + "`r`n`r`n" + $reply.Body
-        }
+    param([Parameter(Mandatory)][string]$EntryID,[Parameter(Mandatory)][string]$Body,
+          [string]$SuggestedSubject,[switch]$ApplySuggestedSubject,[switch]$SaveOnly)
+    if(-not $Body.Trim()){throw 'Empty draft.'}
+    $conn=Connect-MailHawkOutlook
+    $item=$conn.Namespace.GetItemFromID($EntryID)
+    if(-not $item){throw 'Original email unavailable.'}
+    $reply=$item.Reply()
+    $reply.Display()
+    $html=[string]$reply.HTMLBody
+    $format=[int]$reply.BodyFormat
+    if($format -eq 2){
+        if($html -notmatch '(?is)<body\b'){throw 'Outlook HTML editor is missing a body element; no signature was overwritten.'}
+        $reply.HTMLBody=Join-MailHawkReplyHtml -ExistingHtml $html -DraftText $Body
+    }elseif($format -eq 3){
+        # For Outlook rich-text/Word format insert via WordEditor so its
+        # rich-text signature and inline formatting remain untouched.
+        $inspector=$reply.GetInspector
+        $editor=$inspector.WordEditor
+        if(-not $editor){throw 'Cannot safely edit Outlook rich-text reply.'}
+        $start=$editor.Range(0,0)
+        $start.InsertBefore($Body+"`r`n`r`n")
+    }else{
+        # Plain-text reply: keep whatever default text signature Outlook added.
+        $reply.Body=$Body+"`r`n`r`n"+[string]$reply.Body
     }
-    if ($Display) { $reply.Display() }
-    elseif ($SaveOnly) { $reply.Save() }
+    if($ApplySuggestedSubject){
+        if(-not $SuggestedSubject.Trim() -or $SuggestedSubject.Length -gt 240 -or $SuggestedSubject -match '[`r`n]'){throw 'Invalid suggested subject.'}
+        $reply.Subject=$SuggestedSubject.Trim()
+    }
+    if($SaveOnly){$reply.Save()}
     return $reply
 }

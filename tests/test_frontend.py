@@ -79,13 +79,14 @@ def run():
                 assert page.locator('#draftDialog').is_visible()
                 page.locator('#generateDraft').click()
                 page.wait_for_function("document.getElementById('draftBody').value.length > 30")
-                assert page.locator('#draftOptions .draft-option').count()==2
-                page.locator('[data-draft-option="B"]').click()
-                assert 'appreciate' in page.locator('#draftBody').input_value()
-                page.locator('#draftBody').fill('Customized option B.')
-                page.locator('[data-draft-option="A"]').click()
-                page.locator('[data-draft-option="B"]').click()
-                assert page.locator('#draftBody').input_value()=='Customized option B.'
+                assert page.locator('#draftSubjectSuggested').input_value().startswith('RE:')
+                assert not page.locator('#draftApplySubject').is_checked()
+                assert page.locator('#draftBody').input_value().count('Thank you') == 1
+                assert page.locator('#draftOptions').count() == 0
+                page.locator('#draftBody').fill('Edited single draft for review.')
+                page.locator('#draftSubjectSuggested').fill('Review requested')
+                page.locator('#draftApplySubject').check()
+                assert page.locator('#draftBody').input_value() == 'Edited single draft for review.'
                 page.locator('#closeDialog').click()
                 page.get_by_role('button',name='Configuration').click()
                 assert page.locator('#settings').is_visible()

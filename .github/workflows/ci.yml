@@ -49,3 +49,4 @@ jobs:
         run: |
           .\tests\Test-MailHawkTriage.ps1
           .\tests\Test-MailHawkReport.ps1
+          .\tests\Test-MailHawkProtocol.ps1
