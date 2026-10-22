@@ -14,7 +14,8 @@ One plain-text email message using normal paragraphs.
 <<<END_MAILHAWK_DRAFT_V1>>>
 Do not write anything outside the envelope. Never place a marker inside the body.
 No Markdown, HTML, code fences, JSON, prefaces, commentary, duplicated drafts,
-fabricated approvals or invented signature. Outlook manages the real signature.
+fabricated approvals or invented signature. No sign-off line such as "Best regards",
+"Sincerely", "Respectfully" or "V/R"; Outlook handles the authentic signature.
 '@
 }
 function ConvertFrom-MailHawkDraftV1 {
@@ -35,6 +36,9 @@ function ConvertFrom-MailHawkDraftV1 {
     }
     if([regex]::IsMatch($body,'(?m)^<<<(?:MAILHAWK_|END_|SUBJECT|BODY)[A-Z0-9_]*>>>')){
         throw 'Draft protocol: duplicate or nested markers.'
+    }
+    if([regex]::IsMatch($body,'(?im)^\s*(?:best\s+regards|kind\s+regards|warm\s+regards|sincerely|respectfully|v/r)\s*,?\s*$')){
+        throw 'Draft protocol: sign-off detected; Outlook will provide the real signature.'
     }
     return [pscustomobject]@{Version='MAILHAWK_DRAFT_V1';Subject=$subject;Body=$body}
 }
