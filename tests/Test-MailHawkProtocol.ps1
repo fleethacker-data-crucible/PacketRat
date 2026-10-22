@@ -32,7 +32,7 @@ Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text ($validDraft+"`n"+$valid
 Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text $validDraft.Replace('<<<END_BODY>>>','<<<NOT_THE_END>>>')} 'Missing terminator rejected'
 Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text '{"responses":[{"body":"Old style A"},{"body":"Old style B"}]}'} 'Legacy A/B JSON rejected'
 Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text ("preamble`n"+$validDraft)} 'Unexpected preface rejected'
-$inside=$validDraft.Replace('I will review','<<<BODY>>>`nI will review'.Replace('`', [char]96))
+$inside=$validDraft.Replace('I will review',("<<<BODY>>>"+[char]10+"I will review"))
 Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text $inside} 'Nested delimiter rejected'
 $goodReport=@'
 <<<MAILHAWK_REPORT_V1>>>
