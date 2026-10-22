@@ -27,7 +27,6 @@
   s=decode(decode(s));
   // Strip model quote wrappers only at the beginning of a line, not ordinary comparisons.
   s=s.split('\n').map(line=>line.replace(/^\s*(?:>\s*)+(?=\S)/,'')).join('\n');
-  s=s.replace(/(?m)^/g,''); // no global trimming: preserve meaningful paragraph structure
   s=s.replace(/^\s*```(?:md|markdown|text)?\s*$/gmi,'');
   return s.replace(/\n{4,}/g,'\n\n\n').trim();
  }
