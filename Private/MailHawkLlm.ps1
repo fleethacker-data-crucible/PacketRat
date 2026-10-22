@@ -188,6 +188,38 @@ function Get-MailHawkLlmToken {
     throw ("No managed LLM token available for {0}. Check ARC is installed/unlocked with service {1}, or switch to Manual under MailHawk Configuration > Credentials." -f $ForProfile, $arcItem)
 }
 
+function ConvertTo-MailHawkLlmText {
+    <#
+     .SYNOPSIS
+       Extract text from strings, typed content block arrays, or nested provider content.
+       Never cast an object or an array to [string] (System.Object[]).
+    #>
+    [CmdletBinding()]
+    param($Value,[int]$Depth=0)
+    if($null -eq $Value -or $Depth -gt 6){return ''}
+    if($Value -is [string]){return [string]$Value}
+    if($Value -is [System.Collections.IEnumerable] -and $Value -isnot [System.Collections.IDictionary] -and $Value -isnot [string]){
+        $pieces=New-Object System.Collections.Generic.List[string]
+        foreach($piece in $Value){
+            $t=ConvertTo-MailHawkLlmText -Value $piece -Depth ($Depth+1)
+            if(-not [string]::IsNullOrWhiteSpace($t)){[void]$pieces.Add($t)}
+        }
+        return ($pieces -join "`n")
+    }
+    foreach($prop in @('text','content','parts','output_text','message')){
+        $part=$null
+        if($Value -is [System.Collections.IDictionary]){
+            if($Value.Contains($prop)){$part=$Value[$prop]}
+        }elseif($Value.PSObject.Properties[$prop]){
+            $part=$Value.$prop
+        }
+        if($null -eq $part){continue}
+        $t=ConvertTo-MailHawkLlmText -Value $part -Depth ($Depth+1)
+        if(-not [string]::IsNullOrWhiteSpace($t)){return $t}
+    }
+    return ''
+}
+
 function Invoke-MailHawkChat {
     <#
     .SYNOPSIS
@@ -266,20 +298,22 @@ function Invoke-MailHawkChat {
         -ContentType 'application/json; charset=utf-8' `
         -TimeoutSec $TimeoutSec
 
-    # Normalize text extraction
-    $text = $null
-    if ($resp.choices -and $resp.choices[0].message.content) {
-        $text = [string]$resp.choices[0].message.content
+    # Provider responses may return a string, text block array or content.parts.
+    # Avoid casting arrays into "System.Object[]" instead of real report text.
+    $text=''
+    if($resp.choices -and $resp.choices[0].message){
+        $text=ConvertTo-MailHawkLlmText -Value $resp.choices[0].message.content
     }
-    elseif ($resp.choices -and $resp.choices[0].text) {
-        $text = [string]$resp.choices[0].text
+    if(-not $text -and $resp.choices -and $resp.choices[0].text){
+        $text=ConvertTo-MailHawkLlmText -Value $resp.choices[0].text
     }
-    elseif ($resp.candidates -and $resp.candidates[0].content.parts) {
-        $text = ($resp.candidates[0].content.parts | ForEach-Object { $_.text }) -join ''
+    if(-not $text -and $resp.candidates -and $resp.candidates[0].content){
+        $text=ConvertTo-MailHawkLlmText -Value $resp.candidates[0].content
     }
-    elseif ($resp.content) {
-        $text = [string]$resp.content
+    if(-not $text -and $resp.content){
+        $text=ConvertTo-MailHawkLlmText -Value $resp.content
     }
+    if(-not $text){throw 'The AI endpoint returned no recognized text content.'}
 
     return [pscustomobject]@{
         Profile  = $cfg.Profile
