@@ -3,6 +3,7 @@
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'Private/MailHawkReport.ps1')
+. (Join-Path $root 'Private/MailHawkLlm.ps1')
 . (Join-Path $root 'Public/Invoke-MailHawkInboxAnalysis.ps1')
 
 function Assert-ReportTest($Value,[string]$Message){
@@ -46,6 +47,15 @@ Assert-ReportTest ($clean.Contains("## Heading")) 'Report content retained'
 Assert-ReportTest ($clean -notmatch '[\x00-\x08]') 'Non-printing controls are removed'
 $quality=Get-MailHawkReportQuality -Report $clean -Items $items -StructuredPresent $true
 Assert-ReportTest ($quality.VerifiedSources -eq 2) 'Quality counts verified sources'
+$blocks=@(
+    [pscustomobject]@{type='text';text='First section'},
+    [pscustomobject]@{type='text';text='Second section'}
+)
+$allText=ConvertTo-MailHawkLlmText -Value $blocks
+Assert-ReportTest ($allText.Contains('First section') -and $allText.Contains('Second section')) 'Typed GenAI parts extracted without object casts'
+$gemini=[pscustomobject]@{content=[pscustomobject]@{parts=@([pscustomobject]@{text='Gemini report'})}}
+Assert-ReportTest ((ConvertTo-MailHawkLlmText -Value $gemini) -eq 'Gemini report') 'Nested provider part extraction'
+
 # Stub approved service call; ensure follow-up is scoped and read-only.
 function Invoke-MailHawkChat {
     param([object[]]$Messages,[string]$Profile,[int]$MaxTokens,[double]$Temperature)
