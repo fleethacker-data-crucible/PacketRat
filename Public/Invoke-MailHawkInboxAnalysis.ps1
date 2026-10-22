@@ -314,8 +314,9 @@ $emailJson
         }
     }
     $reportSections=@(Get-MailHawkReportSections -Report $reportMd)
-    $reportQuality=Get-MailHawkReportQuality -Report $reportMd -Items @($verifiedItems) -StructuredPresent ($structuredReportItems.Count -gt 0)
+    $reportQuality=Get-MailHawkReportQuality -Report $reportMd -Items @($verifiedItems) -StructuredPresent ($structuredReportItems.Count -gt 0) -ModelItems @($structuredReportItems)
     if($partialStructured){$reportQuality.Warnings=@(@($reportQuality.Warnings)+@('GenAI output was truncated before JSON completion; report actions require reanalysis.'))}
+    if($partialStructured){$reportQuality.PartialOutput=$true}
 
     return [pscustomobject]@{
         Success        = $true
