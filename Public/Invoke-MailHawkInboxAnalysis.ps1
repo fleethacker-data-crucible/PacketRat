@@ -244,6 +244,19 @@ $emailJson
     # Rule matches use real mailbox identity, never LLM-generated EntryIDs.
     $ruleResult=Invoke-MailHawkRuleTriage -Emails @($summary.Emails) -Suggested @($mustReply) -Store $store
     $mustReply=@($ruleResult.Items)
+    # Keep rule exclusions reversible. Never overwrite a user's manual priority.
+    $currentKeys=@{}
+    foreach($mail in @($summary.Emails)){if($mail.Fingerprint){$currentKeys[[string]$mail.Fingerprint]=$true}}
+    $excluded=@{}
+    foreach($key in @($ruleResult.SuppressedKeys)){$excluded[[string]$key]=$true}
+    foreach($item in @($store.Checklist)){
+        $key=[string]$item.Key
+        if(-not $currentKeys.ContainsKey($key)){continue}
+        $skip=$excluded.ContainsKey($key) -and -not [bool]$item.PriorityOverride
+        $item | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue ([bool]$skip) -Force
+    }
+    Save-MailHawkStore -Store $store -Root $Root
+
     if($ruleResult.Matched -gt 0){
         $reportMd += "`n`n## Applied triage policy`n"
         $reportMd += ("{0} rule matches evaluated. Review Rules to change defaults or add rules. Manual priority overrides persist." -f $ruleResult.Matched)
