@@ -37,7 +37,7 @@ function Get-MailHawkInboxSummaryGraph {
     $filter = "receivedDateTime ge $cutoff"
     $msgs = Get-MgUserMessage -UserId 'me' -Filter $filter -Top $MaxEmails `
         -OrderBy 'receivedDateTime desc' `
-        -Property 'id,subject,from,receivedDateTime,isRead,importance,bodyPreview,body,conversationId,inferenceClassification' `
+        -Property 'id,subject,from,toRecipients,receivedDateTime,isRead,importance,bodyPreview,body,conversationId,inferenceClassification' `
         -ErrorAction Stop
 
     $results = New-Object System.Collections.Generic.List[object]
@@ -52,6 +52,15 @@ function Get-MailHawkInboxSummaryGraph {
             $fromName  = [string]$m.From.EmailAddress.Name
             $fromEmail = [string]$m.From.EmailAddress.Address
         } catch {}
+
+        $isDirect=$false
+        $myAddress=[string]$env:MAILHAWK_USER_EMAIL
+        if(-not $myAddress){try{$myAddress=[string](Get-MgContext).Account}catch{}}
+        if($myAddress){
+            foreach($recipient in @($m.ToRecipients)){
+                if([string]$recipient.EmailAddress.Address -ieq $myAddress){$isDirect=$true;break}
+            }
+        }
 
         $received = ''
         try { $received = ([datetime]$m.ReceivedDateTime).ToString('yyyy-MM-dd HH:mm') } catch {}
@@ -90,6 +99,7 @@ function Get-MailHawkInboxSummaryGraph {
             Received          = $received
             FromName          = $fromName
             FromEmail         = $fromEmail
+            IsDirect          = $isDirect
             Subject           = $subject
             UnRead            = $unread
             Importance        = $importance
