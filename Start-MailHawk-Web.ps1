@@ -10,7 +10,7 @@
 param([ValidateRange(0,65535)][int]$Port=8766,[switch]$NoBrowser,[switch]$Demo)
 $ErrorActionPreference='Stop'
 $Root=$PSScriptRoot
-foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','MailHawkRules','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
+foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','MailHawkRules','MailHawkReport','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-MailHawkInboxAnalysis.ps1')
@@ -25,7 +25,7 @@ if(Test-Path $envFile){
 $script:LastResult=$null
 $script:Nonce=[guid]::NewGuid().ToString('N')
 $script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png'}
-$script:AllowedAssets=@('index.html','app.js','style.css','mailhawk-logo.png','mailhawk-icon.png')
+$script:AllowedAssets=@('index.html','app.js','report-experience.js','style.css','mailhawk-logo.png','mailhawk-icon.png')
 $script:UTF8=New-Object System.Text.UTF8Encoding $false
 
 function Send-MailHawkResponse {
@@ -68,6 +68,16 @@ function Read-MailHawkBody {
 function Find-MailHawkItem($Store,[string]$Key){
     return @($Store.Checklist | Where-Object {$_.Key -ceq $Key} | Select-Object -First 1)[0]
 }
+function Find-MailHawkReportSource([string]$Key) {
+    if(-not $script:LastResult -or -not $script:LastResult.Summary){return $null}
+    $source=@($script:LastResult.ReportItems | Where-Object {$_.Key -ceq $Key} | Select-Object -First 1)
+    if($source.Count -eq 0){return $null}
+    $email=@($script:LastResult.Summary.Emails | Where-Object {
+        $_.Fingerprint -ceq $Key -and -not $_.UserDismissed -and -not $_.IsSensitive
+    } | Select-Object -First 1)
+    if($email.Count -eq 0){return $null}
+    return $email[0]
+}
 function Invoke-MailHawkApi {
     param([string]$Route,$Data)
     if($Route -eq '/api/health') {return @{ok=$true;service='MailHawk';mode='local';version='2.0'}}
@@ -76,7 +86,7 @@ function Invoke-MailHawkApi {
     switch($Route){
       '/api/state' {
           $summary=if($script:LastResult){$script:LastResult}else{$null}
-          return @{ok=$true;store=$store;credentials=(Get-MailHawkCredentialStatus);report=if($summary){$summary.Report}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
+          return @{ok=$true;store=$store;credentials=(Get-MailHawkCredentialStatus);report=if($summary){$summary.Report}else{$null};reportItems=if($summary){@($summary.ReportItems)}else{@()};reportSections=if($summary){@($summary.ReportSections)}else{@()};reportQuality=if($summary){$summary.ReportQuality}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
       }
       '/api/credentials' {
           $source=[string]$Data.source
@@ -110,7 +120,40 @@ function Invoke-MailHawkApi {
           $null=Get-MailHawkLlmToken -ForProfile $llmProfile
           $script:LastResult=Invoke-MailHawkInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root
           $run=$script:LastResult
-          return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;store=(Get-MailHawkStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
+          return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-MailHawkStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
+      }
+      '/api/report/generate' {
+          if(-not $script:LastResult -or -not $script:LastResult.Success){throw 'Analyze inbox before generating report intelligence.'}
+          $mode=[string]$Data.mode
+          if(@('Brief','Actions','Risks','Explain') -cnotcontains $mode){throw 'Invalid report generation mode.'}
+          $sectionId=[string]$Data.sectionId
+          if(-not $sectionId){$sectionId='all'}
+          if($sectionId -cne 'all' -and $sectionId -notmatch '^section-\d{1,3}$'){throw 'Invalid report section.'}
+          $profile=if(@('Auto','GenAi','Grok') -contains [string]$Data.profile){[string]$Data.profile}else{'Auto'}
+          $generated=Invoke-MailHawkReportFollowup -Analysis $script:LastResult -Mode $mode -SectionId $sectionId -Profile $profile
+          return @{ok=$true;generated=$generated}
+      }
+      '/api/report/track' {
+          $key=[string]$Data.key
+          $source=Find-MailHawkReportSource $key
+          if(-not $source){throw 'Only verified, current report source messages can become actions.'}
+          if(Test-MailHawkDismissed -Store $store -Key $key){throw 'Restore this message from dismissals before tracking it.'}
+          $level=if(@('High','Medium','Low') -contains [string]$Data.urgency){[string]$Data.urgency}else{'Medium'}
+          $item=@($script:LastResult.ReportItems | Where-Object {$_.Key -ceq $key} | Select-Object -First 1)[0]
+          if(-not $item){throw 'Verified report item not found'}
+          $existing=Find-MailHawkItem $store $key
+          if(-not $existing){
+              $proposal=[pscustomobject]@{
+                  Key=$key;Index=[int]$source.Index;EntryID=[string]$source.EntryID
+                  Subject=[string]$source.Subject;From=[string]$source.FromName;FromEmail=[string]$source.FromEmail
+                  Why=$(if($item.RecommendedAction){[string]$item.RecommendedAction}else{[string]$item.Reason})
+                  Urgency=$level;TriageSource='Manual';RuleName=''
+              }
+              $store=Merge-MailHawkChecklist -Store $store -Items @($proposal) -Root $Root
+          }
+          $store=Set-MailHawkChecklistPriority -Store $store -Key $key -Urgency $level -Root $Root
+          $null=Set-MailHawkChecklistStatus -Store $store -Key $key -Status open -Root $Root
+          return @{ok=$true;store=(Get-MailHawkStore -Root $Root)}
       }
       '/api/status' {
           $key=[string]$Data.key
@@ -159,7 +202,9 @@ function Invoke-MailHawkApi {
       }
       '/api/open' {
           $item=Find-MailHawkItem $store ([string]$Data.key)
-          if(-not $item -or -not $item.EntryID){throw 'Outlook EntryID unavailable'}
+          if(-not $item){$item=Find-MailHawkReportSource ([string]$Data.key)}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this verified source.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Opening Graph-only messages in classic Outlook is not yet supported.'}
           $outlook=New-Object -ComObject Outlook.Application
           $mail=$outlook.Session.GetItemFromID([string]$item.EntryID)
           if(-not $mail){throw 'Email not found in Outlook'}
@@ -169,8 +214,8 @@ function Invoke-MailHawkApi {
       '/api/draft' {
           $key=[string]$Data.key
           if(-not $script:LastResult){throw 'Run analysis in this session before drafting'}
-          $email=@($script:LastResult.Summary.Emails|Where-Object {$_.Fingerprint -ceq $key}|Select-Object -First 1)[0]
-          if(-not $email){throw 'Email not available in current analysis'}
+          $email=Find-MailHawkReportSource $key
+          if(-not $email){throw 'Email not available in current verified analysis'}
           $profile=if(@('Auto','Grok','GenAi') -contains $Data.profile){$Data.profile}else{'Auto'}
           $instruction=[string]$Data.instruction
           if($instruction.Length -gt 2000){throw 'Draft instruction exceeds limit'}
@@ -179,7 +224,9 @@ function Invoke-MailHawkApi {
       }
       '/api/open-draft' {
           $item=Find-MailHawkItem $store ([string]$Data.key)
-          if(-not $item -or -not $item.EntryID){throw 'Outlook EntryID unavailable'}
+          if(-not $item){$item=Find-MailHawkReportSource ([string]$Data.key)}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this verified source.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Opening Graph-only messages in classic Outlook is not yet supported.'}
           $body=[string]$Data.body
           if(-not $body.Trim()){throw 'Empty draft'}
           if($body.Length -gt 16000){throw 'Draft exceeds 16000 characters'}

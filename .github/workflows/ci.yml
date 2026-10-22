@@ -17,6 +17,7 @@ jobs:
       - name: Check JavaScript syntax and rendering
         run: |
           node --check Web/app.js
+          node --check Web/report-experience.js
           node tests/test_intelligence.js
       - name: Install development browser dependencies
         run: |
@@ -45,4 +46,6 @@ jobs:
             if($errors.Count -gt 0) { throw ("Parser errors in "+$_.FullName+": "+(($errors | ForEach-Object { $_.Message }) -join '; ')) }
           }
       - name: Offline triage and draft tests
-        run: .\tests\Test-MailHawkTriage.ps1
+        run: |
+          .\tests\Test-MailHawkTriage.ps1
+          .\tests\Test-MailHawkReport.ps1

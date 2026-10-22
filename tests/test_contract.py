@@ -7,6 +7,11 @@ CLIENT=(ROOT/'Web/app.js').read_text()
 HTML=(ROOT/'Web/index.html').read_text()
 assert '[Net.IPAddress]::Loopback' in SERVICE
 assert "'/api/status'" in SERVICE and "'/api/open-draft'" in SERVICE
+assert "'/api/report/generate'" in SERVICE and "'/api/report/track'" in SERVICE
+assert "Find-MailHawkReportSource" in SERVICE
+assert "'report-experience.js'" in SERVICE
+assert (ROOT/'Private/MailHawkReport.ps1').is_file()
+assert (ROOT/'Web/report-experience.js').is_file()
 assert "'/api/credentials'" in SERVICE and "'/api/credentials/check'" in SERVICE
 assert "'mailhawk-logo.png'" in SERVICE and "'mailhawk-icon.png'" in SERVICE
 assert 'Read-MailHawkBody' in SERVICE and '$Stream.Read($buffer' in SERVICE

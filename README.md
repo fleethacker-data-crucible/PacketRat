@@ -26,6 +26,22 @@ The five former user-facing BAT files were retired. Internal PowerShell files (`
 
 The PowerShell process-scoped startup convention matches Cascade, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
 
+## Interactive intelligence report
+
+The report is now an interactive, **source-verified intelligence workspace**, not merely pasted GenAI Markdown. It includes:
+
+- Conservative recovery of common encoding artifacts and model formatting, without stripping ordinary Unicode.
+- Verified inline source references and clickable table rows when GenAI includes source indices. Invalid model references are never made actionable.
+- A searchable list of actual source messages from the most recent inbox scan. Open in Outlook, draft a reply, or explicitly create an action from a report source. Graph-to-classic-Outlook opening is not yet implemented.
+- Generate **Action plan**, **Leadership briefing**, **Risk review**, or **Explanation** from the full report or a selected section; follow-ups are generated on demand and do not send email or silently alter the action queue.
+- Report-quality indicators for unresolved character artifacts, unsupported model references, missing structured output, and conflicts between AI suggestions and local triage rules.
+
+Legacy reports without source indices show a verified source list rather than pretending arbitrary prose can be mapped safely to an Outlook message. If GenAI returns incomplete structured output, MailHawk warns instead of displaying partial JSON as trustworthy triage.
+
+See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for detailed findings, remediation, limitations, and the longer-term schema-first architecture proposal.
+
+**Security:** Mail content and the report are treated as untrusted data. The browser escapes rendered HTML, APIs require a current verified source for report-originated actions, and no AI-generated reply is sent automatically. Use only approved AI endpoints for authorized mail data.
+
 ## Intelligence workspace enhancements (feature branch)
 
 - Overview KPI cards open the matching **Active**, **High priority**, **Completed**, or **Filtered** workspace.
