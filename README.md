@@ -26,6 +26,17 @@ The five former user-facing BAT files were retired. Internal PowerShell files (`
 
 The PowerShell process-scoped startup convention matches Cascade, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
 
+## Intelligence workspace enhancements (feature branch)
+
+- Overview KPI cards open the matching **Active**, **High priority**, **Completed**, or **Filtered** workspace.
+- Priority signals are clickable, and subject titles in the action queue open the original message in desktop Outlook (COM mode).
+- An action can be manually upgraded/downgraded High / Medium / Low. Manual overrides survive rescans and can be reset to the AI/rule suggestion.
+- **Configuration → Intelligence rules** provides editable, ordered, enableable defaults plus custom sender/domain/subject/preview rules. The filter review lists reversible rule exclusions.
+- The report workspace renders GenAI Markdown as readable sections, safe tables, and bullets rather than showing raw blockquote chevrons.
+- Draft generation requests a **20,000-token output ceiling** (provider permitting), and offers separately editable Response A/B alternatives. The selected response opens in Outlook for human review only.
+
+The default .mil rule requires a **verified direct recipient and actionable language**. A .mil sender alone does not create a mandatory task. See [Triage Rules and Drafts](docs/TRIAGE_RULES_AND_DRAFTS.md).
+
 ## Choosing an AI token source
 
 Open **Configuration → Credentials & connections** in the GUI.
@@ -53,6 +64,8 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Microsoft Graph | Requires organization-authorized Graph configuration |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
 | Streaming/cancellable agent operations | Not implemented |
+| Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |
+| Polished report renderer and draft option parsing | Implemented; test coverage added |
 | Automatic sending | Not implemented and deliberately disabled |
 
 ## Security
