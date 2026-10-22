@@ -163,6 +163,7 @@ function Merge-MailHawkChecklist {
                 $existing.TriageSource = 'Manual'
             }
             $existing.EntryID   = $item.EntryID
+            $existing | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue $false -Force
             $existing.LastSeen  = (Get-Date).ToString('o')
             if ($existing.Status -eq 'open' -or -not $existing.Status) {
                 $existing.Status = 'open'
@@ -176,6 +177,7 @@ function Merge-MailHawkChecklist {
                 Why       = $item.Why
                 Urgency   = $item.Urgency
                 PriorityOverride = $false
+                RuleSuppressed = $false
                 SuggestedUrgency = [string]$item.Urgency
                 TriageSource = $(if($item.TriageSource){[string]$item.TriageSource}else{'AI'})
                 RuleName = [string]$item.RuleName
@@ -231,6 +233,7 @@ function Set-MailHawkChecklistPriority {
         if([string]$item.Key -cne $Key){continue}
         $item.Urgency=$Urgency
         $item | Add-Member -NotePropertyName PriorityOverride -NotePropertyValue $true -Force
+        $item | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue $false -Force
         $item | Add-Member -NotePropertyName TriageSource -NotePropertyValue 'Manual' -Force
         $item | Add-Member -NotePropertyName RuleName -NotePropertyValue '' -Force
         $item.LastSeen=(Get-Date).ToString('o')
