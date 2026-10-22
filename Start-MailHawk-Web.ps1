@@ -119,6 +119,26 @@ function Invoke-MailHawkApi {
           $null=Set-MailHawkChecklistStatus -Store $store -Key $key -Status ([string]$Data.status) -Root $Root
           return @{ok=$true;store=(Get-MailHawkStore -Root $Root)}
       }
+      '/api/priority' {
+          $key=[string]$Data.key
+          if(-not (Find-MailHawkItem $store $key)){throw 'Unknown checklist item'}
+          $priority=[string]$Data.urgency
+          if(@('High','Medium','Low') -cnotcontains $priority){throw 'Choose High, Medium or Low'}
+          $store=Set-MailHawkChecklistPriority -Store $store -Key $key -Urgency $priority -Root $Root
+          return @{ok=$true;store=$store}
+      }
+      '/api/priority/reset' {
+          $key=[string]$Data.key
+          if(-not (Find-MailHawkItem $store $key)){throw 'Unknown checklist item'}
+          $store=Clear-MailHawkChecklistPriorityOverride -Store $store -Key $key -Root $Root
+          return @{ok=$true;store=$store}
+      }
+      '/api/rules' {
+          if($null -eq $Data.rules){throw 'Rules payload is required'}
+          $rules=@($Data.rules)
+          $store=Set-MailHawkRules -Store $store -Rules $rules -Root $Root
+          return @{ok=$true;store=$store}
+      }
       '/api/dismiss' {
           $key=[string]$Data.key;$item=Find-MailHawkItem $store $key
           if(-not $item){throw 'Unknown checklist item'}
