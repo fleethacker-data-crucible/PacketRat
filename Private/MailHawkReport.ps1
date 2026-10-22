@@ -13,18 +13,34 @@ function ConvertTo-MailHawkReadableReport {
         $clean=$clean.Replace('\r\n',"`n").Replace('\n',"`n").Replace('\t',"`t")
     }
     # Conservative replacements for UTF-8 decoded as Windows-1252.
+    # ASCII-only literals for Windows PowerShell 5.1 compatibility.
     $repair=@(
-        @('â€™','’'),@('â€˜','‘'),@('â€œ','“'),@('â€','”'),
-        @('â€“','–'),@('â€”','—'),@('â€¢','•'),@('â€¦','…'),
-        @('Â ',' '),@('Â·','·'),@('Â©','©'),@('Â®','®'),
-        @('Ã©','é'),@('Ã¨','è'),@('Ã±','ñ'),@('Ã¼','ü'),
-        @('Ã¶','ö'),@('Ã¤','ä'),@('Ã³','ó'),@('Ã­','í')
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0x2122),[string][char]0x2019),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0x2DC),[string][char]0x2018),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0x153),[string][char]0x201C),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0x9D),[string][char]0x201D),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0x2013),[string][char]0x2013),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0x2014),[string][char]0x2014),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0xA2),[string][char]0x2022),
+        @([string]::Concat([char]0xE2,[char]0x20AC,[char]0xA6),[string][char]0x2026),
+        @([string]::Concat([char]0xC2,[char]0xA0),[string][char]0x20),
+        @([string]::Concat([char]0xC2,[char]0xB7),[string][char]0xB7),
+        @([string]::Concat([char]0xC2,[char]0xA9),[string][char]0xA9),
+        @([string]::Concat([char]0xC2,[char]0xAE),[string][char]0xAE),
+        @([string]::Concat([char]0xC3,[char]0xA9),[string][char]0xE9),
+        @([string]::Concat([char]0xC3,[char]0xA8),[string][char]0xE8),
+        @([string]::Concat([char]0xC3,[char]0xB1),[string][char]0xF1),
+        @([string]::Concat([char]0xC3,[char]0xBC),[string][char]0xFC),
+        @([string]::Concat([char]0xC3,[char]0xB6),[string][char]0xF6),
+        @([string]::Concat([char]0xC3,[char]0xA4),[string][char]0xE4),
+        @([string]::Concat([char]0xC3,[char]0xB3),[string][char]0xF3),
+        @([string]::Concat([char]0xC3,[char]0xAD),[string][char]0xED)
     )
     foreach($pair in $repair){$clean=$clean.Replace([string]$pair[0],[string]$pair[1])}
     $clean=[regex]::Replace($clean,[string]([char]27)+'\[[0-9;]*[A-Za-z]','')
     $clean=[regex]::Replace($clean,'[\x00-\x08\x0B\x0C\x0E-\x1F]','')
     $clean=[regex]::Replace($clean,'(?im)^\s*```(?:markdown|md|text)?\s*$','')
-    $clean=[regex]::Replace($clean,'(?m)^\s*(?:>\s*)+(?=#{1,6}\s|[-*•]\s|\d+\.\s)','')
+    $clean=[regex]::Replace($clean,'(?m)^\s*(?:>\s*)+(?=#{1,6}\s|[-*\u2022]\s|\d+\.\s)','')
     $clean=[regex]::Replace($clean,"`n{4,}","`n`n`n")
     return $clean.Trim()
 }
@@ -113,7 +129,7 @@ function Get-MailHawkReportQuality {
     $warnings=New-Object System.Collections.Generic.List[string]
     if([string]::IsNullOrWhiteSpace($Report)){[void]$warnings.Add('Report text is empty.')}
     if(-not $StructuredPresent){[void]$warnings.Add('Structured report references were absent; some source links use verified inbox fallback.')}
-    if([regex]::IsMatch($Report,'Ã.|â€|Â.|�')){[void]$warnings.Add('Some characters still resemble encoding damage; review the original report.')}
+    if([regex]::IsMatch($Report,'\u00C3.|\u00E2\u20AC|\u00C2.|\uFFFD')){[void]$warnings.Add('Some characters still resemble encoding damage; review the original report.')}
     if([regex]::IsMatch($Report,'@@@MAILHAWK_JSON_|^\s*```','Multiline')){[void]$warnings.Add('Model formatting artifacts remain in the report text.')}
     return [pscustomobject]@{
         Warnings=@($warnings.ToArray());VerifiedSources=@($Items).Count
