@@ -34,6 +34,9 @@ Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text '{"responses":[{"body":"
 Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text ("preamble`n"+$validDraft)} 'Unexpected preface rejected'
 $inside=$validDraft.Replace('I will review',("<<<BODY>>>"+[char]10+"I will review"))
 Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text $inside} 'Nested delimiter rejected'
+$signoff=$validDraft.Replace('I will review the request and confirm the next steps.',"I will review the request.`n`nBest regards,")
+Expect-ProtocolError {ConvertFrom-MailHawkDraftV1 -Text $signoff} 'AI sign-off rejected; Outlook must insert it'
+
 $goodReport=@'
 <<<MAILHAWK_REPORT_V1>>>
 {"version":"MAILHAWK_REPORT_V1","must_reply":[{"index":1,"urgency":"High","why":"Needs review"}],"report_items":[{"index":1,"section":"Must Reply","reason":"A reply is requested","recommended_action":"Verify and respond","urgency":"High"}],"sections":[{"id":"categories","title":"Categories","summary":"There is one high-priority request.","items":[{"email_index":1,"text":"The user should review the email."}]},{"id":"groups","title":"Groups","summary":"","items":[]},{"id":"must_reply","title":"Must Reply","summary":"","items":[{"email_index":1,"text":"Please provide an update."}]},{"id":"already_replied","title":"Already Replied / No Action Needed","summary":"","items":[]},{"id":"skipped","title":"Skipped / Caution","summary":"","items":[]},{"id":"quick_summary","title":"Quick Summary","summary":"Confirm required action in Outlook.","items":[]}]}
