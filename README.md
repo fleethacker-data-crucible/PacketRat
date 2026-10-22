@@ -9,12 +9,12 @@ MailHawk turns Outlook mail into a human-reviewed action queue. It runs a **loca
 ## Launch
 
 1. Download/extract the repository into a folder you can write to.
-2. Double-click `Start-MailHawk-Web.bat` or run `powershell.exe -NoProfile -STA -File .\Start-MailHawk-Web.ps1`.
+2. Double-click `Start-MailHawk-Web.bat` (consistent with Cascade's process-scoped PowerShell startup). Direct launching uses `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\Start-MailHawk-Web.ps1` only when permitted by organizational policy.
 3. The browser opens at the **loopback** URL shown in PowerShell (default `http://127.0.0.1:8766/`, with automatic fallback if taken).
 4. For a **non-sensitive demo**, add `?demo=1` to the URL. The sample items are hardcoded; **Outlook and the AI are not contacted**. Demo changes are confined to this browser tab's `sessionStorage`.
 5. Keep the PowerShell window open. Press Ctrl+C to end the local server.
 
-The existing `Start-MailHawk.bat` (Windows Forms) and `Start-MailHawk-Console.bat` launchers remain available as fallbacks. `Start-MailHawk-Demo.bat` opens the sample-data demo directly. `Start-MailHawk-Web.ps1 -NoBrowser` starts the service without opening a browser automatically.
+Run `Start-MailHawk-Diagnostics.bat` first to check PowerShell version, effective policy, script parsing, necessary files, and local loopback binding without connecting to Outlook or reading credentials. If centrally enforced restrictions block startup, stop and use your approved IT signing/deployment process. See `docs/NAUTILUS_LAUNCH_STANDARD.md`.\n\nThe existing `Start-MailHawk.bat` (Windows Forms) and `Start-MailHawk-Console.bat` launchers remain available as fallbacks. `Start-MailHawk-Demo.bat` opens the sample-data demo directly. `Start-MailHawk-Web.ps1 -NoBrowser` starts the service without opening a browser automatically.
 
 ## Major workflows
 
