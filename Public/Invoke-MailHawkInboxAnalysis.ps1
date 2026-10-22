@@ -200,6 +200,8 @@ $emailJson
     $ai = Invoke-MailHawkChat -Messages $messages -Profile $Profile -Model $Model -MaxTokens 8192 -Temperature 0.1
     $rawText = [string]$ai.Text
 
+    # Raw model responses may contain mail content; do not write them unless explicitly opted in.
+    if ($env:MAILHAWK_SAVE_RAW_AI -eq '1') {
     try {
         $logDir = Join-Path $Root 'Logs'
         if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
@@ -208,6 +210,7 @@ $emailJson
         [System.IO.File]::WriteAllText($rawPath, $rawText, $utf8NoBom)
         Write-MailHawkLogSafe -Level INFO -Message ("Raw AI response saved: {0} ({1} chars)" -f $rawPath, $rawText.Length) -Root $Root
     } catch {}
+    }
 
     $mustReply = @()
     if ($rawText -match '(?s)@@@MAILHAWK_JSON_BEGIN@@@(.*)@@@MAILHAWK_JSON_END@@@') {
