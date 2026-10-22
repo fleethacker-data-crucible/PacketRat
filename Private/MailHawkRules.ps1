@@ -76,7 +76,7 @@ function Test-MailHawkRule {
 
 function Invoke-MailHawkRuleTriage {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][array]$Emails,[Parameter(Mandatory)][array]$Suggested,[Parameter(Mandatory)]$Store)
+    param([Parameter(Mandatory)][array]$Emails,[Parameter(Mandatory)][AllowEmptyCollection()][array]$Suggested,[Parameter(Mandatory)]$Store)
     $null=Initialize-MailHawkRules -Store $Store
     $items=@{}
     foreach($item in $Suggested){
