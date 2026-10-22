@@ -6,6 +6,8 @@ const token=document.querySelector('meta[name="mailhawk-token"]')?.content||'';
 const names={overview:'Overview',triage:'Action queue',report:'AI intelligence',dismissals:'Dismissal memory',settings:'Configuration'};
 let store={Checklist:[],Dismissals:[]},report='',lastRun=null,filter='all',draftKey='',busy=false,noticeTimer=null;
 let ruleDraft=null,draftAlternatives=[],activeDraftId='A';
+let reportItems=[],reportSections=[],reportQuality=null,generatedReportText='';
+const reportUI=window.MailHawkReport;
 let credentialDetails=null;
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultRules=[
@@ -21,16 +23,52 @@ const fakeItems=[
  {Key:'demo-3',EntryID:'',Subject:'Please review the updated draft',From:'Jordan Kim',Why:'Review and return comments on an attached document',Urgency:'Medium',Status:'open',CreatedAt:new Date().toISOString()},
  {Key:'demo-4',EntryID:'',Subject:'Meeting agenda feedback',From:'Sam Rivera',Why:'Feedback already provided',Urgency:'Low',Status:'done',CreatedAt:new Date().toISOString()}
 ];
-const demoReport=`MAILHAWK DEMONSTRATION REPORT\n\nThis is sample data, not a scan of a real mailbox.\n\n1. CATEGORIES\n• 2 high-priority action requests\n• 1 document review\n• 1 completed follow-up\n\n2. MUST REPLY\n• Access request: review required\n• Project milestone: confirm dates\n• Updated draft: return comments\n\n3. QUICK SUMMARY\nThree active items are awaiting attention. Check original messages before acting.\n\nNo AI service was contacted.`;
+const demoReport=`## 1. Categories
+> **Triage overview** — 3 action requests, 1 completed response.
+
+## 2. Groups
+| Email # | Sender | Subject | Suggested disposition |
+| --- | --- | --- | --- |
+| [Email #1] | Morgan Lee | Action required: review access request | High |
+| [Email #2] | Taylor Brooks | Upcoming milestone confirmation | High |
+| [Email #3] | Jordan Kim | Please review the updated draft | Medium |
+| [Email #4] | Sam Rivera | Meeting agenda feedback | Already replied |
+
+## 3. Must Reply
+- [Email #1] Please approve the access workflow. Donâ€™t assume approval happened.
+- [Email #2] Review timing â€“ confirm project milestones.
+- [Email #3] Review the attached draft.
+
+## 4. Already Appears Replied / No Action Needed
+- [Email #4] Completed; no new ask detected.
+
+## 5. Skipped / Caution
+> Caution: Check original Outlook messages before replying.
+
+## 6. Quick Summary
+Three pending requests. This is test data, not a live GenAI response.`;
+function demoReportItems(){
+ return fakeItems.map((item,i)=>({
+  Index:i+1,Key:item.Key,Subject:item.Subject,From:item.From,FromEmail:'demo@example.test',
+  Section:i===3?'Already Replied':'Must Reply',Reason:item.Why,
+  RecommendedAction:i===3?'No response needed.':'Review and respond to the verified request.',
+  Urgency:item.Urgency,Tracked:true,SourceVerified:true
+ }));
+}
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
 function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
 function demoPersist(){sessionStorage.setItem('mailhawk-demo-store',JSON.stringify(store));}
 async function api(route,data){
- if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
+ if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
   if(route==='credentials/status')return {ok:true,credentials:{source:'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
    if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
-   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
+   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
+  if(route==='report/generate'){
+   const modes={Brief:'Leadership briefing',Actions:'Prioritized action plan',Risks:'Risk and uncertainty review',Explain:'Plain-language explanation'};
+   return {ok:true,generated:{Mode:data.mode,Section:data.sectionId==='all'?'Full report':'Selected section',Content:'## '+(modes[data.mode]||'Summary')+'\n\n- Verify [Email #1] in Outlook.\n- Confirm [Email #2] timing.\n- This is simulated analysis. No AI or email account was contacted.',Profile:'Demo',Model:'Sample'}};
+  }
+  if(route==='report/track'){const source=demoReportItems().find(x=>x.Key===String(data.key));if(!source)throw Error('Unknown demo source');if(!item){store.Checklist.push({...fakeItems[source.Index-1],Status:'open'})}demoPersist();return {ok:true,store}}
   if(route==='priority'){if(!item)throw Error('Unknown demo item');item.Urgency=data.urgency;item.PriorityOverride=true;item.TriageSource='Manual';item.RuleSuppressed=false;demoPersist();return {ok:true,store}}
   if(route==='priority/reset'){if(!item)throw Error('Unknown demo item');item.PriorityOverride=false;item.TriageSource='AI';demoPersist();return {ok:true,store}}
   if(route==='rules'){store.Rules=data.rules.map(r=>({...r}));demoPersist();return {ok:true,store}}
@@ -70,45 +108,12 @@ function filteredQueue(){
  const priority={High:0,Medium:1,Low:2},sort=$('sortOrder').value;
  return items.sort((a,b)=>sort==='subject'?String(a.Subject).localeCompare(String(b.Subject)):sort==='recent'?String(b.LastSeen||b.CreatedAt||'').localeCompare(String(a.LastSeen||a.CreatedAt||'')):(priority[a.Urgency]??3)-(priority[b.Urgency]??3));
 }
-function formatInline(value){
- return escapeHtml(value).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
-}
-function renderIntelligence(text){
- if(!String(text||'').trim())return '<p class="report-placeholder">Run Analyze inbox to generate a structured briefing.</p>';
- let raw=String(text).replace(/@@@MAILHAWK_JSON_BEGIN@@@[\s\S]*?@@@MAILHAWK_JSON_END@@@/g,'').replace(/\r/g,'');
- if(!raw.includes('\n')&&raw.includes('\\n'))raw=raw.replace(/\\n/g,'\n');
- const lines=raw.split('\n').map(l=>l.replace(/^\s*(?:>\s*)+/,'').replace(/^\s*\\>/,'').trimEnd());
- const html=[];let inList=false,inSection=false;
- const closeList=()=>{if(inList){html.push('</ul>');inList=false}};
- const closeSection=()=>{closeList();if(inSection){html.push('</section>');inSection=false}};
- const cells=line=>line.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(x=>x.trim());
- const separator=line=>/^\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
- for(let i=0;i<lines.length;i++){
-  const line=lines[i].trim();
-  if(!line){closeList();continue}
-  if(/^```/.test(line))continue;
-  const numberedHeading=line.match(/^\d+\.\s+((?:[A-Z][A-Z /&\-]{3,55})|(?:Categories|Groups|Must Reply|Already Replied|Already Appears Replied|No Action Needed|Skipped|Quick Summary|Action Items|Key Findings))$/);
-  if(numberedHeading){closeSection();html.push('<section class="report-section"><h2>'+formatInline(numberedHeading[1])+'</h2>');inSection=true;continue}
-  const heading=line.match(/^#{1,5}\s+(.+)$/);
-  if(heading){closeSection();html.push('<section class="report-section"><h2>'+formatInline(heading[1])+'</h2>');inSection=true;continue}
-  if(/^[-*_]{3,}$/.test(line)){closeList();html.push('<hr>');continue}
-  if(line.startsWith('|')&&i+1<lines.length&&separator(lines[i+1])){
-    closeList();let rows=[];const headers=cells(line);i+=2;
-    for(;i<lines.length&&lines[i].trim().startsWith('|');i++)rows.push(cells(lines[i]));
-    i--;html.push('<div class="report-table-wrap"><table class="report-table"><thead><tr>'+headers.map(x=>'<th>'+formatInline(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+headers.map((h,j)=>'<td>'+formatInline(row[j]||'')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>');continue;
-  }
-  const bullet=line.match(/^(?:[-*•]\s+|\d+[.)]\s+)(.*)$/);
-  if(bullet){if(!inList){html.push('<ul class="report-list">');inList=true}html.push('<li>'+formatInline(bullet[1])+'</li>');continue}
-  closeList();
-  if(/^\*\*[^*]+:\*\*/.test(line)){html.push('<p class="report-emphasis">'+formatInline(line)+'</p>');continue}
-  html.push('<p>'+formatInline(line)+'</p>');
- }
- closeSection();return html.join('');
-}
+function formatInline(value){return escapeHtml(value).replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>')}
+function renderIntelligence(text){return reportUI.renderMarkdown(text,reportItems,reportSections)}
 function render(){const items=store.Checklist||[],dismissed=store.Dismissals||[],suppressed=items.filter(x=>x.RuleSuppressed),visible=items.filter(x=>!x.RuleSuppressed),active=visible.filter(x=>x.Status==='open'||x.Status==='in_progress');$('mOpen').textContent=active.length;$('mHigh').textContent=active.filter(x=>x.Urgency==='High').length;$('mDone').textContent=visible.filter(x=>x.Status==='done').length;$('mDismiss').textContent=dismissed.length+suppressed.length;$('navCount').textContent=active.length;
  $('priorityList').innerHTML=active.length?active.slice().sort((a,b)=>({High:0,Medium:1,Low:2}[a.Urgency]??3)-({High:0,Medium:1,Low:2}[b.Urgency]??3)).slice(0,4).map(x=>itemRow(x)).join(''):empty('Your radar is clear. Run an inbox analysis to discover new actions.');const results=filteredQueue();$('queueTotal').textContent=`${results.length} item${results.length===1?'':'s'}`;$('queue').innerHTML=results.length?results.map(x=>itemRow(x,true)).join(''):empty('No actions match these filters.');$('dismissList').innerHTML=dismissed.length?dismissed.map(x=>`<article class="item"><span class="priority low">Filtered</span><div class="item-body"><strong>${escapeHtml(x.Subject)}</strong><small>${escapeHtml(x.From)} · ${escapeHtml(x.Reason)}</small></div><div class="item-actions"><button data-act="restore" data-key="${escapeHtml(x.Key)}">Restore</button></div></article>`).join(''):empty('No dismissed items. You can dismiss false positives from the action queue.');$('ruleFilteredList').innerHTML=suppressed.length?suppressed.map(x=>
  '<article class="item"><span class="priority low">Rule filter</span><div class="item-body"><strong>'+escapeHtml(x.Subject||'(No subject)')+'</strong><small>'+escapeHtml(x.From||'')+' · '+escapeHtml(x.RuleSuppressedBy||'Matched an exclusion rule')+'</small></div><div class="item-actions"><button data-act="unfilter" data-key="'+escapeHtml(x.Key)+'">Keep in queue</button></div></article>'
- ).join(''):empty('No rule-filtered items in the current action history.');$('reportText').innerHTML=renderIntelligence(report);$('brief').textContent=report?report.replace(/^[\s>]+/gm,'').replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportProfile').textContent=lastRun?.Profile||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
+ ).join(''):empty('No rule-filtered items in the current action history.');$('reportText').innerHTML=renderIntelligence(report);renderReportExtras();$('brief').textContent=report?report.replace(/^[\s>]+/gm,'').replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportProfile').textContent=lastRun?.Profile||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
 function updateCredentialPanel(){
  const source=$('credentialSource').value;
  $('manualTokenFields').classList.toggle('hidden',source!=='Manual');
@@ -210,7 +215,7 @@ async function saveTriageRules(){
 }
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('mailhawk-prefs',JSON.stringify(cfg))}catch{}return cfg}
 function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('mailhawk-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
@@ -255,7 +260,7 @@ document.addEventListener('keydown',event=>{
 document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-draft-option]');if(tab)selectDraftOption(tab.dataset.draftOption);
 });
-$('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
+$('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){draftKey=key;$('draftSubject').textContent=store.Checklist.find(x=>x.Key===key)?.Subject||'No subject';$('draftBody').value='';draftAlternatives=[];activeDraftId='A';$('draftOptions').innerHTML='';$('draftOptions').classList.add('hidden');$('instruction').value='';$('draftDialog').showModal();return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(act==='unfilter'){const original=store.Checklist.find(x=>x.Key===key);store=(await api('priority',{key,urgency:original?.Urgency||'Medium'})).store;}else if(act==='resetpriority')store=(await api('priority/reset',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
 $('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeDraftAlternatives(x.draft);notify('Draft alternatives ready. Select and edit Response A or B; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(report));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
 $('addRule').addEventListener('click',addCustomRule);
