@@ -1,74 +1,74 @@
-# MailHawk · Intelligence Workspace
+# MailHawk — Outlook Intelligence Workspace
 
-MailHawk turns Outlook mail into a human-reviewed action queue. It runs a **local PowerShell 5.1** engine and serves an HTML/CSS/JavaScript dashboard over `127.0.0.1` — no Node, Python, or admin installation on the target computer.
+MailHawk helps triage Outlook emails into a human-reviewed action queue. The browser UI runs on a local Windows PowerShell 5.1 service. No Python or Node.js installation is required on the target workstation.
 
-![MailHawk selected flying hawk brand](Web/mailhawk-logo.png)
+![Selected MailHawk logo](Web/mailhawk-logo.png)
 
-> **Status:** Integrated prototype. The browser GUI and sample-data interactions were tested in Chromium. Real Outlook COM, Microsoft Graph, approved ARC credentials, and AI endpoints still require validation on a permitted Windows workstation. Do not treat this as accredited or production-ready software.
+> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, ARC/CAC, AI provider connectivity, and Navy workstation execution need validation in the approved environment. Not accredited or production-ready.
 
-## Launch
+## Only two launchers
 
-1. Download/extract the repository into a folder you can write to.
-2. Double-click `Start-MailHawk-Web.bat` (consistent with Cascade's process-scoped PowerShell startup). Direct launching uses `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\Start-MailHawk-Web.ps1` only when permitted by organizational policy.
-3. The browser opens at the **loopback** URL shown in PowerShell (default `http://127.0.0.1:8766/`, with automatic fallback if taken).
-4. For a **non-sensitive demo**, add `?demo=1` to the URL. The sample items are hardcoded; **Outlook and the AI are not contacted**. Demo changes are confined to this browser tab's `sessionStorage`.
-5. Keep the PowerShell window open. Press Ctrl+C to end the local server.
+- **`MailHawk.bat`** — opens the modern browser GUI, the default.
+- **`MailHawk-CLI.bat`** — runs console-only inbox analysis (`-Profile GenAi` or `-Profile Grok` are accepted).
 
-Run `Start-MailHawk-Diagnostics.bat` first to check PowerShell version, effective policy, script parsing, necessary files, and local loopback binding without connecting to Outlook or reading credentials. If centrally enforced restrictions block startup, stop and use your approved IT signing/deployment process. See `docs/NAUTILUS_LAUNCH_STANDARD.md`.\n\nThe existing `Start-MailHawk.bat` (Windows Forms) and `Start-MailHawk-Console.bat` launchers remain available as fallbacks. `Start-MailHawk-Demo.bat` opens the sample-data demo directly. `Start-MailHawk-Web.ps1 -NoBrowser` starts the service without opening a browser automatically.
+The browser launcher also supports optional commands from an existing CMD prompt:
 
-## Major workflows
+```bat
+MailHawk.bat
+MailHawk.bat demo
+MailHawk.bat diagnostics
+MailHawk.bat -NoBrowser
+MailHawk.bat -Port 8766
+MailHawk-CLI.bat -Profile GenAi
+```
 
-| Workspace | Capability |
+The five former user-facing BAT files were retired. Internal PowerShell files (`Start-MailHawk-Web.ps1`, `Start-MailHawk.ps1`) remain as implementation entrypoints and are not additional launchers.
+
+The PowerShell process-scoped startup convention matches Cascade, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
+
+## Choosing an AI token source
+
+Open **Configuration → Credentials & connections** in the GUI.
+
+1. Select **ARC / configured environment** to use the existing approved ARC bridge (GenAi service `genapi` or Grok service `advana-api`; override names in `Config/mailhawk.env` if needed).
+2. Or select **Manual · current session**, select GenAi or Grok, paste a token for an **approved** provider, then select **Apply credential source**. Repeat for another provider if needed.
+3. Select **Check available token** to verify that the selected provider's token resolves locally. This does **not** contact an AI endpoint or scan your inbox.
+4. Select **Forget manual tokens** to erase manual credential references held in the current PowerShell process.
+
+Manual credentials are **not saved to disk, environment files, localStorage, or GitHub** by MailHawk. They are held only in the PowerShell service process while it runs and are cleared on service exit or when switching back to ARC. A local process/browser is not an enterprise credential vault; only use this option if permitted under your organization's token-handling policy. Never use unapproved AI endpoints for sensitive or official mail.
+
+**Why “no LLM token” happened:** Earlier browser releases silently searched environment variables/ARC without user-configurable source selection. Now the selected source is explicit, errors include useful setup instructions, and **Analyze inbox checks token availability before reading messages**.
+
+`Config/mailhawk.env.example` contains optional ARC discovery, service names, and provider configuration. Do not commit real token values.
+
+## What works and what still needs verification
+
+| Workflow | State |
 |---|---|
-| Overview | Intelligence banner, action KPIs, high-priority signals, recent report highlights |
-| Action queue | Search, sort, filter, mark done/in-progress/reopen, dismiss, draft and open source Outlook message |
-| AI intelligence | Last analysis report plus provider/model information |
-| Dismissal memory | Persistent dismissed-message history and restore |
-| Configuration | Provider, AI profile, max messages, days back |
-| Draft assistant | Generate, edit, copy, or open as Outlook reply for **manual review** |
+| Browser dashboard, inbox action queue, dismissal memory, draft review | Implemented |
+| Offline demonstration (`MailHawk.bat demo`) | No Outlook or LLM connection |
+| Outlook COM analysis, draft-opening and reply detection | Implementation present; target Windows validation required |
+| ARC managed credential integration | Implementation present; requires ARC unlock/session test |
+| Manual credential configuration | Session-only implementation; network/API testing required |
+| Microsoft Graph | Requires organization-authorized Graph configuration |
+| Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
+| Streaming/cancellable agent operations | Not implemented |
+| Automatic sending | Not implemented and deliberately disabled |
 
-A fresh AI draft requires an inbox analysis during the same server session. No automatic sends, unattended mailbox actions, or background scheduling are implemented. AI operations run synchronously on the local service; they can make the GUI wait. True AI streaming/cancellation is **not yet implemented**.
+## Security
 
-## Configuration
+The HTTP service binds to local loopback only. POST requests require same-origin checks and a per-process request nonce. The selected hawk logo ships as an actual PNG, not a remote reference. User email state and logs belong under the ignored `Logs/` directory. Generated drafts require human review; MailHawk never sends messages automatically.
 
-Copy `Config/mailhawk.env.example` to `Config/mailhawk.env` (ignored by Git). Or rely on approved ARC parameter manager discovery. Tokens must **never** be placed in browser code or committed to Git.
+## Project layout
 
-- Profiles: `Auto`, `GenAi`, `Grok`.
-- Outlook access: desktop COM (recommended for local opening/drafts); Graph needs its own approved authorization/modules.
-- Outlook/AI capabilities rely on what's allowed by your organization.
+- `MailHawk.bat` and `MailHawk-CLI.bat` — the only user launchers.
+- `Start-MailHawk-Web.ps1` — local HTTP/JSON service.
+- `Start-MailHawk.ps1` — legacy engine with console mode used by the CLI.
+- `Web/` — browser application, styling, and logo assets.
+- `Private/`, `Public/` — Outlook, ARC, AI, persistence and analysis modules.
+- `tools/Test-MailHawkStartup.ps1` — noninvasive diagnostics invoked by `MailHawk.bat diagnostics`.
+- `tests/` — development-only source/browser tests.
 
-## Security model and caveats
+**Browser demo:** `MailHawk.bat demo` loads hard-coded test messages and does not touch Outlook or LLM endpoints. Real API keys must not be entered in demo mode.
 
-- TCP server binds only `127.0.0.1`, not a network interface.
-- A per-process nonce and same-origin checks protect POST routes, and GET is read-only. Paths are allowlisted and response types explicit.
-- Mail content and reports stay out of Git; runtime store/logs are written inside ignored `Logs/`.
-- The AI is untrusted input. Checklist identity is resolved against the original Outlook scan, not model-supplied EntryIDs.
-- A local browser origin is **not an enterprise security boundary**. Do not deploy as a shared server; further security review, logging minimization, and organizational approval are required.
-- Drafts open in Outlook but are **not sent** by MailHawk.
-
-## API (local only)
-
-| Method | Route | Effect |
-|---|---|---|
-| GET | `/api/health` | Basic service availability |
-| GET | `/api/state` | Local checklist, dismissals, last session report |
-| POST | `/api/analyze` | Synchronous Outlook + AI analysis |
-| POST | `/api/status` | Change checklist status |
-| POST | `/api/dismiss` | Remember false positive |
-| POST | `/api/restore` | Restore a dismissal |
-| POST | `/api/open` | Open Outlook message window |
-| POST | `/api/draft` | AI-generated reply body |
-| POST | `/api/open-draft` | Open Outlook reply window, no send |
-
-## Development validation
-
-`tests/test_frontend.py` runs browser checks with Python + Playwright on a **development computer**, not as a target workstation dependency. It starts a static server and exercises the offline demo workflow, assets, navigation, action filtering, dismissal restore, and drafting. Windows PowerShell/Outlook integration requires additional native workstation testing.
-
-## Layout
-
-- `Web/` frontend and selected MailHawk logo/icon.
-- `Start-MailHawk-Web.ps1` loopback HTTP service and API routes.
-- `Private/` Outlook collectors, ARC integration, LLM, persistence and drafts.
-- `Public/Invoke-MailHawkInboxAnalysis.ps1` classification pipeline.
-- `Config/mailhawk.env.example` sanitized template.
-- `tests/` offline UI and source contract tests.
+See `docs/NAUTILUS_LAUNCH_STANDARD.md` for the ARC/Cascade launch convention and security constraints.
