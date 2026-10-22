@@ -83,6 +83,7 @@ function Invoke-MailHawkRuleTriage {
         if($item.Key){$items[[string]$item.Key]=$item}
     }
     $suppressed=New-Object System.Collections.Generic.List[string]
+    $suppressedReasons=@{}
     $matched=0
     foreach($mail in $Emails){
         if($mail.UserDismissed -or $mail.IsSensitive -or -not $mail.Fingerprint){continue}
@@ -94,6 +95,7 @@ function Invoke-MailHawkRuleTriage {
             if($rule.Effect -eq 'Skip'){
                 if($items.ContainsKey($key)){$items.Remove($key)}
                 [void]$suppressed.Add($key)
+                $suppressedReasons[$key]=[string]$rule.Name
                 break
             }
             if($items.ContainsKey($key)){
@@ -115,5 +117,5 @@ function Invoke-MailHawkRuleTriage {
             break
         }
     }
-    return [pscustomobject]@{Items=@($items.Values | Sort-Object Index);Matched=$matched;SuppressedKeys=@($suppressed.ToArray())}
+    return [pscustomobject]@{Items=@($items.Values | Sort-Object Index);Matched=$matched;SuppressedKeys=@($suppressed.ToArray());SuppressedReasons=$suppressedReasons}
 }
