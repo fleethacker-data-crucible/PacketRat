@@ -150,11 +150,16 @@ OUTPUT PART 1 - JSON (must appear first):
   "must_reply": [
     {
       "index": 9,
-      "fingerprint": "copy from input Fingerprint field",
-      "entry_id": "copy from input EntryID field",
-      "from": "sender name",
-      "subject": "subject text",
-      "why": "one-line reason",
+      "why": "why a response is needed",
+      "urgency": "High"
+    }
+  ],
+  "report_items": [
+    {
+      "index": 9,
+      "section": "Must Reply",
+      "reason": "Evidence-grounded rationale",
+      "recommended_action": "Suggested next action for a human to review",
       "urgency": "High"
     }
   ]
@@ -162,6 +167,7 @@ OUTPUT PART 1 - JSON (must appear first):
 @@@MAILHAWK_JSON_END@@@
 
 Include in must_reply: security/DLP alerts, mandatory training, SAAR/access requests, direct questions, tasking that still needs action.
+For report_items use only Index values present in the input. Include each email discussed in the Markdown at most once; never fabricate email IDs. Valid section names: Categories, Groups, Must Reply, Already Replied, No Action Needed, Skipped / Caution, Quick Summary. Do not invent exact delivery dates or authority.
 Explicit user rules are applied separately after classification; don't fabricate rule decisions. A .mil sender alone does not imply a task.
 Exclude: newsletters, automated digests, user-dismissed, solidly replied threads.
 
@@ -173,6 +179,7 @@ OUTPUT PART 2 - Markdown with these headings:
 ## 5. Skipped / Caution
 ## 6. Quick Summary
 Use normal Markdown headings, bullets, and tables where helpful. Do not wrap the report in Markdown blockquotes (>), code fences, or duplicate response alternatives.
+When mentioning a specific email in report prose or tables, put [Email #N] (the literal numeric input Index) at the beginning. All clickable links are validated against the original scan. Avoid HTML, escaped Unicode literals, ANSI color codes and unusual quote characters.
 '@
 
     $userPrompt = @"
@@ -213,10 +220,12 @@ $emailJson
     }
 
     $mustReply = @()
+    $structuredReportItems = @()
     if ($rawText -match '(?s)@@@MAILHAWK_JSON_BEGIN@@@(.*)@@@MAILHAWK_JSON_END@@@') {
         $jsonPart = $Matches[1].Trim()
         try {
             $parsed = $jsonPart | ConvertFrom-Json
+            if($parsed.report_items){$structuredReportItems=@($parsed.report_items)}
             foreach ($m in @($parsed.must_reply)) {
                 # The LLM is untrusted: validate the index and use original mailbox identity.
                 # Never allow a fabricated fingerprint/EntryID to target another message.
@@ -236,6 +245,7 @@ $emailJson
     }
 
     $reportMd = [regex]::Replace($rawText, '(?s)@@@MAILHAWK_JSON_BEGIN@@@.*?@@@MAILHAWK_JSON_END@@@', '').Trim()
+    $reportMd = ConvertTo-MailHawkReadableReport -Text $reportMd
     # Preserve readable punctuation, Unicode and report structure; the browser escapes HTML.
 
     if ($mustReply.Count -eq 0) {
@@ -272,6 +282,22 @@ $emailJson
         Write-MailHawkLogSafe -Level WARN -Message 'MustReply list is empty after JSON + fallback' -Root $Root
     }
 
+    # Reconcile all report references to real scan data. AI-supplied fingerprints and EntryIDs
+    # are never accepted. The verified source list can also surface legacy reports with
+    # no report_items, without guessing a message identity from arbitrary text.
+    $verifiedItems=@(Get-MailHawkVerifiedReportItems -Emails @($summary.Emails) -ModelItems @($structuredReportItems) -MustReply @($mustReply))
+    $trackedKeys=@{}
+    foreach($action in @($store.Checklist)){if($action.Key){$trackedKeys[[string]$action.Key]=$action}}
+    foreach($source in $verifiedItems){
+        if($trackedKeys.ContainsKey([string]$source.Key)){
+            $source.Tracked=$true
+            $action=$trackedKeys[[string]$source.Key]
+            $source.Urgency=[string]$action.Urgency
+        }
+    }
+    $reportSections=@(Get-MailHawkReportSections -Report $reportMd)
+    $reportQuality=Get-MailHawkReportQuality -Report $reportMd -Items @($verifiedItems) -StructuredPresent ($structuredReportItems.Count -gt 0)
+
     return [pscustomobject]@{
         Success        = $true
         GeneratedAt    = Get-Date -Format 'o'
@@ -283,6 +309,9 @@ $emailJson
         DismissedCount = $dismissedCount
         Summary        = $summary
         Report         = $reportMd
+        ReportItems    = @($verifiedItems)
+        ReportSections = @($reportSections)
+        ReportQuality  = $reportQuality
         MustReply      = $mustReply
         Store          = $store
     }
