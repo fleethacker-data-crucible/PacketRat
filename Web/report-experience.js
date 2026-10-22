@@ -160,5 +160,33 @@
   if(!(Array.isArray(sections)?sections:[]).length)warnings.push('The report has no reliably parsed sections.');
   return {warnings,verifiedSources:lookup.size,sections:(sections||[]).length,unverifiedRefs:[...new Set(unknown)]};
  }
- root.MailHawkReport={normalizeText,deriveSections,renderMarkdown,renderSources,audit,escapeHtml};
+ function renderStructured(sections,verifiedItems,reportSections=[]){
+  if(!Array.isArray(sections)||!sections.length)return '<p class="report-placeholder">No structured report available.</p>';
+  const sources=sourceIndex(verifiedItems),seen=new Set();
+  return sections.map((section,i)=>{
+   const title=escapeHtml(normalizeText(section.Title||section.title||'Untitled section'));
+   const id=reportSections[i]?.Id||'section-'+i;
+   const heading='<div class="report-section-heading"><h2>'+title+'</h2><button type="button" class="report-section-action" data-report-generate-section="'+escapeHtml(id)+'">✧ Generate from section</button></div>';
+   const summary=normalizeText(section.Summary||section.summary||'');
+   let html='<section class="report-section" data-report-section="'+escapeHtml(section.Id||section.id||'')+'">'+heading;
+   if(summary)html+='<p>'+escapeHtml(summary)+'</p>';
+   const entries=Array.isArray(section.Items)?section.Items:Array.isArray(section.items)?section.items:[];
+   if(entries.length){
+    html+='<ul class="report-list report-structured-list">';
+    for(const entry of entries){
+     const message=normalizeText(entry.Text||entry.text||'');
+     if(!message.trim())continue;
+     const index=Number(entry.EmailIndex||entry.email_index||0);
+     const eligible=index>0&&sources.has(index);
+     const sourceLink=eligible?'<button type="button" class="report-reference" data-report-open-index="'+index+'">Email #'+index+' ↗</button> ':
+      index>0?'<span class="report-unlinked">Source #'+index+' not verified</span> ':'';
+     html+='<li>'+sourceLink+escapeHtml(message)+'</li>';
+     if(eligible)seen.add(index);
+    }
+    html+='</ul>';
+   }else if(!summary)html+='<p class="report-placeholder">No findings in this section.</p>';
+   return html+'</section>';
+  }).join('');
+ }
+ root.MailHawkReport={normalizeText,deriveSections,renderMarkdown,renderStructured,renderSources,audit,escapeHtml};
 })(typeof globalThis!=='undefined'?globalThis:this);
