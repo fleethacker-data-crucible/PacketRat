@@ -155,6 +155,7 @@ function Merge-MailHawkChecklist {
             $existing.Subject   = $item.Subject
             $existing.From      = $item.From
             $existing.Why       = $item.Why
+            $existing | Add-Member -NotePropertyName SuggestedUrgency -NotePropertyValue ([string]$item.Urgency) -Force
             if (-not $existing.PriorityOverride) { $existing.Urgency = $item.Urgency }
             $existing | Add-Member -NotePropertyName TriageSource -NotePropertyValue ([string]$item.TriageSource) -Force
             $existing | Add-Member -NotePropertyName RuleName -NotePropertyValue ([string]$item.RuleName) -Force
@@ -175,6 +176,7 @@ function Merge-MailHawkChecklist {
                 Why       = $item.Why
                 Urgency   = $item.Urgency
                 PriorityOverride = $false
+                SuggestedUrgency = [string]$item.Urgency
                 TriageSource = $(if($item.TriageSource){[string]$item.TriageSource}else{'AI'})
                 RuleName = [string]$item.RuleName
                 FromEmail = [string]$item.FromEmail
@@ -247,6 +249,7 @@ function Clear-MailHawkChecklistPriorityOverride {
     foreach($item in @($Store.Checklist)){
         if([string]$item.Key -cne $Key){continue}
         $item | Add-Member -NotePropertyName PriorityOverride -NotePropertyValue $false -Force
+        if(@('High','Medium','Low') -contains [string]$item.SuggestedUrgency){$item.Urgency=[string]$item.SuggestedUrgency}
         $item | Add-Member -NotePropertyName TriageSource -NotePropertyValue 'AI' -Force
         $item | Add-Member -NotePropertyName RuleName -NotePropertyValue '' -Force
         $found=$true
