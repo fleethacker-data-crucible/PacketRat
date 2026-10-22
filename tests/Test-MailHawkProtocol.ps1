@@ -58,7 +58,7 @@ $signature='<html><body class="WordSection1"><div id="signature">Authorized Outl
 $joined=Join-MailHawkReplyHtml -ExistingHtml $signature -DraftText 'Review <this> & confirm'
 Assert-Protocol ($joined.Contains('Review &lt;this&gt; &amp; confirm')) 'HTML escape message'
 Assert-Protocol ($joined.Contains($signature.Substring($signature.IndexOf('<div id="signature">')))) 'Existing signature and quoted message intact'
-Assert-Protocol (($joined.Split('id="signature"').Length-1) -eq 1) 'Signature not duplicated'
+Assert-Protocol (([regex]::Matches($joined,'id="signature"').Count) -eq 1) 'Signature not duplicated'
 Assert-Protocol ($joined.IndexOf('Review &lt;this&gt;') -lt $joined.IndexOf('Authorized Outlook signature')) 'Message before Outlook signature'
 function Invoke-MailHawkChat {
     param($Messages,[string]$Profile,[string]$Model,[int]$MaxTokens,[double]$Temperature)
