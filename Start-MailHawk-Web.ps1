@@ -10,7 +10,7 @@
 param([ValidateRange(0,65535)][int]$Port=8766,[switch]$NoBrowser,[switch]$Demo)
 $ErrorActionPreference='Stop'
 $Root=$PSScriptRoot
-foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','MailHawkRules','MailHawkReport','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
+foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','MailHawkRules','MailHawkProtocol','MailHawkReport','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-MailHawkInboxAnalysis.ps1')
@@ -86,7 +86,7 @@ function Invoke-MailHawkApi {
     switch($Route){
       '/api/state' {
           $summary=if($script:LastResult){$script:LastResult}else{$null}
-          return @{ok=$true;store=$store;credentials=(Get-MailHawkCredentialStatus);report=if($summary){$summary.Report}else{$null};reportItems=if($summary){@($summary.ReportItems)}else{@()};reportSections=if($summary){@($summary.ReportSections)}else{@()};reportQuality=if($summary){$summary.ReportQuality}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
+          return @{ok=$true;store=$store;credentials=(Get-MailHawkCredentialStatus);report=if($summary){$summary.Report}else{$null};reportStructure=if($summary){@($summary.ReportStructure)}else{@()};responseProtocol=if($summary){[string]$summary.ResponseProtocol}else{''};reportItems=if($summary){@($summary.ReportItems)}else{@()};reportSections=if($summary){@($summary.ReportSections)}else{@()};reportQuality=if($summary){$summary.ReportQuality}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
       }
       '/api/credentials' {
           $source=[string]$Data.source
@@ -120,7 +120,7 @@ function Invoke-MailHawkApi {
           $null=Get-MailHawkLlmToken -ForProfile $llmProfile
           $script:LastResult=Invoke-MailHawkInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root
           $run=$script:LastResult
-          return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-MailHawkStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
+          return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportStructure=@($run.ReportStructure);responseProtocol=[string]$run.ResponseProtocol;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-MailHawkStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
       }
       '/api/report/generate' {
           if(-not $script:LastResult -or -not $script:LastResult.Success){throw 'Analyze inbox before generating report intelligence.'}
@@ -233,9 +233,15 @@ function Invoke-MailHawkApi {
           $outlook=New-Object -ComObject Outlook.Application
           $mail=$outlook.Session.GetItemFromID([string]$item.EntryID)
           if(-not $mail){throw 'Email not found in Outlook'}
-          $reply=$mail.Reply()
-          $reply.Body=$body+"`r`n`r`n"+$reply.Body
-          $reply.Display() # human review; never call Send()
+          $subject=[string]$Data.subject
+          $apply=[bool]$Data.applySubject
+          if($apply -and ([string]::IsNullOrWhiteSpace($subject) -or $subject.Length -gt 240 -or $subject -match '[`r`n]')){
+              throw 'Suggested subject must be a single line with 1-240 characters.'
+          }
+          # Classic Outlook injects its configured per-account reply signature
+          # when the reply inspector opens. Preserve the existing HTML and
+          # append the reviewed text before it; never invent a new signature.
+          $null=New-MailHawkOutlookReplyDraft -EntryID ([string]$item.EntryID) -Body $body -SuggestedSubject $subject -ApplySuggestedSubject:$apply
           return @{ok=$true}
       }
       default {throw 'Unknown API route'}

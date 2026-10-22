@@ -17,7 +17,13 @@ assert "'mailhawk-logo.png'" in SERVICE and "'mailhawk-icon.png'" in SERVICE
 assert 'Read-MailHawkBody' in SERVICE and '$Stream.Read($buffer' in SERVICE
 assert 'X-Content-Type-Options: nosniff' in SERVICE
 assert "'POST'" in SERVICE
-assert '$reply.Display()' in SERVICE and '$reply.Send(' not in SERVICE
+COM=(ROOT/'Private/Get-OutlookMailSummary.ps1').read_text()
+assert '$reply.Display()' in COM and '$reply.HTMLBody=Join-MailHawkReplyHtml' in COM
+assert '$reply.Send(' not in COM and '$reply.Send(' not in SERVICE
+assert 'New-MailHawkOutlookReplyDraft' in SERVICE
+assert (ROOT/'Private/MailHawkProtocol.ps1').exists()
+assert 'ConvertFrom-MailHawkDraftV1' in (ROOT/'Private/MailHawkDraft.ps1').read_text()
+assert 'ConvertFrom-MailHawkReportV1' in (ROOT/'Public/Invoke-MailHawkInboxAnalysis.ps1').read_text()
 assert "?demo=1" in CLIENT or "'demo'" in CLIENT
 assert '__MAILHAWK_NONCE__' in HTML
 assert 'id="credentialToken"' in HTML and 'type="password"' in HTML

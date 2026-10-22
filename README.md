@@ -42,6 +42,22 @@ See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for deta
 
 **Security:** Mail content and the report are treated as untrusted data. The browser escapes rendered HTML, APIs require a current verified source for report-originated actions, and no AI-generated reply is sent automatically. Use only approved AI endpoints for authorized mail data.
 
+## Standardized AI responses (v1)
+
+MailHawk no longer attempts to interpret free-form GenAI replies as email drafts or dashboard reports. It uses three explicit, versioned response contracts:
+
+| Protocol | Output | Handling |
+|---|---|---|
+| `MAILHAWK_DRAFT_V1` | One suggested subject and one plain-text body, wrapped in exact ASCII markers | Parsed into a single editable response; never duplicate A/B options |
+| `MAILHAWK_REPORT_V1` | One JSON envelope with six required sections and indexed source recommendations | Validated and compiled into HTML by MailHawk, with source links grounded in the Outlook scan |
+| `MAILHAWK_INSIGHT_V1` | One JSON envelope for action plans, explanations, risk reviews and leadership briefings | Generated on demand and compiled into read-only report content |
+
+Malformed or incomplete outputs fail visibly instead of placing raw model output in the GUI or Outlook. Report serialization uses deterministic section layouts; UTF-8 character handling is kept separate from parsing.
+
+**Outlook signatures:** MailHawk displays the classic Outlook reply first, allowing Outlook to insert the configured reply signature for the chosen account. The AI body is inserted above Outlook's preexisting HTML body without duplicating a signature or erasing quoted content. No signature is invented when none is configured. Suggested subject overrides are always **opt-in** to preserve the original reply thread.
+
+See [AI Wire Protocol v1](docs/AI_WIRE_PROTOCOL_V1.md) for delimiters, schemas, validation, and test requirements. The 20,000-output-token ceiling for drafts remains a provider request budget, not an email length requirement.
+
 ## Intelligence workspace enhancements (feature branch)
 
 - Overview KPI cards open the matching **Active**, **High priority**, **Completed**, or **Filtered** workspace.
@@ -49,7 +65,7 @@ See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for deta
 - An action can be manually upgraded/downgraded High / Medium / Low. Manual overrides survive rescans and can be reset to the AI/rule suggestion.
 - **Configuration → Intelligence rules** provides editable, ordered, enableable defaults plus custom sender/domain/subject/preview rules. The filter review lists reversible rule exclusions.
 - The report workspace renders GenAI Markdown as readable sections, safe tables, and bullets rather than showing raw blockquote chevrons.
-- Draft generation requests a **20,000-token output ceiling** (provider permitting), and offers separately editable Response A/B alternatives. The selected response opens in Outlook for human review only.
+- Draft generation requests a **20,000-token output ceiling** (provider permitting) and returns exactly one structured subject/body response. The selected response opens in Outlook for human review only.
 
 The default .mil rule requires a **verified direct recipient and actionable language**. A .mil sender alone does not create a mandatory task. See [Triage Rules and Drafts](docs/TRIAGE_RULES_AND_DRAFTS.md).
 

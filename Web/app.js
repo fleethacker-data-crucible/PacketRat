@@ -5,8 +5,8 @@ const demo=new URLSearchParams(location.search).get('demo')==='1'||document.docu
 const token=document.querySelector('meta[name="mailhawk-token"]')?.content||'';
 const names={overview:'Overview',triage:'Action queue',report:'AI intelligence',dismissals:'Dismissal memory',settings:'Configuration'};
 let store={Checklist:[],Dismissals:[]},report='',lastRun=null,filter='all',draftKey='',busy=false,noticeTimer=null;
-let ruleDraft=null,draftAlternatives=[],activeDraftId='A';
-let reportItems=[],reportSections=[],reportQuality=null,generatedReportText='';
+let ruleDraft=null,draftVersion=null;
+let reportItems=[],reportSections=[],reportStructure=[],reportQuality=null,generatedReportText='';
 const reportUI=window.MailHawkReport;
 let credentialDetails=null;
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -60,14 +60,31 @@ function demoReportItems(){
   RecommendedAction:'',Urgency:'Unrated',Tracked:false,SourceVerified:true});
  return linked;
 }
+function demoStructuredReport(){
+ return [
+  {Id:'categories',Title:'1. Categories',Summary:'Triage overview: 3 action requests and 1 completed response.',Items:[
+    {EmailIndex:1,Text:'Approval needs review.'},{EmailIndex:2,Text:'Confirm project milestone dates.'}]},
+  {Id:'groups',Title:'2. Groups',Summary:'Work is grouped by required follow-up.',Items:[
+    {EmailIndex:3,Text:'Document review and comments requested.'}]},
+  {Id:'must_reply',Title:'3. Must Reply',Summary:'Three pending requests need human review.',Items:[
+    {EmailIndex:1,Text:'Donâ€™t assume access was approved.'},
+    {EmailIndex:2,Text:'Confirm timing â€“ dates remain unverified.'},
+    {EmailIndex:3,Text:'Review the revised document.'}]},
+  {Id:'already_replied',Title:'4. Already Replied / No Action Needed',Summary:'One reply was completed; one FYI is untracked.',Items:[
+    {EmailIndex:4,Text:'Original question was already answered.'},
+    {EmailIndex:5,Text:'Routine schedule FYI only.'}]},
+  {Id:'skipped',Title:'5. Skipped / Caution',Summary:'Source verification is required before acting.',Items:[]},
+  {Id:'quick_summary',Title:'6. Quick Summary',Summary:'Review three active tasks; no real Outlook or AI data was used.',Items:[]}
+ ];
+}
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
 function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
 function demoPersist(){sessionStorage.setItem('mailhawk-demo-store',JSON.stringify(store));}
 async function api(route,data){
- if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
+ if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
   if(route==='credentials/status')return {ok:true,credentials:{source:'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
    if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
-   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
+   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
   if(route==='report/generate'){
    const modes={Brief:'Leadership briefing',Actions:'Prioritized action plan',Risks:'Risk and uncertainty review',Explain:'Plain-language explanation'};
@@ -80,7 +97,12 @@ async function api(route,data){
   if(route==='status'){if(!item)throw Error('Unknown demo item');item.Status=data.status;demoPersist();return {ok:true,store}}
   if(route==='dismiss'){if(!item)throw Error('Unknown demo item');item.Status='dismissed';store.Dismissals=[...store.Dismissals.filter(x=>x.Key!==key),{Key:key,Subject:item.Subject,From:item.From,Reason:data.reason||'No action needed'}];demoPersist();return {ok:true,store}}
   if(route==='restore'){store.Dismissals=store.Dismissals.filter(x=>x.Key!==key);if(item)item.Status='open';demoPersist();return {ok:true,store}}
-  if(route==='draft'){const a='Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a specific deadline I should prioritize.\n\nBest regards';const b='I appreciate you reaching out. I can take a closer look and would welcome any additional context or timing requirements you would like me to consider.\n\nThank you.';return {ok:true,draft:{Draft:a,Options:[{Id:'A',Label:'Concise',Body:a},{Id:'B',Label:'Collaborative',Body:b}],Profile:'Demo',OutputTokenBudget:20000}}}
+  if(route==='draft'){return {ok:true,draft:{
+    Version:'MAILHAWK_DRAFT_V1',Subject:'RE: '+String(item?.Subject||'Request'),
+    Body:'Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a deadline I should prioritize.',
+    Draft:'Thank you for the update. I will review the details and follow up with you shortly.',
+    SignatureSource:'OutlookReply',Profile:'Demo',OutputTokenBudget:20000
+   }}}
   if(route==='open'||route==='open-draft')return {ok:true,demoOnly:true};
   throw Error('Unknown demo action');
  }
@@ -114,7 +136,7 @@ function filteredQueue(){
  return items.sort((a,b)=>sort==='subject'?String(a.Subject).localeCompare(String(b.Subject)):sort==='recent'?String(b.LastSeen||b.CreatedAt||'').localeCompare(String(a.LastSeen||a.CreatedAt||'')):(priority[a.Urgency]??3)-(priority[b.Urgency]??3));
 }
 function formatInline(value){return escapeHtml(value).replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>')}
-function renderIntelligence(text){return reportUI.renderMarkdown(text,reportItems,reportSections)}
+function renderIntelligence(text){return reportStructure.length?reportUI.renderStructured(reportStructure,reportItems,reportSections):reportUI.renderMarkdown(text,reportItems,reportSections)}
 function renderReportExtras(){
  const sources=Array.isArray(reportItems)?reportItems:[];
  const sections=Array.isArray(reportSections)&&reportSections.length?reportSections:reportUI.deriveSections(report);
@@ -158,8 +180,8 @@ function openDraftForKey(key){
  if(!source&&!item)throw Error('This message is not verified in the current report or action queue.');
  draftKey=key;
  $('draftSubject').textContent=item?.Subject||source?.Subject||'No subject';
- $('draftBody').value='';draftAlternatives=[];activeDraftId='A';
- $('draftOptions').innerHTML='';$('draftOptions').classList.add('hidden');
+ $('draftBody').value='';$('draftSubjectSuggested').value='';
+ $('draftApplySubject').checked=false;draftVersion=null;
  $('instruction').value='';
  $('draftDialog').showModal();
 }
@@ -284,32 +306,19 @@ async function saveTriageRules(){
 }
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('mailhawk-prefs',JSON.stringify(cfg))}catch{}return cfg}
 function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('mailhawk-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
  render();show('triage');
 }
-function saveDraftSelection(){
- const current=draftAlternatives.find(x=>x.Id===activeDraftId);
- if(current)current.Body=$('draftBody').value;
-}
-function selectDraftOption(id){
- const option=draftAlternatives.find(x=>x.Id===id);if(!option)return;
- saveDraftSelection();activeDraftId=id;
- $('draftOptions').querySelectorAll('[data-draft-option]').forEach(x=>{
-  const selected=x.dataset.draftOption===id;x.classList.toggle('selected',selected);x.setAttribute('aria-selected',String(selected));
- });
- $('draftBody').value=option.Body;
-}
-function initializeDraftAlternatives(draft){
- draftAlternatives=(Array.isArray(draft?.Options)&&draft.Options.length?draft.Options:[{Id:'A',Label:'Suggested response',Body:draft?.Draft||''}])
-   .slice(0,3).map((x,i)=>({Id:['A','B','C'][i],Label:String(x.Label||'Response '+['A','B','C'][i]),Body:String(x.Body||'')}));
- activeDraftId='';const container=$('draftOptions');container.innerHTML=draftAlternatives.map(x=>
-  '<button class="draft-option" type="button" role="tab" aria-selected="false" data-draft-option="'+escapeHtml(x.Id)+'"><strong>Response '+escapeHtml(x.Id)+'</strong><span>'+escapeHtml(x.Label)+'</span></button>'
- ).join('');
- container.classList.toggle('hidden',draftAlternatives.length<=1);
- selectDraftOption('A');
+function initializeSingleDraft(draft){
+ if(!draft||draft.Version!=='MAILHAWK_DRAFT_V1'||typeof draft.Subject!=='string'||typeof draft.Body!=='string'){
+  throw Error('AI draft response did not match MailHawk DRAFT_V1 protocol.');
+ }
+ $('draftSubjectSuggested').value=draft.Subject;
+ $('draftBody').value=draft.Body;
+ draftVersion=draft.Version;
 }
 function setBusy(flag,label){busy=flag;const button=$('analyze');button.disabled=flag;button.innerHTML=flag?'<span>◌</span> Analyzing…':'<span>✦</span> Analyze inbox <span class="button-arrow">↗</span>';$('engineStatus').textContent=flag?label||'Running analysis':demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis'}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>setQueueFilter(el.dataset.filter)));$('queueSearch').addEventListener('input',render);$('sortOrder').addEventListener('change',render);
@@ -351,12 +360,10 @@ document.addEventListener('keydown',event=>{
  const row=event.target.matches('.signal-item')?event.target:null;
  if(row&&(event.key==='Enter'||event.key===' ')){event.preventDefault();row.click()}
 });
-document.addEventListener('click',event=>{
- const tab=event.target.closest('[data-draft-option]');if(tab)selectDraftOption(tab.dataset.draftOption);
-});
-$('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
+
+$('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){openDraftForKey(key);return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(act==='unfilter'){const original=store.Checklist.find(x=>x.Key===key);store=(await api('priority',{key,urgency:original?.Urgency||'Medium'})).store;}else if(act==='resetpriority')store=(await api('priority/reset',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
-$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeDraftAlternatives(x.draft);notify('Draft alternatives ready. Select and edit Response A or B; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
+$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeSingleDraft(x.draft);notify('One draft is ready. Outlook will insert its configured reply signature; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body,subject:$('draftSubjectSuggested').value.trim(),applySubject:$('draftApplySubject').checked});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
 $('addRule').addEventListener('click',addCustomRule);
 $('resetRules').addEventListener('click',()=>{ruleDraft=defaultRules.map(r=>({...r}));renderRules();noteRules('Suggested defaults restored in editor; click Save rules to apply.')});
 $('saveRules').addEventListener('click',saveTriageRules);
