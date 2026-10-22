@@ -5,8 +5,16 @@ const demo=new URLSearchParams(location.search).get('demo')==='1'||document.docu
 const token=document.querySelector('meta[name="mailhawk-token"]')?.content||'';
 const names={overview:'Overview',triage:'Action queue',report:'AI intelligence',dismissals:'Dismissal memory',settings:'Configuration'};
 let store={Checklist:[],Dismissals:[]},report='',lastRun=null,filter='all',draftKey='',busy=false,noticeTimer=null;
+let ruleDraft=null,draftAlternatives=[],activeDraftId='A';
 let credentialDetails=null;
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const defaultRules=[
+ {Id:'security',Name:'Security / mandatory action',Enabled:true,Match:'SecurityAction',Value:'',Effect:'High'},
+ {Id:'directmil',Name:'Direct .mil request',Enabled:true,Match:'DirectMilRequest',Value:'',Effect:'High'},
+ {Id:'directask',Name:'Direct request or question',Enabled:true,Match:'DirectRequest',Value:'',Effect:'Medium'},
+ {Id:'replied',Name:'Already replied, no new request',Enabled:true,Match:'AlreadyReplied',Value:'',Effect:'Skip'},
+ {Id:'automated',Name:'Routine automated digest',Enabled:true,Match:'AutomatedDigest',Value:'',Effect:'Skip'}
+];
 const fakeItems=[
  {Key:'demo-1',EntryID:'',Subject:'Action required: review access request',From:'Morgan Lee',Why:'Approval requested for a pending access workflow',Urgency:'High',Status:'open',CreatedAt:new Date().toISOString()},
  {Key:'demo-2',EntryID:'',Subject:'Upcoming project milestone confirmation',From:'Taylor Brooks',Why:'A response confirming target dates is requested',Urgency:'High',Status:'in_progress',CreatedAt:new Date().toISOString()},
@@ -14,8 +22,8 @@ const fakeItems=[
  {Key:'demo-4',EntryID:'',Subject:'Meeting agenda feedback',From:'Sam Rivera',Why:'Feedback already provided',Urgency:'Low',Status:'done',CreatedAt:new Date().toISOString()}
 ];
 const demoReport=`MAILHAWK DEMONSTRATION REPORT\n\nThis is sample data, not a scan of a real mailbox.\n\n1. CATEGORIES\n• 2 high-priority action requests\n• 1 document review\n• 1 completed follow-up\n\n2. MUST REPLY\n• Access request: review required\n• Project milestone: confirm dates\n• Updated draft: return comments\n\n3. QUICK SUMMARY\nThree active items are awaiting attention. Check original messages before acting.\n\nNo AI service was contacted.`;
-function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],UpdatedAt:new Date().toISOString()};}
-function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?x:demoDefault()}catch{return demoDefault()}}
+function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
+function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
 function demoPersist(){sessionStorage.setItem('mailhawk-demo-store',JSON.stringify(store));}
 async function api(route,data){
  if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
@@ -23,10 +31,13 @@ async function api(route,data){
    if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
    if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
+  if(route==='priority'){if(!item)throw Error('Unknown demo item');item.Urgency=data.urgency;item.PriorityOverride=true;item.TriageSource='Manual';demoPersist();return {ok:true,store}}
+  if(route==='priority/reset'){if(!item)throw Error('Unknown demo item');item.PriorityOverride=false;item.TriageSource='AI';demoPersist();return {ok:true,store}}
+  if(route==='rules'){store.Rules=data.rules.map(r=>({...r}));demoPersist();return {ok:true,store}}
   if(route==='status'){if(!item)throw Error('Unknown demo item');item.Status=data.status;demoPersist();return {ok:true,store}}
   if(route==='dismiss'){if(!item)throw Error('Unknown demo item');item.Status='dismissed';store.Dismissals=[...store.Dismissals.filter(x=>x.Key!==key),{Key:key,Subject:item.Subject,From:item.From,Reason:data.reason||'No action needed'}];demoPersist();return {ok:true,store}}
   if(route==='restore'){store.Dismissals=store.Dismissals.filter(x=>x.Key!==key);if(item)item.Status='open';demoPersist();return {ok:true,store}}
-  if(route==='draft'){return {ok:true,draft:{Draft:'Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a specific deadline I should prioritize.\n\nBest regards',Profile:'Demo'}}}
+  if(route==='draft'){const a='Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a specific deadline I should prioritize.\n\nBest regards';const b='I appreciate you reaching out. I can take a closer look and would welcome any additional context or timing requirements you would like me to consider.\n\nThank you.';return {ok:true,draft:{Draft:a,Options:[{Id:'A',Label:'Concise',Body:a},{Id:'B',Label:'Collaborative',Body:b}],Profile:'Demo',OutputTokenBudget:20000}}}
   if(route==='open'||route==='open-draft')return {ok:true,demoOnly:true};
   throw Error('Unknown demo action');
  }
@@ -37,9 +48,28 @@ async function api(route,data){
 function notify(message,error=false){const el=$('notice');el.textContent=message;el.classList.toggle('error',error);el.classList.toggle('hidden',!message);clearTimeout(noticeTimer);if(message)noticeTimer=setTimeout(()=>el.classList.add('hidden'),8500)}
 function show(viewName){if(!names[viewName])return;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('hidden',el.id!==viewName));document.querySelectorAll('.nav').forEach(el=>el.classList.toggle('active',el.dataset.view===viewName));$('crumb').textContent=names[viewName];window.scrollTo({top:0,behavior:'instant'});}
 function priorityBadge(item){const urgency=['High','Medium','Low'].includes(item.Urgency)?item.Urgency:'Medium';return `<span class="priority ${urgency.toLowerCase()}">${urgency}</span>`}
-function itemRow(item,actions=false){const key=escapeHtml(item.Key),sub=escapeHtml(item.Subject||'(No subject)'),from=escapeHtml(item.From||'Unknown sender'),why=escapeHtml(item.Why||'No reason provided'),status=escapeHtml((item.Status||'open').replace('_',' '));return `<article class="item">${priorityBadge(item)}<div class="item-body"><strong title="${sub}">${sub}</strong><small title="${from} · ${why}">${from} · ${why}${actions?' · '+status:''}</small></div>${actions?`<div class="item-actions"><button data-act="open" data-key="${key}" aria-label="Open ${sub} in Outlook">Outlook ↗</button><button data-act="draft" data-key="${key}" aria-label="Draft response to ${sub}">✧ Draft</button>${item.Status==='done'?`<button data-act="openstatus" data-key="${key}">Reopen</button>`:`<button data-act="done" data-key="${key}">✓ Done</button><button data-act="progress" data-key="${key}">In progress</button>`}<button data-act="dismiss" data-key="${key}">Dismiss</button></div>`:''}</article>`}
+function itemRow(item,actions=false){
+ const key=escapeHtml(item.Key),sub=escapeHtml(item.Subject||'(No subject)'),from=escapeHtml(item.From||'Unknown sender');
+ const why=escapeHtml(item.Why||'No reason provided'),status=escapeHtml((item.Status||'open').replace('_',' '));
+ const source=item.PriorityOverride?'Manual priority':item.RuleName?'Rule: '+item.RuleName:(item.TriageSource||'AI suggested');
+ const label='<span class="source-label">'+escapeHtml(source)+'</span>';
+ const title='<button type="button" class="item-title" data-act="open" data-key="'+key+'" title="Open original in Outlook">'+sub+'</button>';
+ const levels=['High','Medium','Low'];
+ const prioritySelect='<label class="priority-selector">Priority <select data-priority-key="'+key+'" aria-label="Set priority for '+sub+'">'+levels.map(p=>'<option value="'+p+'"'+(item.Urgency===p?' selected':'')+'>'+p+'</option>').join('')+'</select></label>';
+ const controls=actions?'<div class="item-actions"><button data-act="open" data-key="'+key+'">Outlook ↗</button><button data-act="draft" data-key="'+key+'">✧ Draft</button>'+prioritySelect+(item.PriorityOverride?'<button data-act="resetpriority" data-key="'+key+'" title="Restore AI/rule priority">Reset priority</button>':'')+(item.Status==='done'?'<button data-act="openstatus" data-key="'+key+'">Reopen</button>':'<button data-act="done" data-key="'+key+'">✓ Done</button><button data-act="progress" data-key="'+key+'">In progress</button>')+'<button data-act="dismiss" data-key="'+key+'">Dismiss</button></div>':'';
+ return '<article class="item'+(actions?'':' signal-item')+'"'+(actions?'':' role="button" tabindex="0" data-act="open" data-key="'+key+'" aria-label="Open '+sub+' in Outlook"')+'>'+priorityBadge(item)+'<div class="item-body">'+title+'<small title="'+from+' · '+why+'">'+from+' · '+why+' · '+status+' · '+label+'</small></div>'+controls+'</article>';
+}
 const empty=(caption)=>`<div class="empty"><span class="empty-icon">◎</span>${escapeHtml(caption)}</div>`;
-function filteredQueue(){let items=store.Checklist.filter(x=>x.Status!=='dismissed'&&(filter==='all'||x.Status===filter));const term=$('queueSearch').value.trim().toLowerCase();if(term)items=items.filter(x=>[x.Subject,x.From,x.Why].some(v=>String(v||'').toLowerCase().includes(term)));const priority={High:0,Medium:1,Low:2};const sort=$('sortOrder').value;return items.sort((a,b)=>sort==='subject'?String(a.Subject).localeCompare(String(b.Subject)):sort==='recent'?String(b.LastSeen||b.CreatedAt||'').localeCompare(String(a.LastSeen||a.CreatedAt||'')):(priority[a.Urgency]??3)-(priority[b.Urgency]??3));}
+function filteredQueue(){
+ let items=store.Checklist.filter(x=>x.Status!=='dismissed'&&(
+  filter==='all'||(filter==='active'&&['open','in_progress'].includes(x.Status))||
+  (filter==='high'&&x.Urgency==='High'&&['open','in_progress'].includes(x.Status))||
+  x.Status===filter));
+ const term=$('queueSearch').value.trim().toLowerCase();
+ if(term)items=items.filter(x=>[x.Subject,x.From,x.Why,x.RuleName].some(v=>String(v||'').toLowerCase().includes(term)));
+ const priority={High:0,Medium:1,Low:2},sort=$('sortOrder').value;
+ return items.sort((a,b)=>sort==='subject'?String(a.Subject).localeCompare(String(b.Subject)):sort==='recent'?String(b.LastSeen||b.CreatedAt||'').localeCompare(String(a.LastSeen||a.CreatedAt||'')):(priority[a.Urgency]??3)-(priority[b.Urgency]??3));
+}
 function render(){const items=store.Checklist||[],dismissed=store.Dismissals||[],active=items.filter(x=>x.Status==='open'||x.Status==='in_progress');$('mOpen').textContent=active.length;$('mHigh').textContent=active.filter(x=>x.Urgency==='High').length;$('mDone').textContent=items.filter(x=>x.Status==='done').length;$('mDismiss').textContent=dismissed.length;$('navCount').textContent=active.length;
  $('priorityList').innerHTML=active.length?active.slice().sort((a,b)=>({High:0,Medium:1,Low:2}[a.Urgency]??3)-({High:0,Medium:1,Low:2}[b.Urgency]??3)).slice(0,4).map(x=>itemRow(x)).join(''):empty('Your radar is clear. Run an inbox analysis to discover new actions.');const results=filteredQueue();$('queueTotal').textContent=`${results.length} item${results.length===1?'':'s'}`;$('queue').innerHTML=results.length?results.map(x=>itemRow(x,true)).join(''):empty('No actions match these filters.');$('dismissList').innerHTML=dismissed.length?dismissed.map(x=>`<article class="item"><span class="priority low">Filtered</span><div class="item-body"><strong>${escapeHtml(x.Subject)}</strong><small>${escapeHtml(x.From)} · ${escapeHtml(x.Reason)}</small></div><div class="item-actions"><button data-act="restore" data-key="${escapeHtml(x.Key)}">Restore</button></div></article>`).join(''):empty('No dismissed items. You can dismiss false positives from the action queue.');$('reportText').textContent=report||'No analysis in this session. Select “Analyze inbox” to begin.';$('brief').textContent=report?report.replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportProfile').textContent=lastRun?.Profile||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
 function updateCredentialPanel(){
