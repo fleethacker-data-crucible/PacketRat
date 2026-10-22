@@ -104,3 +104,10 @@
 .report-source-actions button{color:#bfe7ff;background:#123148;border:1px solid #375d78;border-radius:7px;padding:8px 11px;font-size:11px;font-weight:720;cursor:pointer}
 .report-source-actions button:hover{color:#fff;background:#214d69}
 @media(max-width:700px){.report-generation-toolbar label{flex-basis:100%}.report-generation-toolbar button{width:100%}.report-section-heading{align-items:flex-start;flex-direction:column}.report-rich .report-section-heading h2{flex-basis:auto}.report-sources-panel{padding:16px}.report-source-status{margin-left:0}}
+
+/* Single response protocol: subject, body and Outlook-managed signature. */
+.draft-protocol-note{margin:14px 0 8px;padding:10px 13px;border:1px solid #386e7b;border-radius:9px;background:#122d3d;color:#a8dcef;font-size:12px;line-height:1.6}
+.draft-subject-toggle{display:flex;align-items:center;gap:10px;margin:10px 0 18px;color:#b9d0e2;font-size:11px;line-height:1.5}
+.draft-subject-toggle input{accent-color:#48b8e9;width:17px;height:17px;flex:none}
+.draft-signature-note{font-size:11px;color:#90b6ca;line-height:1.65;margin:0 0 15px;padding:10px 0}
+#draftSubjectSuggested{width:100%;max-width:100%;border:1px solid #365b75;background:#102235;color:#e4f7ff;padding:11px 12px;border-radius:7px;font-size:12px}
