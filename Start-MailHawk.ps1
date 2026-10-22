@@ -57,6 +57,7 @@ if ($env:MAILHAWK_PROVIDER) { $Provider = $env:MAILHAWK_PROVIDER }
 . (Join-Path $Root 'Private\MailHawkLlm.ps1')
 . (Join-Path $Root 'Private\MailHawkStore.ps1')
 . (Join-Path $Root 'Private\MailHawkRules.ps1')
+. (Join-Path $Root 'Private\MailHawkProtocol.ps1')
 . (Join-Path $Root 'Private\MailHawkReport.ps1')
 . (Join-Path $Root 'Private\Get-OutlookMailSummary.ps1')
 . (Join-Path $Root 'Private\MailHawkGraph.ps1')
