@@ -78,6 +78,11 @@ function Get-MailHawkLlmConfig {
     if ($Profile -eq 'Auto') {
         if ($url -match 'databricks\.mil|serving-endpoints') { $resolved = 'Grok' }
         elseif ($url -match 'genai\.mil') { $resolved = 'GenAi' }
+        elseif ($script:MailHawkCredentialSource -eq 'Manual' -and
+                [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.GenAi) -and
+                -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.Grok)) {
+            $resolved = 'Grok'
+        }
         elseif (-not [string]::IsNullOrWhiteSpace($env:DATABRICKS_TOKEN) -and [string]::IsNullOrWhiteSpace($env:GENAI_TOKEN)) {
             $resolved = 'Grok'
         }
