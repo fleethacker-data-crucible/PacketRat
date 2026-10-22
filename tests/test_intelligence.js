@@ -1,0 +1,23 @@
+/* Development-only pure report/UI rendering contract. No browser or account access. */
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const src=fs.readFileSync(path.join(__dirname,'../Web/app.js'),'utf8');
+const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const start=src.indexOf('function formatInline('),end=src.indexOf('function render(){',start);
+assert(start>=0&&end>start,'report renderer should be present');
+const renderer=new Function('escapeHtml',src.slice(start,end)+';return renderIntelligence;')(escapeHtml);
+const out=renderer('## 1. Must Reply\n> > **Important**\n\n| Priority | Action |\n| --- | --- |\n| High | <script>alert(1)</script> |\n\n1. Review message\n2. Follow up');
+assert(out.includes('<h2>1. Must Reply</h2>'),'Markdown heading');
+assert(out.includes('<strong>Important</strong>'),'Markdown emphasis');
+assert(out.includes('<table'),'Markdown table');
+assert(out.includes('<ul'),'Numbered tasks remain list items');
+assert(!out.includes('<script>'),'Untrusted HTML must be escaped');
+assert(!out.includes('&gt; &gt;'),'Quote markers are cleaned');
+const legacy=renderer('1. CATEGORIES\n• High priority\n\n2. MUST REPLY\n• Approval requested');
+assert(legacy.includes('<h2>CATEGORIES</h2>'),'GenAI numbered headings');
+assert(legacy.includes('<li>High priority</li>'),'Bullets');
+const html=fs.readFileSync(path.join(__dirname,'../Web/index.html'),'utf8');
+for(const id of ['draftOptions','rulesList','ruleFilteredList','reportText','mHigh','mOpen','mDone','mDismiss'])assert(html.includes('id="'+id+'"'),'Missing element '+id);
+assert((html.match(/class="metric"/g)||[]).length===4,'Four metrics must be interactive');
+assert((html.match(/<button type="button" class="metric"/g)||[]).length===4,'Metric boxes must be buttons');
+console.log('MailHawk report renderer and interactive UI contract passed');
