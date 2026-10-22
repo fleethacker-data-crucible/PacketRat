@@ -296,9 +296,20 @@ function New-MailHawkOutlookReplyDraft {
     $reply=$item.Reply()
     $reply.Display()
     $html=[string]$reply.HTMLBody
-    if([int]$reply.BodyFormat -eq 2 -and $html -match '(?is)<body\b'){
+    $format=[int]$reply.BodyFormat
+    if($format -eq 2){
+        if($html -notmatch '(?is)<body\b'){throw 'Outlook HTML editor is missing a body element; no signature was overwritten.'}
         $reply.HTMLBody=Join-MailHawkReplyHtml -ExistingHtml $html -DraftText $Body
+    }elseif($format -eq 3){
+        # For Outlook rich-text/Word format insert via WordEditor so its
+        # rich-text signature and inline formatting remain untouched.
+        $inspector=$reply.GetInspector
+        $editor=$inspector.WordEditor
+        if(-not $editor){throw 'Cannot safely edit Outlook rich-text reply.'}
+        $start=$editor.Range(0,0)
+        $start.InsertBefore($Body+"`r`n`r`n")
     }else{
+        # Plain-text reply: keep whatever default text signature Outlook added.
         $reply.Body=$Body+"`r`n`r`n"+[string]$reply.Body
     }
     if($ApplySuggestedSubject){
