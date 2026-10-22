@@ -254,6 +254,7 @@ $emailJson
         if(-not $currentKeys.ContainsKey($key)){continue}
         $skip=$excluded.ContainsKey($key) -and -not [bool]$item.PriorityOverride
         $item | Add-Member -NotePropertyName RuleSuppressed -NotePropertyValue ([bool]$skip) -Force
+        $item | Add-Member -NotePropertyName RuleSuppressedBy -NotePropertyValue $(if($skip){[string]$ruleResult.SuppressedReasons[$key]}else{''}) -Force
     }
     Save-MailHawkStore -Store $store -Root $Root
 
