@@ -10,7 +10,7 @@
 param([ValidateRange(0,65535)][int]$Port=8766,[switch]$NoBrowser,[switch]$Demo)
 $ErrorActionPreference='Stop'
 $Root=$PSScriptRoot
-foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
+foreach($name in @('ArcBridge','MailHawkLogging','MailHawkLlm','MailHawkStore','MailHawkRules','Get-OutlookMailSummary','MailHawkGraph','MailHawkDraft')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-MailHawkInboxAnalysis.ps1')
