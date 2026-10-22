@@ -41,6 +41,7 @@ const demoReport=`## 1. Categories
 
 ## 4. Already Appears Replied / No Action Needed
 - [Email #4] Completed; no new ask detected.
+- [Email #5] Routine schedule update (FYI; not tracked).
 
 ## 5. Skipped / Caution
 > Caution: Check original Outlook messages before replying.
@@ -48,12 +49,16 @@ const demoReport=`## 1. Categories
 ## 6. Quick Summary
 Three pending requests. This is test data, not a live GenAI response.`;
 function demoReportItems(){
- return fakeItems.map((item,i)=>({
+ const linked=fakeItems.map((item,i)=>({
   Index:i+1,Key:item.Key,Subject:item.Subject,From:item.From,FromEmail:'demo@example.test',
   Section:i===3?'Already Replied':'Must Reply',Reason:item.Why,
   RecommendedAction:i===3?'No response needed.':'Review and respond to the verified request.',
   Urgency:item.Urgency,Tracked:true,SourceVerified:true
  }));
+ linked.push({Index:5,Key:'demo-5',Subject:'FYI: schedule update',From:'Office Updates',
+  FromEmail:'demo-fyi@example.test',Section:'No Action Needed',Reason:'Routine FYI, not in the action queue.',
+  RecommendedAction:'',Urgency:'Unrated',Tracked:false,SourceVerified:true});
+ return linked;
 }
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
 function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
@@ -68,7 +73,7 @@ async function api(route,data){
    const modes={Brief:'Leadership briefing',Actions:'Prioritized action plan',Risks:'Risk and uncertainty review',Explain:'Plain-language explanation'};
    return {ok:true,generated:{Mode:data.mode,Section:data.sectionId==='all'?'Full report':'Selected section',Content:'## '+(modes[data.mode]||'Summary')+'\n\n- Verify [Email #1] in Outlook.\n- Confirm [Email #2] timing.\n- This is simulated analysis. No AI or email account was contacted.',Profile:'Demo',Model:'Sample'}};
   }
-  if(route==='report/track'){const source=demoReportItems().find(x=>x.Key===String(data.key));if(!source)throw Error('Unknown demo source');if(!item){store.Checklist.push({...fakeItems[source.Index-1],Status:'open'})}demoPersist();return {ok:true,store}}
+  if(route==='report/track'){const source=demoReportItems().find(x=>x.Key===String(data.key));if(!source)throw Error('Unknown demo source');if(!item){store.Checklist.push({Key:source.Key,EntryID:'',Subject:source.Subject,From:source.From,Why:source.Reason,Urgency:data.urgency||'Medium',Status:'open',PriorityOverride:true,TriageSource:'Manual'})}demoPersist();return {ok:true,store}}
   if(route==='priority'){if(!item)throw Error('Unknown demo item');item.Urgency=data.urgency;item.PriorityOverride=true;item.TriageSource='Manual';item.RuleSuppressed=false;demoPersist();return {ok:true,store}}
   if(route==='priority/reset'){if(!item)throw Error('Unknown demo item');item.PriorityOverride=false;item.TriageSource='AI';demoPersist();return {ok:true,store}}
   if(route==='rules'){store.Rules=data.rules.map(r=>({...r}));demoPersist();return {ok:true,store}}
