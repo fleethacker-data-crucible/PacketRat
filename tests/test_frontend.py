@@ -33,6 +33,7 @@ def run():
                 html = (WEB/'index.html').read_text().replace('<html lang="en">','<html lang="en" data-demo="1">')
                 html = html.replace('<link rel="stylesheet" href="style.css">','')
                 html = html.replace('<script defer src="app.js"></script>','')
+                html = html.replace('<script defer src="report-experience.js"></script>','')
                 for name in ('mailhawk-icon.png','mailhawk-logo.png'):
                     encoded = base64.b64encode((WEB/name).read_bytes()).decode()
                     html = html.replace('src="'+name+'"','src="data:image/png;base64,'+encoded+'"')
@@ -43,6 +44,7 @@ def run():
                     Object.defineProperty(window, 'sessionStorage', {configurable:true, value:{getItem:k=>memory[k]||null,setItem:(k,v)=>memory[k]=v}});
                     Object.defineProperty(window, 'localStorage', {configurable:true, value:{getItem:()=>null,setItem:()=>{}}});
                 }""")
+                page.add_script_tag(content=(WEB/'report-experience.js').read_text())
                 page.add_script_tag(content=(WEB/'app.js').read_text())
                 page.wait_for_selector('#mOpen:text-is("3")')
                 assert page.locator('#mHigh').inner_text()=='2'
@@ -103,6 +105,22 @@ def run():
                 assert 'Demo mode' in page.locator('#notice').inner_text()
                 page.locator('[data-view="report"]').click()
                 assert page.locator('#reportText h2').count() >= 3
+                page.locator('[data-view="report"]').click()
+                assert page.locator('#reportSourceCount').inner_text().startswith('5 verified')
+                assert 'Donâ€™t' not in page.locator('#reportText').inner_text()
+                assert 'Don’t' in page.locator('#reportText').inner_text()
+                assert page.locator('#reportText [data-report-open-index]').count() >= 3
+                page.locator('#reportText [data-report-open-index]').first.click()
+                page.wait_for_function("document.getElementById('notice').textContent.includes('Demo')")
+                page.locator('[data-report-generate-section]').first.click()
+                page.wait_for_function("!document.getElementById('reportGenerated').classList.contains('hidden')")
+                assert 'simulated' in page.locator('#reportGeneratedText').inner_text().lower()
+                page.locator('#reportSources [data-report-track="demo-5"]').click()
+                page.wait_for_function("document.getElementById('notice').textContent.includes('added')")
+                assert page.locator('#reportSources [data-report-queue="demo-5"]').count() == 1
+                page.locator('#reportSources [data-report-draft="demo-2"]').click()
+                assert page.locator('#draftDialog').is_visible()
+                page.locator('#closeDialog').click()
                 assert not errors, f'Browser errors: {errors}'
                 browser.close()
         finally:
