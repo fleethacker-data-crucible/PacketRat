@@ -275,31 +275,36 @@ function Open-MailHawkMailItem {
     }
 }
 
+function Join-MailHawkReplyHtml {
+    param([string]$ExistingHtml,[string]$DraftText)
+    if(-not $DraftText.Trim()){throw 'Empty reply.'}
+    $match=[regex]::Match($ExistingHtml,'(?is)<body`b[^>]*>')
+    if(-not $match.Success){throw 'Outlook HTML body unavailable.'}
+    $encoded=[System.Net.WebUtility]::HtmlEncode($DraftText)
+    $encoded=$encoded.Replace("`r`n","`n").Replace("`r","`n").Replace("`n",'<br />')
+    $offset=$match.Index+$match.Length
+    return $ExistingHtml.Substring(0,$offset)+'<div>'+$encoded+'</div><div><br /></div>'+$ExistingHtml.Substring($offset)
+}
 function New-MailHawkOutlookReplyDraft {
     [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$EntryID,
-        [string]$Body,
-        [switch]$Display,
-        [switch]$SaveOnly
-    )
-    $conn = Connect-MailHawkOutlook
-    $item = $conn.Namespace.GetItemFromID($EntryID)
-    if ($null -eq $item) { throw "No item found for EntryID." }
-
-    $reply = $item.Reply()
-    if ($Body) {
-        try {
-            if ($reply.BodyFormat -eq 2) {
-                $reply.HTMLBody = ($Body -replace "`r?`n", '<br>') + '<br><br>' + $reply.HTMLBody
-            } else {
-                $reply.Body = $Body + "`r`n`r`n" + $reply.Body
-            }
-        } catch {
-            $reply.Body = $Body + "`r`n`r`n" + $reply.Body
-        }
+    param([Parameter(Mandatory)][string]$EntryID,[Parameter(Mandatory)][string]$Body,
+          [string]$SuggestedSubject,[switch]$ApplySuggestedSubject,[switch]$SaveOnly)
+    if(-not $Body.Trim()){throw 'Empty draft.'}
+    $conn=Connect-MailHawkOutlook
+    $item=$conn.Namespace.GetItemFromID($EntryID)
+    if(-not $item){throw 'Original email unavailable.'}
+    $reply=$item.Reply()
+    $reply.Display()
+    $html=[string]$reply.HTMLBody
+    if([int]$reply.BodyFormat -eq 2 -and $html -match '(?is)<body`b'){
+        $reply.HTMLBody=Join-MailHawkReplyHtml -ExistingHtml $html -DraftText $Body
+    }else{
+        $reply.Body=$Body+"`r`n`r`n"+[string]$reply.Body
     }
-    if ($Display) { $reply.Display() }
-    elseif ($SaveOnly) { $reply.Save() }
+    if($ApplySuggestedSubject){
+        if(-not $SuggestedSubject.Trim() -or $SuggestedSubject.Length -gt 240 -or $SuggestedSubject -match '[`r`n]'){throw 'Invalid suggested subject.'}
+        $reply.Subject=$SuggestedSubject.Trim()
+    }
+    if($SaveOnly){$reply.Save()}
     return $reply
 }
