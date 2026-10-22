@@ -1,5 +1,15 @@
 #requires -Version 5.1
 # MailHawk Wire Protocol v1 -- ASCII markers, strict structure, no raw text fallback.
+function ConvertTo-MailHawkWireReadableText {
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Text)
+    # The same conservative UTF-8/Windows-1252 repair is used for drafts,
+    # structured report strings and derived report content.
+    if(Get-Command ConvertTo-MailHawkReadableReport -ErrorAction SilentlyContinue){
+        return (ConvertTo-MailHawkReadableReport -Text $Text)
+    }
+    return $Text
+}
 function Get-MailHawkDraftWirePrompt {
     return @'
 MAILHAWK DRAFT V1. Return EXACTLY ONE email response. No alternative versions.
@@ -29,6 +39,8 @@ function ConvertFrom-MailHawkDraftV1 {
     if(-not $m.Success){throw 'Draft protocol: expected exactly one envelope with SUBJECT and BODY fields.'}
     $subject=$m.Groups['subject'].Value.Trim()
     $body=$m.Groups['body'].Value.Trim()
+    $subject=ConvertTo-MailHawkWireReadableText -Text $subject
+    $body=ConvertTo-MailHawkWireReadableText -Text $body
     if($subject.Length -lt 1 -or $subject.Length -gt 240){throw 'Draft protocol: subject must have 1-240 characters.'}
     if($body.Length -lt 1 -or $body.Length -gt 30000){throw 'Draft protocol: body must have 1-30000 characters.'}
     if($subject -match '[\x00-\x1F\x7F]' -or $body -match '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'){
@@ -109,6 +121,7 @@ function ConvertFrom-MailHawkReportV1 {
 function ConvertTo-MailHawkProtocolPlainText {
     param([AllowEmptyString()][string]$Value)
     if(-not $Value){return ''}
+    $Value=ConvertTo-MailHawkWireReadableText -Text $Value
     $clean=[regex]::Replace($Value,'[\x00-\x1F\x7F]',' ')
     $clean=[regex]::Replace($clean,'\s+',' ').Trim()
     $clean=$clean.TrimStart([char[]]@('#','>','*','|',' '))
