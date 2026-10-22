@@ -19,6 +19,7 @@ const messy='## 1. Must Reply\n> [Email #1] Donâ€™t forget the â€“ dea
 const clean=ui.normalizeText(messy);
 assert(clean.includes('Don’t'),'Repair known UTF-8/Windows-1252 artifacts');
 assert(clean.includes('–'),'Repair a mojibake en dash');
+assert(ui.normalizeText('Double encoded Ã¢â‚¬â„¢ quote').includes('’'),'Double-encoded punctuation repaired');
 assert(!clean.includes('â€™'),'No source mojibake');
 const sections=ui.deriveSections(messy);
 const rendered=ui.renderMarkdown(messy,samples,sections);
