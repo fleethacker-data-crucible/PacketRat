@@ -110,6 +110,70 @@ function filteredQueue(){
 }
 function formatInline(value){return escapeHtml(value).replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>')}
 function renderIntelligence(text){return reportUI.renderMarkdown(text,reportItems,reportSections)}
+function renderReportExtras(){
+ const sources=Array.isArray(reportItems)?reportItems:[];
+ const sections=Array.isArray(reportSections)&&reportSections.length?reportSections:reportUI.deriveSections(report);
+ const tracked=new Set((store.Checklist||[]).filter(x=>x.Key).map(x=>String(x.Key)));
+ const search=$('reportSourceSearch')?.value||'';
+ $('reportSources').innerHTML=reportUI.renderSources(sources,tracked,search);
+ $('reportSourceCount').textContent=sources.length+' verified';
+ const select=$('reportScope'),previous=select.value;
+ select.innerHTML='<option value="all">Entire report</option>'+sections.map(section=>
+  '<option value="'+escapeHtml(section.Id)+'">'+escapeHtml(section.Title||'Report section')+'</option>').join('');
+ select.value=[...select.options].some(o=>o.value===previous)?previous:'all';
+ const audit=reportUI.audit(report,sources,sections);
+ const warnings=[...new Set([...(reportQuality?.Warnings||[]),...audit.warnings])];
+ const quality=$('reportQuality');
+ quality.classList.remove('hidden');
+ quality.classList.toggle('warning',warnings.length>0);
+ const stats=sources.length+' verified messages · '+sections.length+' report sections';
+ quality.textContent=warnings.length?stats+' · Review: '+warnings.join(' | '):stats+' · References checked against inbox';
+}
+async function generateReportFrom(sectionId){
+ if(busy){notify('An analysis operation is already in progress.');return;}
+ if(!report.trim())return notify('Analyze inbox first to generate from its report.',true);
+ const mode=$('reportMode').value,scope=sectionId||$('reportScope').value||'all';
+ $('reportScope').value=scope;
+ const btn=$('generateReport');btn.disabled=true;btn.textContent='Generating…';
+ notify('Generating a new '+mode.toLowerCase()+' from '+(scope==='all'?'the full report':'the selected report section')+'. This will not modify Outlook.');
+ try{
+  const result=await api('report/generate',{mode,sectionId:scope,profile:$('profile').value});
+  generatedReportText=String(result.generated?.Content||'');
+  if(!generatedReportText.trim())throw Error('The AI returned an empty follow-up.');
+  $('reportGeneratedHeading').textContent=(result.generated?.Mode||mode)+' — '+(result.generated?.Section||'Report');
+  $('reportGeneratedText').innerHTML=reportUI.renderMarkdown(generatedReportText,reportItems,[]);
+  $('reportGenerated').classList.remove('hidden');
+  notify('Report follow-up generated for your review. Nothing has been sent or tracked.');
+  $('reportGenerated').scrollIntoView({block:'start',behavior:'smooth'});
+ }catch(error){notify(error.message,true)}
+ finally{btn.disabled=false;btn.textContent='✧ Generate'}
+}
+function openDraftForKey(key){
+ const source=reportItems.find(x=>x.Key===key),item=(store.Checklist||[]).find(x=>x.Key===key);
+ if(!source&&!item)throw Error('This message is not verified in the current report or action queue.');
+ draftKey=key;
+ $('draftSubject').textContent=item?.Subject||source?.Subject||'No subject';
+ $('draftBody').value='';draftAlternatives=[];activeDraftId='A';
+ $('draftOptions').innerHTML='';$('draftOptions').classList.add('hidden');
+ $('instruction').value='';
+ $('draftDialog').showModal();
+}
+async function handleReportSourceAction(type,key){
+ const source=reportItems.find(x=>x.Key===key);
+ if(!source)return notify('This reference is not verified in the current inbox scan.',true);
+ try{
+  if(type==='draft'){openDraftForKey(key);return}
+  if(type==='queue'){
+   setQueueFilter('all');$('queueSearch').value=source.Subject||'';render();return;
+  }
+  if(type==='track'){
+   const result=await api('report/track',{key,urgency:['High','Medium','Low'].includes(source.Urgency)?source.Urgency:'Medium'});
+   store=result.store||store;render();notify('Verified message added to the action queue for human review.');return;
+  }
+  const result=await api('open',{key});
+  notify(result.demoOnly?'Demo only: no Outlook message was opened.':'Original message opened in Outlook.');
+ }catch(error){notify(error.message,true)}
+}
 function render(){const items=store.Checklist||[],dismissed=store.Dismissals||[],suppressed=items.filter(x=>x.RuleSuppressed),visible=items.filter(x=>!x.RuleSuppressed),active=visible.filter(x=>x.Status==='open'||x.Status==='in_progress');$('mOpen').textContent=active.length;$('mHigh').textContent=active.filter(x=>x.Urgency==='High').length;$('mDone').textContent=visible.filter(x=>x.Status==='done').length;$('mDismiss').textContent=dismissed.length+suppressed.length;$('navCount').textContent=active.length;
  $('priorityList').innerHTML=active.length?active.slice().sort((a,b)=>({High:0,Medium:1,Low:2}[a.Urgency]??3)-({High:0,Medium:1,Low:2}[b.Urgency]??3)).slice(0,4).map(x=>itemRow(x)).join(''):empty('Your radar is clear. Run an inbox analysis to discover new actions.');const results=filteredQueue();$('queueTotal').textContent=`${results.length} item${results.length===1?'':'s'}`;$('queue').innerHTML=results.length?results.map(x=>itemRow(x,true)).join(''):empty('No actions match these filters.');$('dismissList').innerHTML=dismissed.length?dismissed.map(x=>`<article class="item"><span class="priority low">Filtered</span><div class="item-body"><strong>${escapeHtml(x.Subject)}</strong><small>${escapeHtml(x.From)} · ${escapeHtml(x.Reason)}</small></div><div class="item-actions"><button data-act="restore" data-key="${escapeHtml(x.Key)}">Restore</button></div></article>`).join(''):empty('No dismissed items. You can dismiss false positives from the action queue.');$('ruleFilteredList').innerHTML=suppressed.length?suppressed.map(x=>
  '<article class="item"><span class="priority low">Rule filter</span><div class="item-body"><strong>'+escapeHtml(x.Subject||'(No subject)')+'</strong><small>'+escapeHtml(x.From||'')+' · '+escapeHtml(x.RuleSuppressedBy||'Matched an exclusion rule')+'</small></div><div class="item-actions"><button data-act="unfilter" data-key="'+escapeHtml(x.Key)+'">Keep in queue</button></div></article>'
@@ -244,6 +308,31 @@ function initializeDraftAlternatives(draft){
 }
 function setBusy(flag,label){busy=flag;const button=$('analyze');button.disabled=flag;button.innerHTML=flag?'<span>◌</span> Analyzing…':'<span>✦</span> Analyze inbox <span class="button-arrow">↗</span>';$('engineStatus').textContent=flag?label||'Running analysis':demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis'}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>setQueueFilter(el.dataset.filter)));$('queueSearch').addEventListener('input',render);$('sortOrder').addEventListener('change',render);
+$('reportSourceSearch').addEventListener('input',()=>renderReportExtras());
+$('generateReport').addEventListener('click',()=>generateReportFrom());
+$('copyGenerated').addEventListener('click',()=>copy(generatedReportText));
+$('closeGenerated').addEventListener('click',()=>$('reportGenerated').classList.add('hidden'));
+document.addEventListener('click',event=>{
+ const section=event.target.closest('[data-report-generate-section]');
+ if(section){generateReportFrom(section.dataset.reportGenerateSection);return}
+ const node=event.target.closest('[data-report-open-index],[data-report-open],[data-report-draft],[data-report-track],[data-report-queue]');
+ if(!node||busy)return;
+ if(node.hasAttribute('data-report-open-index')){
+  const index=Number(node.dataset.reportOpenIndex);
+  const source=reportItems.find(x=>Number(x.Index)===index);
+  if(!source){notify('This report reference does not match a verified email.',true);return}
+  handleReportSourceAction('open',source.Key);return;
+ }
+ if(node.hasAttribute('data-report-open'))handleReportSourceAction('open',node.dataset.reportOpen);
+ else if(node.hasAttribute('data-report-draft'))handleReportSourceAction('draft',node.dataset.reportDraft);
+ else if(node.hasAttribute('data-report-track'))handleReportSourceAction('track',node.dataset.reportTrack);
+ else if(node.hasAttribute('data-report-queue'))handleReportSourceAction('queue',node.dataset.reportQueue);
+});
+document.addEventListener('keydown',event=>{
+ if((event.key==='Enter'||event.key===' ')&&event.target.matches('tr[data-report-open-index]')){
+  event.preventDefault();event.target.click();
+ }
+});
 document.querySelectorAll('[data-metric]').forEach(el=>el.addEventListener('click',()=>{const metric=el.dataset.metric;if(metric==='dismiss')show('dismissals');else setQueueFilter(metric==='high'?'high':metric==='done'?'done':'active')}));
 document.addEventListener('change',async event=>{
  const input=event.target.closest('[data-priority-key]');if(!input||busy)return;
@@ -261,8 +350,8 @@ document.addEventListener('click',event=>{
  const tab=event.target.closest('[data-draft-option]');if(tab)selectDraftOption(tab.dataset.draftOption);
 });
 $('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
-document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){draftKey=key;$('draftSubject').textContent=store.Checklist.find(x=>x.Key===key)?.Subject||'No subject';$('draftBody').value='';draftAlternatives=[];activeDraftId='A';$('draftOptions').innerHTML='';$('draftOptions').classList.add('hidden');$('instruction').value='';$('draftDialog').showModal();return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(act==='unfilter'){const original=store.Checklist.find(x=>x.Key===key);store=(await api('priority',{key,urgency:original?.Urgency||'Medium'})).store;}else if(act==='resetpriority')store=(await api('priority/reset',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
-$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeDraftAlternatives(x.draft);notify('Draft alternatives ready. Select and edit Response A or B; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(report));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
+document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){openDraftForKey(key);return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(act==='unfilter'){const original=store.Checklist.find(x=>x.Key===key);store=(await api('priority',{key,urgency:original?.Urgency||'Medium'})).store;}else if(act==='resetpriority')store=(await api('priority/reset',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
+$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeDraftAlternatives(x.draft);notify('Draft alternatives ready. Select and edit Response A or B; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
 $('addRule').addEventListener('click',addCustomRule);
 $('resetRules').addEventListener('click',()=>{ruleDraft=defaultRules.map(r=>({...r}));renderRules();noteRules('Suggested defaults restored in editor; click Save rules to apply.')});
 $('saveRules').addEventListener('click',saveTriageRules);
