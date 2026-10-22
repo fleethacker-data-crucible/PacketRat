@@ -87,6 +87,14 @@ function Invoke-MailHawkApi {
           $status=Set-MailHawkCredentialConfiguration -Source $source -Profile $profile -Token $tokenText
           return @{ok=$true;credentials=$status}
       }
+      '/api/credentials/check' {
+          $requested=if($Data.profile -in @('GenAi','Grok')){[string]$Data.profile}else{'GenAi'}
+          # Resolve locally only. Never return token, contact an AI endpoint,
+          # or fetch user mailbox data from this diagnostic route.
+          $resolved=Get-MailHawkLlmConfig -Profile $requested
+          $null=Get-MailHawkLlmToken -ForProfile $resolved.Profile
+          return @{ok=$true;profile=$resolved.Profile;credentialAvailable=$true;note='Credential resolved locally; remote endpoint not tested.'}
+      }
       '/api/credentials/clear' {
           $status=Clear-MailHawkManualTokens
           return @{ok=$true;credentials=$status}
