@@ -131,3 +131,64 @@ function ConvertTo-MailHawkReportMarkdownV1 {
     }
     return (($lines -join "`n").Trim())
 }
+
+# Follow-up generation from an existing report uses the same strict envelope strategy.
+function Get-MailHawkInsightWirePrompt {
+    return @'
+MAILHAWK INSIGHT V1. Return precisely one JSON envelope:
+<<<MAILHAWK_INSIGHT_V1>>>
+{"version":"MAILHAWK_INSIGHT_V1","title":"Clear short title","summary":"Plain-text summary","items":[{"email_index":0,"text":"An evidence-grounded next step or finding"}]}
+<<<END_MAILHAWK_INSIGHT_V1>>>
+The object above demonstrates SHAPE only, not facts. Use only verified report email indices.
+Use email_index 0 for general recommendations with no specific message.
+Return no Markdown, HTML, quotes around the envelope, prefaces or extra text.
+No made-up facts, completed tasks, permission grants or artificial signature.
+'@
+}
+function ConvertFrom-MailHawkInsightV1 {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    if([string]::IsNullOrWhiteSpace($Text) -or $Text.Length -gt 180000){throw 'Insight protocol: empty or oversized output.'}
+    $clean=$Text.Replace([string][char]0xFEFF,'') -replace "`r`n?","`n"
+    $pattern='(?s)\A\s*<<<MAILHAWK_INSIGHT_V1>>>\n(?<json>\{.*\})\n<<<END_MAILHAWK_INSIGHT_V1>>>\s*\z'
+    $m=[regex]::Match($clean,$pattern)
+    if(-not $m.Success){throw 'Insight protocol: expected one INSIGHT_V1 envelope.'}
+    try{$data=ConvertFrom-Json -InputObject $m.Groups['json'].Value -ErrorAction Stop}catch{
+        throw ('Insight protocol: invalid JSON: '+$_.Exception.Message)
+    }
+    if([string]$data.version -cne 'MAILHAWK_INSIGHT_V1' -or $null -eq $data.items){
+        throw 'Insight protocol: incompatible version or missing items.'
+    }
+    $title=[string]$data.title;$summary=[string]$data.summary
+    if($title.Length -gt 150 -or $summary.Length -gt 5000 -or @($data.items).Count -gt 90){
+        throw 'Insight protocol: content exceeds limits.'
+    }
+    $items=New-Object System.Collections.Generic.List[object]
+    foreach($item in @($data.items)){
+        $text=[string]$item.text
+        $index=0
+        if(-not [int]::TryParse([string]$item.email_index,[ref]$index) -or $index -lt 0){
+            throw 'Insight protocol: invalid email index.'
+        }
+        if([string]::IsNullOrWhiteSpace($text) -or $text.Length -gt 1200){throw 'Insight protocol: invalid item text.'}
+        [void]$items.Add([pscustomobject]@{EmailIndex=$index;Text=$text})
+    }
+    return [pscustomobject]@{Version='MAILHAWK_INSIGHT_V1';Title=$title.Trim();Summary=$summary.Trim();Items=@($items.ToArray())}
+}
+function ConvertTo-MailHawkInsightMarkdownV1 {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Insight,[array]$VerifiedSources=@())
+    $allowed=@{}
+    foreach($source in @($VerifiedSources)){if($source.SourceVerified){$allowed[[int]$source.Index]=$true}}
+    $lines=New-Object System.Collections.Generic.List[string]
+    [void]$lines.Add('## '+(ConvertTo-MailHawkProtocolPlainText ([string]$Insight.Title)))
+    [void]$lines.Add((ConvertTo-MailHawkProtocolPlainText ([string]$Insight.Summary)))
+    [void]$lines.Add('')
+    foreach($item in @($Insight.Items)){
+        $n=[int]$item.EmailIndex
+        $text=ConvertTo-MailHawkProtocolPlainText ([string]$item.Text)
+        if($n -gt 0 -and $allowed.ContainsKey($n)){$text="[Email #$n] "+$text}
+        [void]$lines.Add('- '+$text)
+    }
+    return (($lines -join "`n").Trim())
+}
