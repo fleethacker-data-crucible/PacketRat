@@ -87,7 +87,7 @@ function renderIntelligence(text){
   const line=lines[i].trim();
   if(!line){closeList();continue}
   if(/^```/.test(line))continue;
-  const numberedHeading=line.match(/^\d+\.\s+([A-Z][A-Za-z /&\-]{2,55})$/);
+  const numberedHeading=line.match(/^\d+\.\s+((?:[A-Z][A-Z /&\-]{3,55})|(?:Categories|Groups|Must Reply|Already Replied|Already Appears Replied|No Action Needed|Skipped|Quick Summary|Action Items|Key Findings))$/);
   if(numberedHeading){closeSection();html.push('<section class="report-section"><h2>'+formatInline(numberedHeading[1])+'</h2>');inSection=true;continue}
   const heading=line.match(/^#{1,5}\s+(.+)$/);
   if(heading){closeSection();html.push('<section class="report-section"><h2>'+formatInline(heading[1])+'</h2>');inSection=true;continue}
