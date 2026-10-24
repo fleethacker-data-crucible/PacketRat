@@ -8,7 +8,10 @@ permissions:
 
 jobs:
   browser-and-source:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,7 +33,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_launcher_contract.py'
 
   powershell-51:
-    runs-on: windows-latest
+    runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
         shell: powershell
