@@ -129,7 +129,7 @@ function Import-PacketRatLazaretteSession {
       Safe to call repeatedly; never re-dot-sources after the first attempt. Does not unlock.
     #>
     [CmdletBinding()]
-    param([Alias('ArcRoot')][string]$LazaretteRoot, [switch]$Quiet)
+    param([string]$LazaretteRoot, [switch]$Quiet)
 
     # Already have helpers (e.g. this session already loaded Lazarette) - do not re-source
     if (Test-PacketRatLazaretteHelpersAvailable) {
@@ -226,10 +226,13 @@ function Resolve-PacketRatLazaretteServiceName {
     )
 
     if ($Profile -eq 'GenAi') {
-        # New PacketRat name first; former MailHawk and Cascade (now Halyard) names stay as fallbacks.
+        # PacketRat name first, then the former MailHawk name, then Halyard's shared names
+        # (HALYARD_LAZARETTE_ITEM_*, then its former CASCADE_ARC_ITEM_* names, which Halyard still reads).
         $keys = @(
             'PACKETRAT_LAZARETTE_ITEM_GenAi',
             'MAILHAWK_ARC_ITEM_GenAi',
+            'HALYARD_LAZARETTE_ITEM_GenAi',
+            'HALYARD_LAZARETTE_ITEM_Llm',
             'CASCADE_ARC_ITEM_GenAi',
             'CASCADE_ARC_ITEM_Llm'
         )
@@ -243,6 +246,7 @@ function Resolve-PacketRatLazaretteServiceName {
     $keys = @(
         'PACKETRAT_LAZARETTE_ITEM_Grok',
         'MAILHAWK_ARC_ITEM_Grok',
+        'HALYARD_LAZARETTE_ITEM_Grok',
         'CASCADE_ARC_ITEM_Grok'
     )
     foreach ($k in $keys) {
@@ -303,7 +307,7 @@ function Get-PacketRatLazaretteSecretByName {
         } catch {}
     }
 
-    # 3) Vault row match — exact Service/Name first
+    # 3) Vault row match - exact Service/Name first
     if (Get-Command Get-LiveVault -ErrorAction SilentlyContinue) {
         try {
             $vault = Get-LiveVault

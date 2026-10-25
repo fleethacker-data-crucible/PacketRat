@@ -142,7 +142,7 @@ function Invoke-PacketRatApi {
       }
       '/api/credentials' {
           $source=[string]$Data.source
-          if($source -cnotin @('ARC','Manual')){throw 'Select Lazarette or Manual as the credential source.'}
+          if($source -cnotin @('Lazarette','Manual')){throw 'Select Lazarette or Manual as the credential source.'}
           $profile=[string]$Data.profile
           if($profile -cnotin @('GenAi','Grok')){throw 'Select GenAi or Grok for a manual token.'}
           $tokenText=if($null -eq $Data.token){''}else{[string]$Data.token}
