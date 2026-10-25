@@ -12,7 +12,7 @@ function Expect-ProtocolError([scriptblock]$Work,[string]$Message){
     Assert-Protocol $rejected $Message
 }
 $validDraft=@'
-<<<MAILHAWK_DRAFT_V1>>>
+<<<PACKETRAT_DRAFT_V1>>>
 <<<SUBJECT>>>
 RE: Access workflow
 <<<END_SUBJECT>>>
@@ -21,10 +21,10 @@ Thank you for your message.
 
 I will review the request and confirm the next steps.
 <<<END_BODY>>>
-<<<END_MAILHAWK_DRAFT_V1>>>
+<<<END_PACKETRAT_DRAFT_V1>>>
 '@
 $one=ConvertFrom-PacketRatDraftV1 -Text $validDraft
-Assert-Protocol ($one.Version -eq 'MAILHAWK_DRAFT_V1') 'Version known'
+Assert-Protocol ($one.Version -eq 'PACKETRAT_DRAFT_V1') 'Version known'
 Assert-Protocol ($one.Subject -eq 'RE: Access workflow') 'Subject split'
 Assert-Protocol ($one.Body -match 'confirm the next steps') 'Body split'
 Assert-Protocol ($one.Body -notmatch '<<<') 'No delimiters leak into body'
@@ -38,12 +38,12 @@ $signoff=$validDraft.Replace('I will review the request and confirm the next ste
 Expect-ProtocolError {ConvertFrom-PacketRatDraftV1 -Text $signoff} 'AI sign-off rejected; Outlook must insert it'
 
 $goodReport=@'
-<<<MAILHAWK_REPORT_V1>>>
-{"version":"MAILHAWK_REPORT_V1","must_reply":[{"index":1,"urgency":"High","why":"Needs review"}],"report_items":[{"index":1,"section":"Must Reply","reason":"A reply is requested","recommended_action":"Verify and respond","urgency":"High"}],"sections":[{"id":"categories","title":"Categories","summary":"There is one high-priority request.","items":[{"email_index":1,"text":"The user should review the email."}]},{"id":"groups","title":"Groups","summary":"","items":[]},{"id":"must_reply","title":"Must Reply","summary":"","items":[{"email_index":1,"text":"Please provide an update."}]},{"id":"already_replied","title":"Already Replied / No Action Needed","summary":"","items":[]},{"id":"skipped","title":"Skipped / Caution","summary":"","items":[]},{"id":"quick_summary","title":"Quick Summary","summary":"Confirm required action in Outlook.","items":[]}]}
-<<<END_MAILHAWK_REPORT_V1>>>
+<<<PACKETRAT_REPORT_V1>>>
+{"version":"PACKETRAT_REPORT_V1","must_reply":[{"index":1,"urgency":"High","why":"Needs review"}],"report_items":[{"index":1,"section":"Must Reply","reason":"A reply is requested","recommended_action":"Verify and respond","urgency":"High"}],"sections":[{"id":"categories","title":"Categories","summary":"There is one high-priority request.","items":[{"email_index":1,"text":"The user should review the email."}]},{"id":"groups","title":"Groups","summary":"","items":[]},{"id":"must_reply","title":"Must Reply","summary":"","items":[{"email_index":1,"text":"Please provide an update."}]},{"id":"already_replied","title":"Already Replied / No Action Needed","summary":"","items":[]},{"id":"skipped","title":"Skipped / Caution","summary":"","items":[]},{"id":"quick_summary","title":"Quick Summary","summary":"Confirm required action in Outlook.","items":[]}]}
+<<<END_PACKETRAT_REPORT_V1>>>
 '@
 $report=ConvertFrom-PacketRatReportV1 -Text $goodReport -MaxSourceIndex 2
-Assert-Protocol ($report.Version -eq 'MAILHAWK_REPORT_V1') 'Report version'
+Assert-Protocol ($report.Version -eq 'PACKETRAT_REPORT_V1') 'Report version'
 Assert-Protocol (@($report.Sections).Count -eq 6) 'Exactly six sections'
 Assert-Protocol (@($report.MustReply).Count -eq 1) 'Structured must-reply'
 $emails=@(
@@ -55,8 +55,8 @@ Assert-Protocol ($compiled.Contains('[Email #1]')) 'Link to verified source'
 Assert-Protocol ($compiled -notmatch '<<<|```') 'No model formatting markers in compiled report'
 $fakeIndex=$goodReport.Replace('"index":1','"index":999')
 Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $fakeIndex -MaxSourceIndex 2} 'Invalid email index rejected'
-Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $goodReport.Replace('"version":"MAILHAWK_REPORT_V1"','"version":"V0"')} 'Unsupported schema version rejected'
-Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $goodReport.Replace('<<<END_MAILHAWK_REPORT_V1>>>','')} 'Truncated report rejected'
+Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $goodReport.Replace('"version":"PACKETRAT_REPORT_V1"','"version":"V0"')} 'Unsupported schema version rejected'
+Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $goodReport.Replace('<<<END_PACKETRAT_REPORT_V1>>>','')} 'Truncated report rejected'
 $signature='<html><body class="WordSection1"><div id="signature">Authorized Outlook signature<img src="cid:logo.png"></div><blockquote>Prior email</blockquote></body></html>'
 $joined=Join-PacketRatReplyHtml -ExistingHtml $signature -DraftText 'Review <this> & confirm'
 Assert-Protocol ($joined.Contains('Review &lt;this&gt; &amp; confirm')) 'HTML escape message'

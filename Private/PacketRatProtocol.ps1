@@ -12,16 +12,16 @@ function ConvertTo-PacketRatWireReadableText {
 }
 function Get-PacketRatDraftWirePrompt {
     return @'
-MAILHAWK DRAFT V1. Return EXACTLY ONE email response. No alternative versions.
+PACKETRAT DRAFT V1. Return EXACTLY ONE email response. No alternative versions.
 Write precisely this envelope. Markers must each be on their own line:
-<<<MAILHAWK_DRAFT_V1>>>
+<<<PACKETRAT_DRAFT_V1>>>
 <<<SUBJECT>>>
 One suggested subject on one line
 <<<END_SUBJECT>>>
 <<<BODY>>>
 One plain-text email message using normal paragraphs.
 <<<END_BODY>>>
-<<<END_MAILHAWK_DRAFT_V1>>>
+<<<END_PACKETRAT_DRAFT_V1>>>
 Do not write anything outside the envelope. Never place a marker inside the body.
 No Markdown, HTML, code fences, JSON, prefaces, commentary, duplicated drafts,
 fabricated approvals or invented signature. No sign-off line such as "Best regards",
@@ -34,7 +34,7 @@ function ConvertFrom-PacketRatDraftV1 {
     if([string]::IsNullOrWhiteSpace($Text)){throw 'Draft protocol: empty AI response.'}
     if($Text.Length -gt 150000){throw 'Draft protocol: oversized response.'}
     $clean=$Text.Replace([string][char]0xFEFF,'') -replace "`r`n?","`n"
-    $pattern='(?s)\A\s*<<<MAILHAWK_DRAFT_V1>>>\n<<<SUBJECT>>>\n(?<subject>[^\n]+)\n<<<END_SUBJECT>>>\n<<<BODY>>>\n(?<body>.*?)\n<<<END_BODY>>>\n<<<END_MAILHAWK_DRAFT_V1>>>\s*\z'
+    $pattern='(?s)\A\s*<<<PACKETRAT_DRAFT_V1>>>\n<<<SUBJECT>>>\n(?<subject>[^\n]+)\n<<<END_SUBJECT>>>\n<<<BODY>>>\n(?<body>.*?)\n<<<END_BODY>>>\n<<<END_PACKETRAT_DRAFT_V1>>>\s*\z'
     $m=[regex]::Match($clean,$pattern)
     if(-not $m.Success){throw 'Draft protocol: expected exactly one envelope with SUBJECT and BODY fields.'}
     $subject=$m.Groups['subject'].Value.Trim()
@@ -46,20 +46,20 @@ function ConvertFrom-PacketRatDraftV1 {
     if($subject -match '[\x00-\x1F\x7F]' -or $body -match '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'){
         throw 'Draft protocol: illegal control character.'
     }
-    if([regex]::IsMatch($body,'(?m)^<<<(?:MAILHAWK_|END_|SUBJECT|BODY)[A-Z0-9_]*>>>')){
+    if([regex]::IsMatch($body,'(?m)^<<<(?:PACKETRAT_|END_|SUBJECT|BODY)[A-Z0-9_]*>>>')){
         throw 'Draft protocol: duplicate or nested markers.'
     }
     if([regex]::IsMatch($body,'(?im)^\s*(?:best\s+regards|kind\s+regards|warm\s+regards|sincerely|respectfully|v/r)\s*,?\s*$')){
         throw 'Draft protocol: sign-off detected; Outlook will provide the real signature.'
     }
-    return [pscustomobject]@{Version='MAILHAWK_DRAFT_V1';Subject=$subject;Body=$body}
+    return [pscustomobject]@{Version='PACKETRAT_DRAFT_V1';Subject=$subject;Body=$body}
 }
 function Get-PacketRatReportWirePrompt {
     return @'
-MAILHAWK REPORT V1. Return EXACTLY ONE JSON report wrapped in these ASCII markers:
-<<<MAILHAWK_REPORT_V1>>>
-{"version":"MAILHAWK_REPORT_V1","must_reply":[{"index":1,"urgency":"High","why":"Reason"}],"report_items":[{"index":1,"section":"Must Reply","reason":"Reason","recommended_action":"Proposed action","urgency":"High"}],"sections":[{"id":"categories","title":"Categories","summary":"Short plain-text summary","items":[{"email_index":1,"text":"Source-grounded finding"}]},{"id":"groups","title":"Groups","summary":"","items":[]},{"id":"must_reply","title":"Must Reply","summary":"","items":[]},{"id":"already_replied","title":"Already Replied / No Action Needed","summary":"","items":[]},{"id":"skipped","title":"Skipped / Caution","summary":"","items":[]},{"id":"quick_summary","title":"Quick Summary","summary":"","items":[]}]}
-<<<END_MAILHAWK_REPORT_V1>>>
+PACKETRAT REPORT V1. Return EXACTLY ONE JSON report wrapped in these ASCII markers:
+<<<PACKETRAT_REPORT_V1>>>
+{"version":"PACKETRAT_REPORT_V1","must_reply":[{"index":1,"urgency":"High","why":"Reason"}],"report_items":[{"index":1,"section":"Must Reply","reason":"Reason","recommended_action":"Proposed action","urgency":"High"}],"sections":[{"id":"categories","title":"Categories","summary":"Short plain-text summary","items":[{"email_index":1,"text":"Source-grounded finding"}]},{"id":"groups","title":"Groups","summary":"","items":[]},{"id":"must_reply","title":"Must Reply","summary":"","items":[]},{"id":"already_replied","title":"Already Replied / No Action Needed","summary":"","items":[]},{"id":"skipped","title":"Skipped / Caution","summary":"","items":[]},{"id":"quick_summary","title":"Quick Summary","summary":"","items":[]}]}
+<<<END_PACKETRAT_REPORT_V1>>>
 The contents above demonstrate SHAPE only. Write actual findings, not placeholders.
 All six section ids are mandatory in exactly that order. Use [] for empty items.
 Use only source Index numbers present in the supplied inbox snapshot; never invent IDs.
@@ -74,13 +74,13 @@ function ConvertFrom-PacketRatReportV1 {
     if([string]::IsNullOrWhiteSpace($Text)){throw 'Report protocol: empty response.'}
     if($Text.Length -gt 750000){throw 'Report protocol: oversized response.'}
     $clean=$Text.Replace([string][char]0xFEFF,'') -replace "`r`n?","`n"
-    $pattern='(?s)\A\s*<<<MAILHAWK_REPORT_V1>>>\n(?<payload>\{.*\})\n<<<END_MAILHAWK_REPORT_V1>>>\s*\z'
+    $pattern='(?s)\A\s*<<<PACKETRAT_REPORT_V1>>>\n(?<payload>\{.*\})\n<<<END_PACKETRAT_REPORT_V1>>>\s*\z'
     $m=[regex]::Match($clean,$pattern)
     if(-not $m.Success){throw 'Report protocol: expected exactly one REPORT_V1 JSON envelope.'}
     try{$data=ConvertFrom-Json -InputObject $m.Groups['payload'].Value -ErrorAction Stop}catch{
         throw ('Report protocol: invalid JSON: '+$_.Exception.Message)
     }
-    if([string]$data.version -cne 'MAILHAWK_REPORT_V1'){throw 'Report protocol: unsupported version.'}
+    if([string]$data.version -cne 'PACKETRAT_REPORT_V1'){throw 'Report protocol: unsupported version.'}
     if($null -eq $data.must_reply -or $null -eq $data.report_items -or $null -eq $data.sections){
         throw 'Report protocol: required arrays missing.'
     }
@@ -116,7 +116,7 @@ function ConvertFrom-PacketRatReportV1 {
             throw 'Report protocol: invalid or out-of-range email reference.'
         }
     }
-    return [pscustomobject]@{Version='MAILHAWK_REPORT_V1';MustReply=@($data.must_reply);ReportItems=@($data.report_items);Sections=@($safe.ToArray())}
+    return [pscustomobject]@{Version='PACKETRAT_REPORT_V1';MustReply=@($data.must_reply);ReportItems=@($data.report_items);Sections=@($safe.ToArray())}
 }
 function ConvertTo-PacketRatProtocolPlainText {
     param([AllowEmptyString()][string]$Value)
@@ -152,10 +152,10 @@ function ConvertTo-PacketRatReportMarkdownV1 {
 # Follow-up generation from an existing report uses the same strict envelope strategy.
 function Get-PacketRatInsightWirePrompt {
     return @'
-MAILHAWK INSIGHT V1. Return precisely one JSON envelope:
-<<<MAILHAWK_INSIGHT_V1>>>
-{"version":"MAILHAWK_INSIGHT_V1","title":"Clear short title","summary":"Plain-text summary","items":[{"email_index":0,"text":"An evidence-grounded next step or finding"}]}
-<<<END_MAILHAWK_INSIGHT_V1>>>
+PACKETRAT INSIGHT V1. Return precisely one JSON envelope:
+<<<PACKETRAT_INSIGHT_V1>>>
+{"version":"PACKETRAT_INSIGHT_V1","title":"Clear short title","summary":"Plain-text summary","items":[{"email_index":0,"text":"An evidence-grounded next step or finding"}]}
+<<<END_PACKETRAT_INSIGHT_V1>>>
 The object above demonstrates SHAPE only, not facts. Use only verified report email indices.
 Use email_index 0 for general recommendations with no specific message.
 Return no Markdown, HTML, quotes around the envelope, prefaces or extra text.
@@ -167,13 +167,13 @@ function ConvertFrom-PacketRatInsightV1 {
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
     if([string]::IsNullOrWhiteSpace($Text) -or $Text.Length -gt 180000){throw 'Insight protocol: empty or oversized output.'}
     $clean=$Text.Replace([string][char]0xFEFF,'') -replace "`r`n?","`n"
-    $pattern='(?s)\A\s*<<<MAILHAWK_INSIGHT_V1>>>\n(?<json>\{.*\})\n<<<END_MAILHAWK_INSIGHT_V1>>>\s*\z'
+    $pattern='(?s)\A\s*<<<PACKETRAT_INSIGHT_V1>>>\n(?<json>\{.*\})\n<<<END_PACKETRAT_INSIGHT_V1>>>\s*\z'
     $m=[regex]::Match($clean,$pattern)
     if(-not $m.Success){throw 'Insight protocol: expected one INSIGHT_V1 envelope.'}
     try{$data=ConvertFrom-Json -InputObject $m.Groups['json'].Value -ErrorAction Stop}catch{
         throw ('Insight protocol: invalid JSON: '+$_.Exception.Message)
     }
-    if([string]$data.version -cne 'MAILHAWK_INSIGHT_V1' -or $null -eq $data.items){
+    if([string]$data.version -cne 'PACKETRAT_INSIGHT_V1' -or $null -eq $data.items){
         throw 'Insight protocol: incompatible version or missing items.'
     }
     $title=[string]$data.title;$summary=[string]$data.summary
@@ -190,7 +190,7 @@ function ConvertFrom-PacketRatInsightV1 {
         if([string]::IsNullOrWhiteSpace($text) -or $text.Length -gt 1200){throw 'Insight protocol: invalid item text.'}
         [void]$items.Add([pscustomobject]@{EmailIndex=$index;Text=$text})
     }
-    return [pscustomobject]@{Version='MAILHAWK_INSIGHT_V1';Title=$title.Trim();Summary=$summary.Trim();Items=@($items.ToArray())}
+    return [pscustomobject]@{Version='PACKETRAT_INSIGHT_V1';Title=$title.Trim();Summary=$summary.Trim();Items=@($items.ToArray())}
 }
 function ConvertTo-PacketRatInsightMarkdownV1 {
     [CmdletBinding()]
