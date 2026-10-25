@@ -14,11 +14,11 @@ Formerly MailHawk.
 
 > **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/CAC, AI provider connectivity, and Navy workstation execution need validation in the approved environment. Not accredited or production-ready.
 
-| Night watch (dark) |
-| --- |
-| ![PacketRat overview in the Night watch theme](docs/screenshots/overview-night-watch.png) |
+| Night watch (dark) | Chart room (light) |
+| --- | --- |
+| ![PacketRat overview in the Night watch theme](docs/screenshots/overview-night-watch.png) | ![PacketRat overview in the Chart room theme](docs/screenshots/overview-chart-room.png) |
 
-PacketRat has one theme, Night watch (dark); there is no Chart room (light) theme yet. The screenshot uses the offline demo's sample mail.
+The screenshots use the offline demo's sample mail. PacketRat follows the Windows light or dark setting; the theme button in the sidebar cycles Follow Windows, Night watch and Chart room.
 
 ## Only two launchers
 

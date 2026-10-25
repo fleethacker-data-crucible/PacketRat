@@ -13,7 +13,12 @@ assert "'report-experience.js'" in SERVICE
 assert (ROOT/'Private/PacketRatReport.ps1').is_file()
 assert (ROOT/'Web/report-experience.js').is_file()
 assert "'/api/credentials'" in SERVICE and "'/api/credentials/check'" in SERVICE
-assert "'packetrat-logo.png'" in SERVICE and "'packetrat-icon.png'" in SERVICE
+# Fleet UI assets are on the served allow-list; the former MailHawk hawk art is gone.
+for asset in ('shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png'):
+    assert "'"+asset+"'" in SERVICE, asset
+    assert (ROOT/'Web'/asset).is_file(), asset
+assert "'.svg'='image/svg+xml" in SERVICE
+assert 'packetrat-logo.png' not in SERVICE and 'packetrat-icon.png' not in SERVICE
 assert 'Read-PacketRatBody' in SERVICE and '$Stream.Read($buffer' in SERVICE
 assert 'X-Content-Type-Options: nosniff' in SERVICE
 assert "'POST'" in SERVICE
@@ -28,8 +33,10 @@ assert "?demo=1" in CLIENT or "'demo'" in CLIENT
 assert '__PACKETRAT_NONCE__' in HTML
 assert 'id="credentialToken"' in HTML and 'type="password"' in HTML
 assert "credentialSource" in CLIENT and "credentials/clear" in CLIENT
-assert (ROOT/'Web/packetrat-logo.png').is_file()
-assert Image.open(ROOT/'Web/packetrat-icon.png').size==(320,320)
+assert Image.open(ROOT/'Web/brand/emblem-dark.png').size==Image.open(ROOT/'Web/brand/emblem-light.png').size
+assert (ROOT/'Web/brand/mark.svg').read_bytes()==(ROOT/'assets/brand/mark.svg').read_bytes(), 'Served mark matches assets/brand'
+assert 'data-app="packetrat"' in HTML and HTML.index('vendor/fleet/fleet.css')<HTML.index('href="style.css"')
+assert 'MH<' not in HTML, 'No former MailHawk initials'
 assert not (ROOT/'Logs').exists(), 'Local user email records must not ship.'
 LLM=(ROOT/'Private/PacketRatLlm.ps1').read_text()
 assert 'PacketRatManualTokens' in LLM and "PacketRatCredentialSource" in LLM
