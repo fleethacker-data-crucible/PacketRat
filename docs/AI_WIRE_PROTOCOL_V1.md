@@ -8,14 +8,14 @@ The outer delimiter identifies the message kind and ensures the response is comp
 
 Source of truth: `Private/PacketRatProtocol.ps1`.
 
-> **Name note:** the app was renamed from MailHawk to PacketRat. The envelope IDs and markers (`MAILHAWK_DRAFT_V1`, `MAILHAWK_REPORT_V1`, `MAILHAWK_INSIGHT_V1`, `END_MAILHAWK_*`, `@@@MAILHAWK_JSON_*@@@`) are a wire format and are kept unchanged for compatibility with saved reports and existing prompts.
+> **Envelope lifetime:** envelopes exist only between the model response and the parser. Nothing that is saved (the store, `PacketRatReport_*.md`, the opt-in raw AI log) is parsed again, so the markers can change between releases without a fallback.
 
 `Private/PacketRatProtocol.ps1` uses ASCII-safe delimiter definitions for Windows PowerShell 5.1.
 
 ### Draft — exactly one reply
 
 ```text
-<<<MAILHAWK_DRAFT_V1>>>
+<<<PACKETRAT_DRAFT_V1>>>
 <<<SUBJECT>>>
 RE: Access Request
 <<<END_SUBJECT>>>
@@ -24,7 +24,7 @@ Thank you for the update.
 
 I will review the request and follow up after confirming the remaining details.
 <<<END_BODY>>>
-<<<END_MAILHAWK_DRAFT_V1>>>
+<<<END_PACKETRAT_DRAFT_V1>>>
 ```
 
 The model must return exactly **one** subject and **one** plain-text body. The subject is editable. **Outlook's original reply subject remains unchanged by default** to preserve threading. A user may explicitly select the opt-in override.
@@ -36,9 +36,9 @@ A 20,000-output-token provider request ceiling is maintained for drafting; that 
 ### Main report — one versioned JSON envelope
 
 ```text
-<<<MAILHAWK_REPORT_V1>>>
+<<<PACKETRAT_REPORT_V1>>>
 {
-  "version": "MAILHAWK_REPORT_V1",
+  "version": "PACKETRAT_REPORT_V1",
   "must_reply": [{"index": 1, "urgency": "High", "why": "Source-supported request"}],
   "report_items": [{"index": 1, "section": "Must Reply", "reason": "Reply requested", "recommended_action": "Review and respond", "urgency": "High"}],
   "sections": [
@@ -50,7 +50,7 @@ A 20,000-output-token provider request ceiling is maintained for drafting; that 
     {"id": "quick_summary", "title": "Quick Summary", "summary": "Review pending actions.", "items": []}
   ]
 }
-<<<END_MAILHAWK_REPORT_V1>>>
+<<<END_PACKETRAT_REPORT_V1>>>
 ```
 
 All six section IDs are required **in that order**; empty sections use empty arrays. No markdown headings, tables, or arbitrary model-authored UI controls are accepted in section text. PacketRat validates JSON and reconciles model email indices against the original scan. It then constructs readable, escaped sections and click-through links for *verified* messages. Model-generated EntryIDs, HTML, and fabricated references are never trusted as action identifiers.
@@ -58,9 +58,9 @@ All six section IDs are required **in that order**; empty sections use empty arr
 ### On-demand follow-ups — insight envelope
 
 ```text
-<<<MAILHAWK_INSIGHT_V1>>>
-{"version":"MAILHAWK_INSIGHT_V1","title":"Action plan","summary":"Review the verified requests.","items":[{"email_index":1,"text":"Confirm the deadline from the original email."},{"email_index":0,"text":"Review uncertain classifications before acting."}]}
-<<<END_MAILHAWK_INSIGHT_V1>>>
+<<<PACKETRAT_INSIGHT_V1>>>
+{"version":"PACKETRAT_INSIGHT_V1","title":"Action plan","summary":"Review the verified requests.","items":[{"email_index":1,"text":"Confirm the deadline from the original email."},{"email_index":0,"text":"Review uncertain classifications before acting."}]}
+<<<END_PACKETRAT_INSIGHT_V1>>>
 ```
 
 This covers briefings, explanations, risk reviews and follow-up plans generated from the full report or a selected report section. Email index **0** means general advice with no specific message citation. The compiled UI is read-only and never sends mail automatically.

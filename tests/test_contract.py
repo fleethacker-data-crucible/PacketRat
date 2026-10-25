@@ -45,6 +45,10 @@ assert "'Lazarette.ps1', 'Arc.ps1'" in BRIDGE, 'Discovery by lib\\Lazarette.ps1 
 assert BRIDGE.index("'Lazarette.ps1', 'Arc.ps1'") < BRIDGE.index("Join-Path $full 'pm.ps1'"), 'pm.ps1 only as the last resort'
 assert "'Unlock-LazaretteVaultInteractive', 'Unlock-ArcVaultInteractive'" in BRIDGE
 assert "'genapi'" in BRIDGE and "'advana-api'" in BRIDGE, 'Vault item names unchanged'
+for suffix in ('GenAi','Grok'):
+    item_order=[f"'PACKETRAT_LAZARETTE_ITEM_{suffix}'",f"'MAILHAWK_ARC_ITEM_{suffix}'",f"'HALYARD_LAZARETTE_ITEM_{suffix}'",f"'CASCADE_ARC_ITEM_{suffix}'"]
+    item_positions=[BRIDGE.index(x) for x in item_order]
+    assert item_positions==sorted(item_positions), 'Item overrides: PacketRat, MailHawk, then Halyard before its former Cascade names'
 STORE=(ROOT/'Private/PacketRatStore.ps1').read_text()
 assert "'mailhawk-store.json'" in STORE and 'Copy-Item' in STORE and 'Remove-Item' not in STORE
 assert "'mailhawk-prefs','packetrat-prefs'" in CLIENT

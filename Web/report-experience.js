@@ -13,7 +13,7 @@
  ];
  function normalizeText(input){
   let s=String(input??'');
-  s=s.replace(/@@@MAILHAWK_JSON_BEGIN@@@[\s\S]*?@@@MAILHAWK_JSON_END@@@/g,'');
+  s=s.replace(/@@@PACKETRAT_JSON_BEGIN@@@[\s\S]*?@@@PACKETRAT_JSON_END@@@/g,'');
   s=s.replace(/^\uFEFF/g,'').replace(/[\u200B-\u200F\u202A-\u202E\u00AD]/g,'').replace(/\u00A0/g,' ');
   for(const [from,to] of replacements)s=s.split(from).join(to);
   s=s.replace(/\x1B\[[0-9;]*[A-Za-z]/g,'').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,'');
@@ -156,7 +156,7 @@
   const unknown=[...clean.matchAll(/\[\s*Email\s*#(\d+)\s*\]|\[\s*#(\d+)\s*\]/gi)].map(m=>Number(m[1]||m[2])).filter(n=>!lookup.has(n));
   if(unknown.length)warnings.push('Unverified model email references: '+[...new Set(unknown)].join(', ')+'. These are not clickable.');
   if(/�|Ã.|â€|Â[^\s]/.test(clean))warnings.push('Unresolved encoding artifacts remain; inspect the source output.');
-  if(/@@@MAILHAWK_JSON_|```/.test(clean))warnings.push('Unrecognized structured/model formatting remains in the report.');
+  if(/@@@PACKETRAT_JSON_|```/.test(clean))warnings.push('Unrecognized structured/model formatting remains in the report.');
   if(!(Array.isArray(sections)?sections:[]).length)warnings.push('The report has no reliably parsed sections.');
   return {warnings,verifiedSources:lookup.size,sections:(sections||[]).length,unverifiedRefs:[...new Set(unknown)]};
  }

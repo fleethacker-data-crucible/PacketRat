@@ -138,7 +138,7 @@ function Get-PacketRatReportQuality {
     if([regex]::IsMatch($Report,'\u00C3.|\u00E2\u20AC|\u00C2.|\uFFFD')){
         [void]$warnings.Add('Some characters still resemble encoding damage; check the original output.')
     }
-    if([regex]::IsMatch($Report,'@@@MAILHAWK_JSON_|^\s*```','Multiline')){
+    if([regex]::IsMatch($Report,'@@@PACKETRAT_JSON_|^\s*```','Multiline')){
         [void]$warnings.Add('Model formatting artifacts remain in the report text.')
     }
     $validMentions=0;$unknownMentions=@{}
