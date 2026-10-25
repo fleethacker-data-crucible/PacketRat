@@ -27,8 +27,21 @@ Launch-PacketRat.bat demo
 Launch-PacketRat.bat diagnostics
 Launch-PacketRat.bat -NoBrowser
 Launch-PacketRat.bat -Port 8766
+Launch-PacketRat.bat --replace
+Launch-PacketRat.bat --stay
+Launch-PacketRat.bat stop
 PacketRat-CLI.bat -Profile GenAi
 ```
+
+### Closing the tab stops PacketRat
+
+The browser tab owns the local PowerShell service. The page sends a heartbeat every 5 seconds and a leaving signal when it closes; the service stops itself 20 seconds after the last heartbeat (5 seconds after a leaving signal), but never while a scan, report, draft or store write is running. A reload or a second PacketRat tab keeps it alive. Other ways to stop it:
+
+- **End session** in the sidebar.
+- `Launch-PacketRat.bat stop` (runs `Stop-PacketRat.ps1`), which stops every running PacketRat service without needing a PID.
+- Ctrl+C in the console, if it is visible.
+
+Launching while PacketRat already runs asks *Stop it and start fresh?*. `Launch-PacketRat.bat --replace` answers yes; `Launch-PacketRat.bat --stay` (or `PACKETRAT_AUTO_STOP=0` in the environment or `Config/packetrat.env`; the former `MAILHAWK_AUTO_STOP` still works) keeps the service running after the tab closes. Each running service writes `Logs/packetrat-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops. `Stop-PacketRat.ps1` and the single-instance check also find a server started by an older MailHawk build (`Logs/mailhawk-server-<pid>.json` or a `Start-MailHawk-Web.ps1` process).
 
 The five former user-facing BAT files were retired. Internal PowerShell files (`Start-PacketRat-Web.ps1`, `Start-PacketRat.ps1`) remain as implementation entrypoints and are not additional launchers.
 
@@ -116,6 +129,7 @@ The HTTP service binds to local loopback only. POST requests require same-origin
 
 - `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers.
 - `Start-PacketRat-Web.ps1` — local HTTP/JSON service.
+- `Stop-PacketRat.ps1` — stops every running PacketRat browser service (`Launch-PacketRat.bat stop`).
 - `Start-PacketRat.ps1` — legacy engine with console mode used by the CLI.
 - `Web/` — browser application, styling, and logo assets.
 - `Private/`, `Public/` — Outlook, Lazarette, AI, persistence and analysis modules.

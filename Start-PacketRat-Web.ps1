@@ -5,12 +5,35 @@
  .NOTES
   No HttpListener URLACL or administrator elevation required.
   Outlook COM calls and AI requests are synchronous in this implementation.
+  The browser tab owns this server: it stops itself once no PacketRat tab has sent a
+  heartbeat for 20 s (5 s after a tab's leaving signal), never in the middle of a request.
+ .PARAMETER Stay
+  Keep running after the browser tab closes. Also: --stay, or PACKETRAT_AUTO_STOP=0 (former MAILHAWK_AUTO_STOP still read).
+ .PARAMETER Replace
+  If PacketRat is already running, stop it and start fresh without asking. Also: --replace.
 #>
-[CmdletBinding()]
-param([ValidateRange(0,65535)][int]$Port=8766,[switch]$NoBrowser,[switch]$Demo)
+[CmdletBinding(PositionalBinding=$false)]
+param(
+    [ValidateRange(0,65535)][int]$Port=8766,
+    [switch]$NoBrowser,
+    [switch]$Demo,
+    [switch]$Stay,
+    [switch]$Replace,
+    [Parameter(ValueFromRemainingArguments=$true)][string[]]$Rest
+)
 $ErrorActionPreference='Stop'
 $Root=$PSScriptRoot
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLlm','PacketRatStore','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft')) {
+foreach($option in @($Rest)){
+    switch -Regex ([string]$option){
+        '^--?stay$' {$Stay=$true}
+        '^--?replace$' {$Replace=$true}
+        '^--?no-browser$' {$NoBrowser=$true}
+        '^(--?)?demo$' {$Demo=$true}
+        '^gui$' {}
+        default {if($option){Write-Warning "Ignoring unknown option $option"}}
+    }
+}
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -25,6 +48,23 @@ if(Test-Path $envFile){
     }
 }
 Initialize-PacketRatLegacyEnvironment
+# One instance: a running server holds the store and Outlook session; offer to replace it.
+$running=@(Get-PacketRatProcesses -Root $Root)
+if($running.Count -gt 0){
+    $where=($running | ForEach-Object {Format-PacketRatProcess $_}) -join ', '
+    Write-Host ('PacketRat is already running: '+$where) -ForegroundColor Yellow
+    $answer=if($Replace){'y'}else{Read-Host 'Stop it and start fresh? [Y/n]'}
+    if($answer -eq '' -or $answer -match '^[Yy]'){
+        foreach($stopped in @(Stop-PacketRatProcesses -Root $Root)){Write-Host ('  Stopped PacketRat '+(Format-PacketRatProcess $stopped)) -ForegroundColor DarkGray}
+    }else{
+        Write-Host 'Leaving the running server alone. Use End session in its browser tab, or Stop-PacketRat.ps1.' -ForegroundColor DarkGray
+        if($running[0].Url -and -not $NoBrowser){try{Start-Process $running[0].Url}catch{}}
+        exit 0
+    }
+}
+$script:Presence=New-PacketRatPresence -AutoStop (Test-PacketRatAutoStopEnabled -Stay:$Stay)
+$script:BusyUntil=[DateTime]::MinValue
+$script:StopReason=''
 $script:LastResult=$null
 $script:Nonce=[guid]::NewGuid().ToString('N')
 $script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png'}
@@ -83,6 +123,15 @@ function Find-PacketRatReportSource([string]$Key) {
 }
 function Invoke-PacketRatApi {
     param([string]$Route,$Data)
+    if($Route -eq '/api/heartbeat') {
+        Register-PacketRatPresence -State $script:Presence -Tab ([string]$Data.tab) -Leaving:($Data.leaving -eq $true)
+        return @{ok=$true;autoStop=[bool]$script:Presence.AutoStop;liveTabs=(Get-PacketRatLiveTabCount -State $script:Presence);timeoutSeconds=[int]$script:Presence.HeartbeatTimeout.TotalSeconds}
+    }
+    if($Route -eq '/api/session/stop') {
+        # Requests are handled one at a time, so nothing else is mid-write here.
+        $script:StopReason='End session was selected in the browser.'
+        return @{ok=$true;stopping=$true}
+    }
     if($Route -eq '/api/health') {return @{ok=$true;service='PacketRat';mode='local';version='2.0'}}
     if($Route -eq '/api/credentials/status') {return @{ok=$true;credentials=(Get-PacketRatCredentialStatus)}}
     $store=Get-PacketRatStore -Root $Root
@@ -259,13 +308,32 @@ try{$listener.Start()}catch{
 }
 $Port=([Net.IPEndPoint]$listener.LocalEndpoint).Port
 $url="http://127.0.0.1:$Port/"
-Write-Host "PacketRat browser interface: $url" -ForegroundColor Cyan
-Write-Host "Offline demo: ${url}?demo=1" -ForegroundColor DarkCyan
-Write-Host 'Press Ctrl+C to stop the server.' -ForegroundColor DarkGray
-if(-not $NoBrowser){try{Start-Process ($url + $(if($Demo){'?demo=1'}else{''}))}catch{Write-Warning 'Could not automatically open browser. Copy the URL shown above.'}}
+$runtimeFile=$null
+$pendingAccept=$null
 try {
- while($true){
-    $client=$listener.AcceptTcpClient()
+ # Runtime file for Stop-PacketRat.ps1 and the single-instance check: no nonce, ever.
+ $runtimeFile=Write-PacketRatRuntimeFile -Root $Root -Port $Port -Url $url
+ Write-Host "PacketRat browser interface: $url" -ForegroundColor Cyan
+ Write-Host "Offline demo: ${url}?demo=1" -ForegroundColor DarkCyan
+ if($script:Presence.AutoStop){
+     Write-Host 'Closing the PacketRat browser tab stops this server (use -Stay or PACKETRAT_AUTO_STOP=0 to keep it running).' -ForegroundColor DarkGray
+ }else{
+     Write-Host 'Auto-stop is off: this server keeps running after the tab closes.' -ForegroundColor DarkGray
+ }
+ Write-Host 'Stop with End session in the browser, Stop-PacketRat.ps1, or Ctrl+C here.' -ForegroundColor DarkGray
+ if(-not $NoBrowser){try{Start-Process ($url + $(if($Demo){'?demo=1'}else{''}))}catch{Write-Warning 'Could not automatically open browser. Copy the URL shown above.'}}
+ while(-not $script:StopReason){
+    if($null -eq $pendingAccept){$pendingAccept=$listener.BeginAcceptTcpClient($null,$null)}
+    # Presence tick: wake every second. Queued connections are served before presence is
+    # judged, so heartbeats that waited behind a long scan still count.
+    if(-not $pendingAccept.AsyncWaitHandle.WaitOne(1000)){
+        if(Test-PacketRatBrowserGone -State $script:Presence -BusyUntil $script:BusyUntil){
+            $script:StopReason='No PacketRat browser tab is open.'
+        }
+        continue
+    }
+    $client=$listener.EndAcceptTcpClient($pendingAccept)
+    $pendingAccept=$null
     $client.ReceiveTimeout=30000;$client.SendTimeout=30000
     try {
       $stream=$client.GetStream()
@@ -291,7 +359,13 @@ try {
               Send-PacketRatText $stream 405 '{"ok":false,"error":"POST required"}';continue
           }
           if($method -eq 'POST'){
-              if($headers['x-packetrat-token'] -cne $script:Nonce -or $headers['origin'] -cne $url.TrimEnd('/')){
+              # navigator.sendBeacon cannot set headers: /api/heartbeat alone may carry the
+              # nonce in its JSON body instead (checked below). Never in the query string.
+              $isBeacon=($path -eq '/api/heartbeat')
+              $origin=$headers['origin']
+              $originOk=($origin -ceq $url.TrimEnd('/')) -or ($isBeacon -and [string]::IsNullOrEmpty($origin))
+              $headerToken=($headers['x-packetrat-token'] -ceq $script:Nonce)
+              if(-not $originOk -or (-not $headerToken -and -not $isBeacon)){
                   Send-PacketRatText $stream 403 '{"ok":false,"error":"Unauthorized request"}';continue
               }
               if($headers['content-type'] -notmatch '^application/json(?:;|$)'){
@@ -302,15 +376,26 @@ try {
               if(-not [int]::TryParse($rawLength,[ref]$length) -or $length -lt 1 -or $length -gt 131072){
                   Send-PacketRatText $stream 413 '{"ok":false,"error":"Invalid request body length"}';continue
               }
-              $data=ConvertFrom-Json (Read-PacketRatBody -Stream $stream -Length $length)
+              # Never echo or log request bodies: they can carry manual tokens or the nonce.
+              try{$data=ConvertFrom-Json (Read-PacketRatBody -Stream $stream -Length $length)}catch{
+                  Send-PacketRatText $stream 400 '{"ok":false,"error":"Invalid JSON body"}';continue
+              }
+              if(-not $headerToken -and -not (Test-PacketRatBeaconToken -Data $data -Expected $script:Nonce)){
+                  Send-PacketRatText $stream 403 '{"ok":false,"error":"Unauthorized request"}';continue
+              }
           }elseif($method -eq 'GET'){$data=$null}
           else{Send-PacketRatText $stream 405 '{"ok":false,"error":"Method not allowed"}';continue}
+          $requestStarted=[DateTime]::UtcNow
           try {
               $result=Invoke-PacketRatApi -Route $path -Data $data
               Send-PacketRatText $stream 200 (ConvertTo-Json -InputObject $result -Depth 15 -Compress)
           }catch{
               Write-Warning "PacketRat API error: $($_.Exception.Message)"
               Send-PacketRatText $stream 400 (ConvertTo-Json -InputObject @{ok=$false;error=$_.Exception.Message} -Compress)
+          }finally{
+              # Heartbeats wait while a long request (scan, report, draft) runs; do not
+              # count that time against the open tabs.
+              if(([DateTime]::UtcNow-$requestStarted).TotalSeconds -ge 2){$script:BusyUntil=[DateTime]::UtcNow}
           }
       }elseif($method -eq 'GET'){
           $name=if($path -eq '/'){'index.html'}else{$path.TrimStart('/')}
@@ -329,4 +414,9 @@ try {
     }catch{Write-Warning "PacketRat HTTP error: $($_.Exception.Message)"}
     finally{$client.Close()}
  }
-}finally{$listener.Stop()}
+ Write-Host ('PacketRat stopped: '+$script:StopReason) -ForegroundColor Yellow
+ Write-PacketRatLog -Message ('Browser server stopped: '+$script:StopReason) -Root $Root
+}finally{
+    $listener.Stop()
+    Remove-PacketRatRuntimeFile -Path $runtimeFile
+}

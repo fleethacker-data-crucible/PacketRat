@@ -7,6 +7,7 @@ Run `Launch-LocalDev.bat` from this repository on your **personal Windows PC** a
 - Prerequisite: Windows PowerShell 5.1; no CAC needed.
 - Startup: Starts the existing ?demo=1 UI with sample mail, sample reports and in-browser demonstration actions.
 - Boundary: Demo UI does not read Outlook or request AI credentials; this does not test a real inbox or GenAI endpoint.
+- Lifecycle: stops any PacketRat already running first (`-Replace`, and says what it stopped); closing the tab stops the dev server. Add `--stay` to keep it running.
 - Diagnostics / manual check: `powershell.exe -NoProfile -File Start-PacketRat-Web.ps1 -Demo`.
 
 ## Workflow
