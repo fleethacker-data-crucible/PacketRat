@@ -1,7 +1,7 @@
-# MailHawk - local persistent store (checklist + false-positive dismissals)
+# PacketRat - local persistent store (checklist + false-positive dismissals)
 #requires -Version 5.1
 
-function Get-MailHawkStorePath {
+function Get-PacketRatStorePath {
     param([string]$Root)
     if (-not $Root) { $Root = $PSScriptRoot }
     # Private\ -> project root
@@ -10,21 +10,31 @@ function Get-MailHawkStorePath {
     }
     $dir = Join-Path $Root 'Logs'
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    return (Join-Path $dir 'mailhawk-store.json')
+    $path = Join-Path $dir 'packetrat-store.json'
+    # One-time copy-forward from the former name (MailHawk). The old file is left untouched,
+    # and nothing happens once packetrat-store.json exists, so this is idempotent.
+    if (-not (Test-Path -LiteralPath $path)) {
+        $legacy = Join-Path $dir 'mailhawk-store.json'
+        if (Test-Path -LiteralPath $legacy) {
+            try { Copy-Item -LiteralPath $legacy -Destination $path -ErrorAction Stop }
+            catch { Write-Warning "Could not copy legacy mailhawk-store.json forward: $($_.Exception.Message)" }
+        }
+    }
+    return $path
 }
 
-function Get-MailHawkStore {
+function Get-PacketRatStore {
     [CmdletBinding()]
     param([string]$Root)
 
-    $path = Get-MailHawkStorePath -Root $Root
+    $path = Get-PacketRatStorePath -Root $Root
     if (-not (Test-Path $path)) {
         return [pscustomobject]@{
             Version     = 1
             UpdatedAt   = (Get-Date).ToString('o')
             Dismissals  = @()   # EntryID or fingerprint -> reason
             Checklist   = @()   # tracked must-reply items
-            Rules       = @(Get-MailHawkDefaultRules)  # editable deterministic triage policy
+            Rules       = @(Get-PacketRatDefaultRules)  # editable deterministic triage policy
         }
     }
     try {
@@ -32,34 +42,34 @@ function Get-MailHawkStore {
         $obj = $raw | ConvertFrom-Json
         if (-not $obj.Dismissals) { $obj | Add-Member -NotePropertyName Dismissals -NotePropertyValue @() -Force }
         if (-not $obj.Checklist)  { $obj | Add-Member -NotePropertyName Checklist  -NotePropertyValue @() -Force }
-        $null=Initialize-MailHawkRules -Store $obj
+        $null=Initialize-PacketRatRules -Store $obj
         return $obj
     } catch {
-        Write-Warning "MailHawk store unreadable, starting fresh: $($_.Exception.Message)"
+        Write-Warning "PacketRat store unreadable, starting fresh: $($_.Exception.Message)"
         return [pscustomobject]@{
             Version     = 1
             UpdatedAt   = (Get-Date).ToString('o')
             Dismissals  = @()
             Checklist   = @()
-            Rules       = @(Get-MailHawkDefaultRules)
+            Rules       = @(Get-PacketRatDefaultRules)
         }
     }
 }
 
-function Save-MailHawkStore {
+function Save-PacketRatStore {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Store,
         [string]$Root
     )
-    $path = Get-MailHawkStorePath -Root $Root
+    $path = Get-PacketRatStorePath -Root $Root
     $Store.UpdatedAt = (Get-Date).ToString('o')
     $json = $Store | ConvertTo-Json -Depth 8
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($path, $json, $utf8NoBom)
 }
 
-function Get-MailHawkMailFingerprint {
+function Get-PacketRatMailFingerprint {
     <#
     .SYNOPSIS
       Stable-ish key when EntryID is missing or changes across profiles.
@@ -80,7 +90,7 @@ function Get-MailHawkMailFingerprint {
     } finally { $sha.Dispose() }
 }
 
-function Test-MailHawkDismissed {
+function Test-PacketRatDismissed {
     param($Store, [string]$Key)
     if (-not $Store -or -not $Store.Dismissals) { return $false }
     foreach ($d in @($Store.Dismissals)) {
@@ -89,7 +99,7 @@ function Test-MailHawkDismissed {
     return $false
 }
 
-function Add-MailHawkDismissal {
+function Add-PacketRatDismissal {
     <#
     .SYNOPSIS
       Mark an email as false-positive / no-action. Persists across runs.
@@ -116,18 +126,18 @@ function Add-MailHawkDismissal {
         DismissedAt = (Get-Date).ToString('o')
     })
     $Store.Dismissals = $list.ToArray()
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }
 
-function Remove-MailHawkDismissal {
+function Remove-PacketRatDismissal {
     param($Store, [string]$Key, [string]$Root)
     $Store.Dismissals = @($Store.Dismissals | Where-Object { $_.Key -ne $Key })
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }
 
-function Merge-MailHawkChecklist {
+function Merge-PacketRatChecklist {
     <#
     .SYNOPSIS
       Upsert must-reply items from an analysis run into the persistent checklist.
@@ -194,11 +204,11 @@ function Merge-MailHawkChecklist {
         switch ($_.Urgency) { 'High' { 0 } 'Medium' { 1 } 'Low' { 2 } default { 3 } }
     }, Subject)
 
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }
 
-function Set-MailHawkChecklistStatus {
+function Set-PacketRatChecklistStatus {
     param(
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][string]$Key,
@@ -215,12 +225,12 @@ function Set-MailHawkChecklistStatus {
             break
         }
     }
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }
 
 
-function Set-MailHawkChecklistPriority {
+function Set-PacketRatChecklistPriority {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Store,
@@ -241,11 +251,11 @@ function Set-MailHawkChecklistPriority {
         break
     }
     if(-not $found){throw 'Unknown checklist item'}
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }
 
-function Clear-MailHawkChecklistPriorityOverride {
+function Clear-PacketRatChecklistPriorityOverride {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$Key,[string]$Root)
     $found=$false
@@ -259,6 +269,6 @@ function Clear-MailHawkChecklistPriorityOverride {
         break
     }
     if(-not $found){throw 'Unknown checklist item'}
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }

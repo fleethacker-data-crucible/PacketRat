@@ -1,7 +1,7 @@
-# MailHawk - Safe mail summary for AI analysis (COM provider)
+# PacketRat - Safe mail summary for AI analysis (COM provider)
 #requires -Version 5.1
 
-function Connect-MailHawkOutlook {
+function Connect-PacketRatOutlook {
     [CmdletBinding()]
     param()
 
@@ -18,7 +18,7 @@ function Connect-MailHawkOutlook {
     }
 }
 
-function Test-MailHawkSensitiveMail {
+function Test-PacketRatSensitiveMail {
     param($MailItem)
 
     if ($MailItem.Sensitivity -ge 2) { return $true }
@@ -42,7 +42,7 @@ function Test-MailHawkSensitiveMail {
     return $false
 }
 
-function Get-MailHawkSentReplyMap {
+function Get-PacketRatSentReplyMap {
     param(
         $Namespace,
         [int]$DaysBack = 21,
@@ -88,7 +88,7 @@ function Get-MailHawkSentReplyMap {
     return $map
 }
 
-function Get-MailHawkInboxSummary {
+function Get-PacketRatInboxSummary {
     [CmdletBinding()]
     param(
         [int]$MaxEmails = 40,
@@ -97,12 +97,12 @@ function Get-MailHawkInboxSummary {
         $Store = $null
     )
 
-    $conn = Connect-MailHawkOutlook
+    $conn = Connect-PacketRatOutlook
     $ns   = $conn.Namespace
     $inbox = $ns.GetDefaultFolder(6)
 
     Write-Host '[*] Scanning Sent Items for reply detection...' -ForegroundColor DarkGray
-    $sentMap = Get-MailHawkSentReplyMap -Namespace $ns -DaysBack ([Math]::Max($DaysBack, 21))
+    $sentMap = Get-PacketRatSentReplyMap -Namespace $ns -DaysBack ([Math]::Max($DaysBack, 21))
 
     $items = $inbox.Items
     $items.Sort('[ReceivedTime]', $true)
@@ -119,7 +119,7 @@ function Get-MailHawkInboxSummary {
         try { $received = [datetime]$item.ReceivedTime } catch { continue }
         if ($received -lt $cutoff) { break }
 
-        $isSensitive = Test-MailHawkSensitiveMail -MailItem $item
+        $isSensitive = Test-PacketRatSensitiveMail -MailItem $item
 
         $entryId = $null
         try { $entryId = [string]$item.EntryID } catch {}
@@ -144,7 +144,7 @@ function Get-MailHawkInboxSummary {
         $isDirect=$false
         try {
             $toLine=[string]$item.To
-            $userEmail=[string]$env:MAILHAWK_USER_EMAIL
+            $userEmail=[string]$env:PACKETRAT_USER_EMAIL
             $userName=''
             try {$userName=[string]$ns.CurrentUser.Name} catch {}
             try {
@@ -204,13 +204,13 @@ function Get-MailHawkInboxSummary {
             $replyEvidence = 'Subject is RE: and message is read'
         }
 
-        $fp = Get-MailHawkMailFingerprint -EntryID $entryId -Subject $subject -FromEmail $fromEmail -Received $received.ToString('yyyy-MM-dd HH:mm')
+        $fp = Get-PacketRatMailFingerprint -EntryID $entryId -Subject $subject -FromEmail $fromEmail -Received $received.ToString('yyyy-MM-dd HH:mm')
 
         $userDismissed = $false
         if ($Store) {
-            $userDismissed = Test-MailHawkDismissed -Store $Store -Key $fp
+            $userDismissed = Test-PacketRatDismissed -Store $Store -Key $fp
             if (-not $userDismissed -and $entryId) {
-                $userDismissed = Test-MailHawkDismissed -Store $Store -Key "id:$entryId"
+                $userDismissed = Test-PacketRatDismissed -Store $Store -Key "id:$entryId"
             }
         }
 
@@ -259,12 +259,12 @@ function Get-MailHawkInboxSummary {
     }
 }
 
-function Open-MailHawkMailItem {
+function Open-PacketRatMailItem {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$EntryID
     )
-    $conn = Connect-MailHawkOutlook
+    $conn = Connect-PacketRatOutlook
     try {
         $item = $conn.Namespace.GetItemFromID($EntryID)
         if ($null -eq $item) { throw "No item found for EntryID." }
@@ -275,7 +275,7 @@ function Open-MailHawkMailItem {
     }
 }
 
-function Join-MailHawkReplyHtml {
+function Join-PacketRatReplyHtml {
     param([string]$ExistingHtml,[string]$DraftText)
     if(-not $DraftText.Trim()){throw 'Empty reply.'}
     $match=[regex]::Match($ExistingHtml,'(?is)<body\b[^>]*>')
@@ -285,12 +285,12 @@ function Join-MailHawkReplyHtml {
     $offset=$match.Index+$match.Length
     return $ExistingHtml.Substring(0,$offset)+'<div>'+$encoded+'</div><div><br /></div>'+$ExistingHtml.Substring($offset)
 }
-function New-MailHawkOutlookReplyDraft {
+function New-PacketRatOutlookReplyDraft {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$EntryID,[Parameter(Mandatory)][string]$Body,
           [string]$SuggestedSubject,[switch]$ApplySuggestedSubject,[switch]$SaveOnly)
     if(-not $Body.Trim()){throw 'Empty draft.'}
-    $conn=Connect-MailHawkOutlook
+    $conn=Connect-PacketRatOutlook
     $item=$conn.Namespace.GetItemFromID($EntryID)
     if(-not $item){throw 'Original email unavailable.'}
     $reply=$item.Reply()
@@ -299,7 +299,7 @@ function New-MailHawkOutlookReplyDraft {
     $format=[int]$reply.BodyFormat
     if($format -eq 2){
         if($html -notmatch '(?is)<body\b'){throw 'Outlook HTML editor is missing a body element; no signature was overwritten.'}
-        $reply.HTMLBody=Join-MailHawkReplyHtml -ExistingHtml $html -DraftText $Body
+        $reply.HTMLBody=Join-PacketRatReplyHtml -ExistingHtml $html -DraftText $Body
     }elseif($format -eq 3){
         # For Outlook rich-text/Word format insert via WordEditor so its
         # rich-text signature and inline formatting remain untouched.
