@@ -21,7 +21,8 @@ if(($machinePolicy -and $machinePolicy -ne 'Undefined') -or ($userPolicy -and $u
 }
 if($PSVersionTable.PSVersion.Major -lt 5){$failures.Add('Windows PowerShell 5.1 or later is required.')}
 $required=@(
-  'Start-PacketRat-Web.ps1','Launch-PacketRat.bat','PacketRat-CLI.bat',
+  'Start-PacketRat-Web.ps1','Stop-PacketRat.ps1','Launch-PacketRat.bat','PacketRat-CLI.bat',
+  'Private/PacketRatLifecycle.ps1',
   'Web/index.html','Web/app.js','Web/style.css',
   'Web/packetrat-logo.png','Web/packetrat-icon.png',
   'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1',
@@ -33,7 +34,7 @@ foreach($relative in $required) {
   $path=Join-Path $root $relative
   if(-not (Test-Path -LiteralPath $path -PathType Leaf)){$failures.Add('Missing file: '+$relative)}
 }
-foreach($relative in @('Start-PacketRat-Web.ps1','tools/Test-PacketRatStartup.ps1',
+foreach($relative in @('Start-PacketRat-Web.ps1','Stop-PacketRat.ps1','Private/PacketRatLifecycle.ps1','tools/Test-PacketRatStartup.ps1',
   'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1','Private/PacketRatStore.ps1',
   'Private/Get-OutlookMailSummary.ps1','Private/PacketRatDraft.ps1',
   'Private/PacketRatGraph.ps1','Private/PacketRatLogging.ps1',

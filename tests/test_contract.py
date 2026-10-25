@@ -45,4 +45,13 @@ assert "'genapi'" in BRIDGE and "'advana-api'" in BRIDGE, 'Vault item names unch
 STORE=(ROOT/'Private/PacketRatStore.ps1').read_text()
 assert "'mailhawk-store.json'" in STORE and 'Copy-Item' in STORE and 'Remove-Item' not in STORE
 assert "'mailhawk-prefs','packetrat-prefs'" in CLIENT
+LIFE=(ROOT/'Private/PacketRatLifecycle.ps1').read_text()
+assert "'/api/heartbeat'" in SERVICE and "'/api/session/stop'" in SERVICE
+assert 'PacketRatLifecycle' in SERVICE and 'Write-PacketRatRuntimeFile' in SERVICE and 'Remove-PacketRatRuntimeFile' in SERVICE
+assert 'packetrat-server-' in LIFE and 'PACKETRAT_AUTO_STOP' in LIFE
+assert 'Nonce' not in LIFE, 'Runtime files must never carry the session nonce'
+assert "navigator.sendBeacon('/api/heartbeat'" in CLIENT and "'pagehide'" in CLIENT
+assert 'id="endSession"' in HTML
+assert (ROOT/'Stop-PacketRat.ps1').is_file()
+assert 'PACKETRAT_AUTO_STOP' in (ROOT/'Config/packetrat.env.example').read_text()
 print('Source and asset contract checks passed')

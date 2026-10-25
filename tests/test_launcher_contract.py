@@ -36,6 +36,18 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('Parser]::ParseFile', text)
         self.assertIn("'Launch-PacketRat.bat','PacketRat-CLI.bat'", text)
 
+    def test_lifecycle_launch_options(self):
+        text = (ROOT/'Launch-PacketRat.bat').read_text()
+        for option in ('--replace', '--stay', ':STOP', 'Stop-PacketRat.ps1'):
+            self.assertIn(option, text)
+        self.assertIn('Start-PacketRat-Web.ps1" %*', text)
+        self.assertIn('-Replace', (ROOT/'Launch-LocalDev.bat').read_text())
+        service = (ROOT/'Start-PacketRat-Web.ps1').read_text()
+        for needle in ('[switch]$Stay', '[switch]$Replace', 'Stop it and start fresh?', "'^--?stay$'", "'^--?replace$'"):
+            self.assertIn(needle, service)
+        stop = (ROOT/'Stop-PacketRat.ps1').read_text()
+        self.assertIn('Stop-PacketRatProcesses', stop)
+
     def test_contract_documented(self):
         self.assertTrue((ROOT/'docs/NAUTILUS_LAUNCH_STANDARD.md').exists())
         self.assertTrue((ROOT/'AGENTS.md').exists())
