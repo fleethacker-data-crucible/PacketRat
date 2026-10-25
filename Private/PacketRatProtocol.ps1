@@ -1,16 +1,16 @@
 #requires -Version 5.1
-# MailHawk Wire Protocol v1 -- ASCII markers, strict structure, no raw text fallback.
-function ConvertTo-MailHawkWireReadableText {
+# PacketRat Wire Protocol v1 -- ASCII markers, strict structure, no raw text fallback.
+function ConvertTo-PacketRatWireReadableText {
     [CmdletBinding()]
     param([AllowEmptyString()][string]$Text)
     # The same conservative UTF-8/Windows-1252 repair is used for drafts,
     # structured report strings and derived report content.
-    if(Get-Command ConvertTo-MailHawkReadableReport -ErrorAction SilentlyContinue){
-        return (ConvertTo-MailHawkReadableReport -Text $Text)
+    if(Get-Command ConvertTo-PacketRatReadableReport -ErrorAction SilentlyContinue){
+        return (ConvertTo-PacketRatReadableReport -Text $Text)
     }
     return $Text
 }
-function Get-MailHawkDraftWirePrompt {
+function Get-PacketRatDraftWirePrompt {
     return @'
 MAILHAWK DRAFT V1. Return EXACTLY ONE email response. No alternative versions.
 Write precisely this envelope. Markers must each be on their own line:
@@ -28,7 +28,7 @@ fabricated approvals or invented signature. No sign-off line such as "Best regar
 "Sincerely", "Respectfully" or "V/R"; Outlook handles the authentic signature.
 '@
 }
-function ConvertFrom-MailHawkDraftV1 {
+function ConvertFrom-PacketRatDraftV1 {
     [CmdletBinding()]
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
     if([string]::IsNullOrWhiteSpace($Text)){throw 'Draft protocol: empty AI response.'}
@@ -39,8 +39,8 @@ function ConvertFrom-MailHawkDraftV1 {
     if(-not $m.Success){throw 'Draft protocol: expected exactly one envelope with SUBJECT and BODY fields.'}
     $subject=$m.Groups['subject'].Value.Trim()
     $body=$m.Groups['body'].Value.Trim()
-    $subject=ConvertTo-MailHawkWireReadableText -Text $subject
-    $body=ConvertTo-MailHawkWireReadableText -Text $body
+    $subject=ConvertTo-PacketRatWireReadableText -Text $subject
+    $body=ConvertTo-PacketRatWireReadableText -Text $body
     if($subject.Length -lt 1 -or $subject.Length -gt 240){throw 'Draft protocol: subject must have 1-240 characters.'}
     if($body.Length -lt 1 -or $body.Length -gt 30000){throw 'Draft protocol: body must have 1-30000 characters.'}
     if($subject -match '[\x00-\x1F\x7F]' -or $body -match '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'){
@@ -54,7 +54,7 @@ function ConvertFrom-MailHawkDraftV1 {
     }
     return [pscustomobject]@{Version='MAILHAWK_DRAFT_V1';Subject=$subject;Body=$body}
 }
-function Get-MailHawkReportWirePrompt {
+function Get-PacketRatReportWirePrompt {
     return @'
 MAILHAWK REPORT V1. Return EXACTLY ONE JSON report wrapped in these ASCII markers:
 <<<MAILHAWK_REPORT_V1>>>
@@ -68,7 +68,7 @@ Markdown headings, code fences, special decorations or extra text outside marker
 Never invent completed actions, approvals, deadlines or a signature.
 '@
 }
-function ConvertFrom-MailHawkReportV1 {
+function ConvertFrom-PacketRatReportV1 {
     [CmdletBinding()]
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Text,[int]$MaxSourceIndex=0)
     if([string]::IsNullOrWhiteSpace($Text)){throw 'Report protocol: empty response.'}
@@ -118,16 +118,16 @@ function ConvertFrom-MailHawkReportV1 {
     }
     return [pscustomobject]@{Version='MAILHAWK_REPORT_V1';MustReply=@($data.must_reply);ReportItems=@($data.report_items);Sections=@($safe.ToArray())}
 }
-function ConvertTo-MailHawkProtocolPlainText {
+function ConvertTo-PacketRatProtocolPlainText {
     param([AllowEmptyString()][string]$Value)
     if(-not $Value){return ''}
-    $Value=ConvertTo-MailHawkWireReadableText -Text $Value
+    $Value=ConvertTo-PacketRatWireReadableText -Text $Value
     $clean=[regex]::Replace($Value,'[\x00-\x1F\x7F]',' ')
     $clean=[regex]::Replace($clean,'\s+',' ').Trim()
     $clean=$clean.TrimStart([char[]]@('#','>','*','|',' '))
     return $clean.Replace('|',' / ').Replace('[','(').Replace(']',')').Replace('*','').Trim()
 }
-function ConvertTo-MailHawkReportMarkdownV1 {
+function ConvertTo-PacketRatReportMarkdownV1 {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Envelope,[Parameter(Mandatory)][array]$VerifiedEmails)
     $eligible=@{}
@@ -137,9 +137,9 @@ function ConvertTo-MailHawkReportMarkdownV1 {
     $lines=New-Object System.Collections.Generic.List[string]
     foreach($section in @($Envelope.Sections)){
         [void]$lines.Add('## '+([string]$section.Title))
-        if($section.Summary){[void]$lines.Add((ConvertTo-MailHawkProtocolPlainText ([string]$section.Summary)))}
+        if($section.Summary){[void]$lines.Add((ConvertTo-PacketRatProtocolPlainText ([string]$section.Summary)))}
         foreach($entry in @($section.Items)){
-            $line=ConvertTo-MailHawkProtocolPlainText ([string]$entry.Text)
+            $line=ConvertTo-PacketRatProtocolPlainText ([string]$entry.Text)
             $index=[int]$entry.EmailIndex
             if($index -gt 0 -and $eligible.ContainsKey($index)){$line="[Email #$index] "+$line}
             if($line){[void]$lines.Add('- '+$line)}
@@ -150,7 +150,7 @@ function ConvertTo-MailHawkReportMarkdownV1 {
 }
 
 # Follow-up generation from an existing report uses the same strict envelope strategy.
-function Get-MailHawkInsightWirePrompt {
+function Get-PacketRatInsightWirePrompt {
     return @'
 MAILHAWK INSIGHT V1. Return precisely one JSON envelope:
 <<<MAILHAWK_INSIGHT_V1>>>
@@ -162,7 +162,7 @@ Return no Markdown, HTML, quotes around the envelope, prefaces or extra text.
 No made-up facts, completed tasks, permission grants or artificial signature.
 '@
 }
-function ConvertFrom-MailHawkInsightV1 {
+function ConvertFrom-PacketRatInsightV1 {
     [CmdletBinding()]
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
     if([string]::IsNullOrWhiteSpace($Text) -or $Text.Length -gt 180000){throw 'Insight protocol: empty or oversized output.'}
@@ -192,18 +192,18 @@ function ConvertFrom-MailHawkInsightV1 {
     }
     return [pscustomobject]@{Version='MAILHAWK_INSIGHT_V1';Title=$title.Trim();Summary=$summary.Trim();Items=@($items.ToArray())}
 }
-function ConvertTo-MailHawkInsightMarkdownV1 {
+function ConvertTo-PacketRatInsightMarkdownV1 {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Insight,[array]$VerifiedSources=@())
     $allowed=@{}
     foreach($source in @($VerifiedSources)){if($source.SourceVerified){$allowed[[int]$source.Index]=$true}}
     $lines=New-Object System.Collections.Generic.List[string]
-    [void]$lines.Add('## '+(ConvertTo-MailHawkProtocolPlainText ([string]$Insight.Title)))
-    [void]$lines.Add((ConvertTo-MailHawkProtocolPlainText ([string]$Insight.Summary)))
+    [void]$lines.Add('## '+(ConvertTo-PacketRatProtocolPlainText ([string]$Insight.Title)))
+    [void]$lines.Add((ConvertTo-PacketRatProtocolPlainText ([string]$Insight.Summary)))
     [void]$lines.Add('')
     foreach($item in @($Insight.Items)){
         $n=[int]$item.EmailIndex
-        $text=ConvertTo-MailHawkProtocolPlainText ([string]$item.Text)
+        $text=ConvertTo-PacketRatProtocolPlainText ([string]$item.Text)
         if($n -gt 0 -and $allowed.ContainsKey($n)){$text="[Email #$n] "+$text}
         [void]$lines.Add('- '+$text)
     }

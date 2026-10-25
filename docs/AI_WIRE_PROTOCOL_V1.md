@@ -1,12 +1,16 @@
-# MailHawk AI Wire Protocol v1
+# PacketRat AI Wire Protocol v1
 
-MailHawk accepts **versioned, delimited structured responses** instead of pasting arbitrary GenAI prose into the Outlook reply or HTML report.
+PacketRat accepts **versioned, delimited structured responses** instead of pasting arbitrary GenAI prose into the Outlook reply or HTML report.
 
 ## Why both delimiters and a schema?
 
 The outer delimiter identifies the message kind and ensures the response is complete. The parser then validates its fields. The browser constructs its own presentation; the model never controls raw HTML or Outlook message metadata.
 
-Source of truth: `Private/MailHawkProtocol.ps1`. This file uses ASCII-safe delimiter definitions for Windows PowerShell 5.1.
+Source of truth: `Private/PacketRatProtocol.ps1`.
+
+> **Name note:** the app was renamed from MailHawk to PacketRat. The envelope IDs and markers (`MAILHAWK_DRAFT_V1`, `MAILHAWK_REPORT_V1`, `MAILHAWK_INSIGHT_V1`, `END_MAILHAWK_*`, `@@@MAILHAWK_JSON_*@@@`) are a wire format and are kept unchanged for compatibility with saved reports and existing prompts.
+
+`Private/PacketRatProtocol.ps1` uses ASCII-safe delimiter definitions for Windows PowerShell 5.1.
 
 ### Draft — exactly one reply
 
@@ -25,7 +29,7 @@ I will review the request and follow up after confirming the remaining details.
 
 The model must return exactly **one** subject and **one** plain-text body. The subject is editable. **Outlook's original reply subject remains unchanged by default** to preserve threading. A user may explicitly select the opt-in override.
 
-The model must **not** generate a signature, title, contact information, logos, or greetings presented as the user's identity. When MailHawk opens a classic Outlook reply, it calls `Display()` first so Outlook can insert the configured **Replies/Forwards signature for the sending account**. Then MailHawk inserts the reviewed body at the start of the existing HTML body, preserving its signature, inline images and quoted thread. For a plain-text reply, it prepends text while preserving what Outlook already placed in the body. MailHawk does not reconstruct a signature from sent email or manually copy signature files. **If Outlook has no configured reply signature, MailHawk does not invent one.**
+The model must **not** generate a signature, title, contact information, logos, or greetings presented as the user's identity. When PacketRat opens a classic Outlook reply, it calls `Display()` first so Outlook can insert the configured **Replies/Forwards signature for the sending account**. Then PacketRat inserts the reviewed body at the start of the existing HTML body, preserving its signature, inline images and quoted thread. For a plain-text reply, it prepends text while preserving what Outlook already placed in the body. PacketRat does not reconstruct a signature from sent email or manually copy signature files. **If Outlook has no configured reply signature, PacketRat does not invent one.**
 
 A 20,000-output-token provider request ceiling is maintained for drafting; that is **not** a request to write 20,000 tokens of email. A provider's actual output-token limit may be smaller.
 
@@ -49,7 +53,7 @@ A 20,000-output-token provider request ceiling is maintained for drafting; that 
 <<<END_MAILHAWK_REPORT_V1>>>
 ```
 
-All six section IDs are required **in that order**; empty sections use empty arrays. No markdown headings, tables, or arbitrary model-authored UI controls are accepted in section text. MailHawk validates JSON and reconciles model email indices against the original scan. It then constructs readable, escaped sections and click-through links for *verified* messages. Model-generated EntryIDs, HTML, and fabricated references are never trusted as action identifiers.
+All six section IDs are required **in that order**; empty sections use empty arrays. No markdown headings, tables, or arbitrary model-authored UI controls are accepted in section text. PacketRat validates JSON and reconciles model email indices against the original scan. It then constructs readable, escaped sections and click-through links for *verified* messages. Model-generated EntryIDs, HTML, and fabricated references are never trusted as action identifiers.
 
 ### On-demand follow-ups — insight envelope
 
