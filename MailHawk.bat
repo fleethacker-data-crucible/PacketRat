@@ -14,15 +14,24 @@ if /i "%~1"=="check" goto DIAGNOSTICS
 if /i "%~1"=="-Demo" goto ARGUMENTS
 if /i "%~1"=="-NoBrowser" goto ARGUMENTS
 if /i "%~1"=="-Port" goto ARGUMENTS
+if /i "%~1"=="--stay" goto ARGUMENTS
+if /i "%~1"=="-Stay" goto ARGUMENTS
+if /i "%~1"=="--replace" goto ARGUMENTS
+if /i "%~1"=="-Replace" goto ARGUMENTS
+if /i "%~1"=="--no-browser" goto ARGUMENTS
+if /i "%~1"=="stop" goto STOP
 echo [MailHawk] Unknown mode: %~1
-echo Usage: MailHawk.bat [gui ^| demo ^| diagnostics]
+echo Usage: MailHawk.bat [gui ^| demo ^| diagnostics ^| stop] [--replace] [--stay]
 echo        MailHawk.bat -NoBrowser
 echo        MailHawk.bat -Port 8766
+echo   --replace  stop a running MailHawk and start fresh without asking
+echo   --stay     keep the local service running after the browser tab closes
 exit /b 2
 
 :GUI
+REM Closing the MailHawk tab stops the service; --stay or MAILHAWK_AUTO_STOP=0 keeps it.
 echo [MailHawk] Opening local browser GUI...
-powershell.exe -NoProfile -NoLogo -STA -ExecutionPolicy Bypass -File "%ROOT%Start-MailHawk-Web.ps1"
+powershell.exe -NoProfile -NoLogo -STA -ExecutionPolicy Bypass -File "%ROOT%Start-MailHawk-Web.ps1" %*
 goto FINISH
 
 :ARGUMENTS
@@ -31,12 +40,17 @@ goto FINISH
 
 :DEMO
 echo [MailHawk] Opening offline demonstration...
-powershell.exe -NoProfile -NoLogo -STA -ExecutionPolicy Bypass -File "%ROOT%Start-MailHawk-Web.ps1" -Demo
+powershell.exe -NoProfile -NoLogo -STA -ExecutionPolicy Bypass -File "%ROOT%Start-MailHawk-Web.ps1" -Demo %*
 goto FINISH
 
 :DIAGNOSTICS
 echo [MailHawk] Running safe local startup checks...
 powershell.exe -NoProfile -NoLogo -STA -ExecutionPolicy Bypass -File "%ROOT%tools\Test-MailHawkStartup.ps1"
+goto FINISH
+
+:STOP
+echo [MailHawk] Stopping every running MailHawk browser service...
+powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass -File "%ROOT%Stop-MailHawk.ps1"
 goto FINISH
 
 :FINISH

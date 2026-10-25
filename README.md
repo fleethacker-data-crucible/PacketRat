@@ -19,8 +19,21 @@ MailHawk.bat demo
 MailHawk.bat diagnostics
 MailHawk.bat -NoBrowser
 MailHawk.bat -Port 8766
+MailHawk.bat --replace
+MailHawk.bat --stay
+MailHawk.bat stop
 MailHawk-CLI.bat -Profile GenAi
 ```
+
+### Closing the tab stops MailHawk
+
+The browser tab owns the local PowerShell service. The page sends a heartbeat every 5 seconds and a leaving signal when it closes; the service stops itself 20 seconds after the last heartbeat (5 seconds after a leaving signal), but never while a scan, report, draft or store write is running. A reload or a second MailHawk tab keeps it alive. Other ways to stop it:
+
+- **End session** in the sidebar.
+- `MailHawk.bat stop` (runs `Stop-MailHawk.ps1`), which stops every running MailHawk service without needing a PID.
+- Ctrl+C in the console, if it is visible.
+
+Launching while MailHawk already runs asks *Stop it and start fresh?*. `MailHawk.bat --replace` answers yes; `MailHawk.bat --stay` (or `MAILHAWK_AUTO_STOP=0` in the environment or `Config/mailhawk.env`) keeps the service running after the tab closes. Each running service writes `Logs/mailhawk-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops.
 
 The five former user-facing BAT files were retired. Internal PowerShell files (`Start-MailHawk-Web.ps1`, `Start-MailHawk.ps1`) remain as implementation entrypoints and are not additional launchers.
 
@@ -108,6 +121,7 @@ The HTTP service binds to local loopback only. POST requests require same-origin
 
 - `MailHawk.bat` and `MailHawk-CLI.bat` — the only user launchers.
 - `Start-MailHawk-Web.ps1` — local HTTP/JSON service.
+- `Stop-MailHawk.ps1` — stops every running MailHawk browser service (`MailHawk.bat stop`).
 - `Start-MailHawk.ps1` — legacy engine with console mode used by the CLI.
 - `Web/` — browser application, styling, and logo assets.
 - `Private/`, `Public/` — Outlook, ARC, AI, persistence and analysis modules.

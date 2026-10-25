@@ -127,6 +127,91 @@ def run():
         finally:
             server.shutdown()
 
+def run_lifecycle():
+    """Heartbeat, pagehide beacon and End session against a routed (in-memory) service."""
+    import json
+    import time
+    base = 'http://127.0.0.1:8766/'
+    nonce = '0123456789abcdef0123456789abcdef'
+    calls = []
+    mime = {'.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png'}
+
+    def handle(route, request):
+        path = request.url[len(base) - 1:].split('?')[0]
+        if path.startswith('/api/'):
+            body = request.post_data or ''
+            calls.append({'path': path, 'method': request.method, 'headers': request.headers, 'body': json.loads(body) if body else None})
+            if path == '/api/state':
+                payload = {'ok': True, 'store': {'Checklist': [], 'Dismissals': []}, 'credentials': {'source': 'ARC', 'manual': {'GenAi': False, 'Grok': False}, 'arcDetected': False, 'arcItems': {}}}
+            else:
+                payload = {'ok': True}
+            return route.fulfill(status=200, content_type='application/json', body=json.dumps(payload))
+        name = 'index.html' if path == '/' else path.lstrip('/')
+        file = WEB / name
+        if not file.is_file():
+            return route.fulfill(status=404, body='Not found')
+        data = file.read_bytes()
+        if name == 'index.html':
+            data = data.replace(b'__MAILHAWK_NONCE__', nonce.encode())
+        return route.fulfill(status=200, content_type=mime[file.suffix], body=data)
+
+    def wait_for(predicate, what, timeout=8.0):
+        end = time.time() + timeout
+        while time.time() < end:
+            if predicate():
+                return
+            page.wait_for_timeout(100)
+        raise AssertionError('Timed out waiting for ' + what + ': ' + json.dumps([(c['path'], c['body']) for c in calls]))
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True, args=['--no-sandbox'])
+        context = browser.new_context()
+        context.route(base + '**', handle)
+        page = context.new_page()
+        errors = []
+        page.on('pageerror', lambda err: errors.append(str(err)))
+        page.goto(base)
+        beats = lambda: [c for c in calls if c['path'] == '/api/heartbeat']
+        wait_for(lambda: len(beats()) >= 1, 'first heartbeat')
+        first = beats()[0]
+        assert first['method'] == 'POST'
+        assert first['headers'].get('x-mailhawk-token') == nonce, 'heartbeat carries the session header'
+        assert first['body']['leaving'] is False and first['body']['tab']
+        assert 'token' not in first['body'], 'header heartbeats do not put the nonce in the body'
+        assert 'token' not in calls[0]['path'] and '?' not in first['path']
+        old_tab = first['body']['tab']
+        # pagehide sends a sendBeacon leaving signal: no custom headers, so the nonce is in the JSON body.
+        # (Playwright does not route requests issued during a real unload, so fire the event directly.)
+        page.evaluate("() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: false}))")
+        wait_for(lambda: any(c['body'] and c['body'].get('leaving') for c in beats()), 'leaving beacon on pagehide')
+        leaving = [c for c in beats() if c['body'].get('leaving')][0]
+        assert leaving['body']['tab'] == old_tab
+        assert leaving['body'].get('token') == nonce, 'beacon carries the nonce in its body'
+        assert 'x-mailhawk-token' not in leaving['headers'], 'sendBeacon path used, not fetch'
+        # Reload: the new page heartbeats at once under a new tab id, inside the grace period.
+        page.reload()
+        wait_for(lambda: any(c['body']['tab'] != old_tab and not c['body']['leaving'] for c in beats()), 'heartbeat from reloaded page')
+        # Periodic heartbeat every 5 s.
+        count = len(beats())
+        page.wait_for_timeout(5600)
+        assert len(beats()) > count, 'heartbeat repeats every 5 s'
+        # End session in the main navigation.
+        assert page.locator('.sidebar #endSession').is_visible()
+        page.once('dialog', lambda dialog: dialog.accept())
+        page.locator('#endSession').click()
+        wait_for(lambda: any(c['path'] == '/api/session/stop' for c in calls), 'session stop request')
+        stop = [c for c in calls if c['path'] == '/api/session/stop'][0]
+        assert stop['method'] == 'POST' and stop['headers'].get('x-mailhawk-token') == nonce
+        page.wait_for_selector('#sessionEnded:not(.hidden)')
+        count = len(beats())
+        page.wait_for_timeout(5600)
+        assert len(beats()) == count, 'heartbeat stops after End session'
+        assert not errors, f'Browser errors: {errors}'
+        browser.close()
+
+
 if __name__=='__main__':
     run()
     print('Playwright browser demo smoke checks passed')
+    run_lifecycle()
+    print('Playwright lifecycle (heartbeat, beacon, End session) checks passed')
