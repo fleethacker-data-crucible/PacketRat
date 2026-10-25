@@ -9,6 +9,12 @@ let ruleDraft=null,draftVersion=null;
 let reportItems=[],reportSections=[],reportStructure=[],reportQuality=null,generatedReportText='';
 const reportUI=window.PacketRatReport;
 let credentialDetails=null;
+// Lucide icons (icons.js); empty when icons.js is not loaded, so the app still works.
+const icon=(name,size)=>window.PacketRatIcons?window.PacketRatIcons.svg(name,size):'';
+/* Status bar (docs/UNIFIED-UI.md section 5): engine dot plus a word, never colour alone. */
+const engineWords={connecting:'Connecting',running:'Running',busy:'Working',disconnected:'Disconnected',stopped:'Stopped',demo:'Demo'};
+function setEngine(state){const el=$('engineState');if(!el)return;el.className='engine engine-'+state;$('engineWord').textContent=engineWords[state]||state}
+function setSession(text){const el=$('connectionStatus');if(el)el.textContent=text}
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultRules=[
  {Id:'security',Name:'Security / mandatory action',Enabled:true,Match:'SecurityAction',Value:'',Effect:'High'},
@@ -108,10 +114,10 @@ async function api(route,data){
  }
  const headers={'Accept':'application/json'};
  if(data!==undefined){headers['Content-Type']='application/json';headers['X-PacketRat-Token']=token;}
- let response;try{response=await fetch('/api/'+route,{method:data!==undefined?'POST':'GET',headers,body:data!==undefined?JSON.stringify(data):undefined,cache:'no-store'})}catch{throw Error('Local PacketRat service not reachable. Relaunch Launch-PacketRat.bat.')}let payload;try{payload=await response.json()}catch{throw Error('Unexpected response from PowerShell service')}if(!response.ok||payload.ok===false)throw Error(payload.error||payload.message||`Request failed (${response.status})`);return payload;
+ let response;try{response=await fetch('/api/'+route,{method:data!==undefined?'POST':'GET',headers,body:data!==undefined?JSON.stringify(data):undefined,cache:'no-store'})}catch{setEngine('disconnected');throw Error('Local PacketRat service not reachable. Relaunch Launch-PacketRat.bat.')}let payload;try{payload=await response.json()}catch{throw Error('Unexpected response from PowerShell service')}if(!response.ok||payload.ok===false)throw Error(payload.error||payload.message||`Request failed (${response.status})`);return payload;
 }
 function notify(message,error=false){const el=$('notice');el.textContent=message;el.classList.toggle('error',error);el.classList.toggle('hidden',!message);clearTimeout(noticeTimer);if(message)noticeTimer=setTimeout(()=>el.classList.add('hidden'),8500)}
-function show(viewName){if(!names[viewName])return;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('hidden',el.id!==viewName));document.querySelectorAll('.nav').forEach(el=>el.classList.toggle('active',el.dataset.view===viewName));$('crumb').textContent=names[viewName];window.scrollTo({top:0,behavior:'instant'});}
+function show(viewName){if(!names[viewName])return;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('hidden',el.id!==viewName));document.querySelectorAll('.nav[data-view]').forEach(el=>{const on=el.dataset.view===viewName;el.classList.toggle('active',on);if(on)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current')});$('crumb').textContent=names[viewName];document.querySelector('.content')?.scrollTo({top:0,behavior:'instant'});window.scrollTo({top:0,behavior:'instant'});}
 function priorityBadge(item){const urgency=['High','Medium','Low'].includes(item.Urgency)?item.Urgency:'Medium';return `<span class="priority ${urgency.toLowerCase()}">${urgency}</span>`}
 function itemRow(item,actions=false){
  const key=escapeHtml(item.Key),sub=escapeHtml(item.Subject||'(No subject)'),from=escapeHtml(item.From||'Unknown sender');
@@ -121,10 +127,10 @@ function itemRow(item,actions=false){
  const title='<button type="button" class="item-title" data-act="open" data-key="'+key+'" title="Open original in Outlook">'+sub+'</button>';
  const levels=['High','Medium','Low'];
  const prioritySelect='<label class="priority-selector">Priority <select data-priority-key="'+key+'" aria-label="Set priority for '+sub+'">'+levels.map(p=>'<option value="'+p+'"'+(item.Urgency===p?' selected':'')+'>'+p+'</option>').join('')+'</select></label>';
- const controls=actions?'<div class="item-actions"><button data-act="open" data-key="'+key+'">Outlook ↗</button><button data-act="draft" data-key="'+key+'">✧ Draft</button>'+prioritySelect+(item.PriorityOverride?'<button data-act="resetpriority" data-key="'+key+'" title="Restore AI/rule priority">Reset priority</button>':'')+(item.Status==='done'?'<button data-act="openstatus" data-key="'+key+'">Reopen</button>':'<button data-act="done" data-key="'+key+'">✓ Done</button><button data-act="progress" data-key="'+key+'">In progress</button>')+'<button data-act="dismiss" data-key="'+key+'">Dismiss</button></div>':'';
+ const controls=actions?'<div class="item-actions"><button data-act="open" data-key="'+key+'">Outlook '+icon('external')+'</button><button data-act="draft" data-key="'+key+'">'+icon('draft')+' Draft</button>'+prioritySelect+(item.PriorityOverride?'<button data-act="resetpriority" data-key="'+key+'" title="Restore AI/rule priority">'+icon('reset')+' Reset priority</button>':'')+(item.Status==='done'?'<button data-act="openstatus" data-key="'+key+'">Reopen</button>':'<button data-act="done" data-key="'+key+'">'+icon('check')+' Done</button><button data-act="progress" data-key="'+key+'">In progress</button>')+'<button data-act="dismiss" data-key="'+key+'">Dismiss</button></div>':'';
  return '<article class="item'+(actions?'':' signal-item')+'"'+(actions?'':' role="button" tabindex="0" data-act="open" data-key="'+key+'" aria-label="Open '+sub+' in Outlook"')+'>'+priorityBadge(item)+'<div class="item-body">'+title+'<small title="'+from+' · '+why+'">'+from+' · '+why+' · '+status+' · '+label+'</small></div>'+controls+'</article>';
 }
-const empty=(caption)=>`<div class="empty"><span class="empty-icon">◎</span>${escapeHtml(caption)}</div>`;
+const empty=(caption)=>`<div class="empty"><span class="empty-icon">${icon('inbox',20)}</span>${escapeHtml(caption)}</div>`;
 function filteredQueue(){
  let items=store.Checklist.filter(x=>!x.RuleSuppressed&&x.Status!=='dismissed'&&(
   filter==='all'||(filter==='active'&&['open','in_progress'].includes(x.Status))||
@@ -173,7 +179,7 @@ async function generateReportFrom(sectionId){
   notify('Report follow-up generated for your review. Nothing has been sent or tracked.');
   $('reportGenerated').scrollIntoView({block:'start',behavior:'smooth'});
  }catch(error){notify(error.message,true)}
- finally{btn.disabled=false;btn.textContent='✧ Generate'}
+ finally{btn.disabled=false;btn.innerHTML=icon('intelligence')+' Generate'}
 }
 function openDraftForKey(key){
  const source=reportItems.find(x=>x.Key===key),item=(store.Checklist||[]).find(x=>x.Key===key);
@@ -220,6 +226,7 @@ function renderCredentialStatus(state){
    ?'Manual session · GenAi '+gen+' · Grok '+grok
    :'Lazarette '+(state.lazaretteDetected?'found':'not detected')+' · GenAi: '+(items.GenAi||'genapi')+' · Grok: '+(items.Grok||'advana-api');
  $('credentialStatus').textContent=demo?'Demo mode: no credentials accepted or stored.':line;
+ setSession(demo?'Sample data':state.source==='Manual'?'Manual token · this session':'Lazarette credentials');
 }
 async function applyCredentialSource(){
  if(demo){$('credentialToken').value='';notify('Demo mode never accepts real credentials.',true);return;}
@@ -260,13 +267,13 @@ function renderRules(){
    return '<div class="rule-row" data-rule-id="'+id+'">'+
     '<div class="rule-row-heading"><label class="rule-toggle"><input type="checkbox" data-rule-field="Enabled"'+(r.Enabled?' checked':'')+'> Enabled</label>'+
     '<span class="rule-order">'+(i+1)+' / '+ruleDraft.length+'</span>'+
-    '<button data-rule-move="up" data-rule-id="'+id+'" aria-label="Move rule up"'+(i===0?' disabled':'')+'>↑</button>'+
-    '<button data-rule-move="down" data-rule-id="'+id+'" aria-label="Move rule down"'+(i===ruleDraft.length-1?' disabled':'')+'>↓</button>'+
-    '<button data-rule-remove="'+id+'" aria-label="Remove rule">✕</button></div>'+
-    '<div class="rule-fields"><label>Name<input data-rule-field="Name" maxlength="90" value="'+name+'"></label>'+
-    '<label>When<select data-rule-field="Match">'+ruleSelect(ruleConditions,r.Match)+'</select></label>'+
-    '<label>Match value<input data-rule-field="Value" maxlength="160" placeholder="For custom matches" value="'+value+'"></label>'+
-    '<label>Then<select data-rule-field="Effect">'+ruleSelect(effects,r.Effect)+'</select></label></div>'+
+    '<button data-rule-move="up" data-rule-id="'+id+'" aria-label="Move rule up"'+(i===0?' disabled':'')+'>'+icon('up')+'</button>'+
+    '<button data-rule-move="down" data-rule-id="'+id+'" aria-label="Move rule down"'+(i===ruleDraft.length-1?' disabled':'')+'>'+icon('down')+'</button>'+
+    '<button data-rule-remove="'+id+'" aria-label="Remove rule">'+icon('close')+'</button></div>'+
+    '<div class="rule-fields"><label>Name<input class="fl-input" data-rule-field="Name" maxlength="90" value="'+name+'"></label>'+
+    '<label>When<select class="fl-input" data-rule-field="Match">'+ruleSelect(ruleConditions,r.Match)+'</select></label>'+
+    '<label>Match value<input class="fl-input" data-rule-field="Value" maxlength="160" placeholder="For custom matches" value="'+value+'"></label>'+
+    '<label>Then<select class="fl-input" data-rule-field="Effect">'+ruleSelect(effects,r.Effect)+'</select></label></div>'+
     '<p class="rule-hint">'+(r.Match==='DirectMilRequest'?'Requires confirmed recipient match and a request; .mil alone is not urgent.':
      r.Match==='SenderDomain'?'Use a domain such as navy.mil without @.':
      r.Match==='SubjectContains'?'Case-insensitive literal phrase.':
@@ -308,7 +315,7 @@ async function saveTriageRules(){
 function migrateStorageKey(storage,oldKey,newKey){try{if(storage.getItem(newKey)===null){const old=storage.getItem(oldKey);if(old!==null)storage.setItem(newKey,old)}}catch{}}
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
 function loadSettings(){migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs');try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{GenAi:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{GenAi:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();setEngine(demo?'demo':'running');}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
@@ -322,7 +329,7 @@ function initializeSingleDraft(draft){
  $('draftBody').value=draft.Body;
  draftVersion=draft.Version;
 }
-function setBusy(flag,label){busy=flag;const button=$('analyze');button.disabled=flag;button.innerHTML=flag?'<span>◌</span> Analyzing…':'<span>✦</span> Analyze inbox <span class="button-arrow">↗</span>';$('engineStatus').textContent=flag?label||'Running analysis':demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis'}
+function setBusy(flag,label){busy=flag;const button=$('analyze');button.disabled=flag;button.innerHTML=flag?icon('loading')+' Analyzing…':icon('analyze')+' Analyze inbox';if(!demo&&!sessionEnded&&$('engineState')?.classList.contains('engine-disconnected')===false)setEngine(flag?'busy':'running');$('engineStatus').textContent=flag?label||'Running analysis':demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis'}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>setQueueFilter(el.dataset.filter)));$('queueSearch').addEventListener('input',render);$('sortOrder').addEventListener('change',render);
 $('reportSourceSearch').addEventListener('input',()=>renderReportExtras());
 $('generateReport').addEventListener('click',()=>generateReportFrom());
@@ -365,7 +372,7 @@ document.addEventListener('keydown',event=>{
 
 $('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){openDraftForKey(key);return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(act==='unfilter'){const original=store.Checklist.find(x=>x.Key===key);store=(await api('priority',{key,urgency:original?.Urgency||'Medium'})).store;}else if(act==='resetpriority')store=(await api('priority/reset',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
-$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeSingleDraft(x.draft);notify('One draft is ready. Outlook will insert its configured reply signature; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.textContent='✦ Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body,subject:$('draftSubjectSuggested').value.trim(),applySubject:$('draftApplySubject').checked});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
+$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeSingleDraft(x.draft);notify('One draft is ready. Outlook will insert its configured reply signature; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.innerHTML=icon('intelligence')+' Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body,subject:$('draftSubjectSuggested').value.trim(),applySubject:$('draftApplySubject').checked});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
 $('addRule').addEventListener('click',addCustomRule);
 $('resetRules').addEventListener('click',()=>{ruleDraft=defaultRules.map(r=>({...r}));renderRules();noteRules('Suggested defaults restored in editor; click Save rules to apply.')});
 $('saveRules').addEventListener('click',saveTriageRules);
@@ -399,7 +406,7 @@ $('clearCredentials').addEventListener('click',async()=>{
  }catch(error){notify(error.message,true);}
 });
 $('saveSettings').addEventListener('click',()=>{try{saveSettings();notify('Preferences saved in this browser.')}catch(error){notify(error.message,true)}});$('exitDemo').addEventListener('click',()=>{location.href=location.pathname});
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('draftDialog').open)$('draftDialog').close();if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();show('triage');$('queueSearch').focus()}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('draftDialog').open){event.preventDefault();$('draftDialog').close()}if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();show('triage');$('queueSearch').focus()}});
 /* Lifecycle: this tab owns the local PowerShell service. Heartbeat every 5 s; on pagehide a
    sendBeacon "leaving" signal (it cannot set headers, so the nonce rides in the JSON body of
    /api/heartbeat only). The service stops itself once no PacketRat tab is alive. */
@@ -407,7 +414,7 @@ const tabId=(()=>{try{return crypto.randomUUID()}catch{return 'tab-'+Date.now().
 let sessionEnded=false;
 function startHeartbeat(intervalMs=5000){
  if(!/^[0-9a-f]{32}$/.test(token))return ()=>{};
- const send=leaving=>{if(sessionEnded)return;try{fetch('/api/heartbeat',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:JSON.stringify({tab:tabId,leaving}),keepalive:true,cache:'no-store'}).catch(()=>{})}catch{}};
+ const send=leaving=>{if(sessionEnded)return;try{fetch('/api/heartbeat',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:JSON.stringify({tab:tabId,leaving}),keepalive:true,cache:'no-store'}).then(r=>{if(!sessionEnded&&!leaving&&!busy)setEngine(r.ok?'running':'disconnected')}).catch(()=>{if(!sessionEnded&&!leaving)setEngine('disconnected')})}catch{}};
  send(false);
  const timer=setInterval(()=>send(false),intervalMs);
  const onHide=()=>{if(sessionEnded)return;let sent=false;try{if(navigator.sendBeacon)sent=navigator.sendBeacon('/api/heartbeat',new Blob([JSON.stringify({tab:tabId,leaving:true,token})],{type:'application/json'}))}catch{sent=false}if(!sent)send(true)};
@@ -417,7 +424,7 @@ function startHeartbeat(intervalMs=5000){
  return ()=>{clearInterval(timer);window.removeEventListener('pagehide',onHide);window.removeEventListener('pageshow',onShow);document.removeEventListener('visibilitychange',onVisible)};
 }
 let stopHeartbeat=()=>{};
-function showSessionEnded(){sessionEnded=true;stopHeartbeat();$('sessionEnded').classList.remove('hidden');document.title='PacketRat | Session ended'}
+function showSessionEnded(){sessionEnded=true;stopHeartbeat();setEngine('stopped');$('sessionEnded').classList.remove('hidden');document.title='PacketRat | Session ended'}
 $('endSession').addEventListener('click',async()=>{
  if(demo&&!/^[0-9a-f]{32}$/.test(token)){notify('Demo mode: there is no local service to stop.');return}
  if(busy){notify('Wait for the current analysis to finish before ending the session.',true);return}
@@ -425,4 +432,6 @@ $('endSession').addEventListener('click',async()=>{
  try{await fetch('/api/session/stop',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:'{}',cache:'no-store'});showSessionEnded()}catch{notify('Local PacketRat service not reachable; it may already have stopped.',true)}
 });
 stopHeartbeat=startHeartbeat();
-function tick(){$('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}tick();setInterval(tick,30000);loadSettings();if(demo){$('demoBanner').classList.remove('hidden');$('modeLabel').textContent='Demo mode';}load();
+function tick(){$('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}tick();setInterval(tick,30000);loadSettings();$('boundAddress').textContent=demo?'Offline demo · no engine':location.host||'—';setEngine(demo?'demo':'connecting');if(demo){$('demoBanner').classList.remove('hidden');setSession('Sample data')}
+if(!demo)fetch('/api/health',{cache:'no-store'}).then(r=>r.json()).then(x=>{if(x&&x.version)$('appVersion').textContent='PacketRat '+x.version}).catch(()=>{});
+load();
