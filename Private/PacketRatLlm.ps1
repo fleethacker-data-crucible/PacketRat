@@ -162,7 +162,7 @@ function Get-PacketRatLlmToken {
     $arcItem = Resolve-PacketRatLazaretteServiceName -Profile $ForProfile
 
     if (Get-Command Import-PacketRatLazaretteSession -ErrorAction SilentlyContinue) {
-        Write-Host '[*] Loading Lazarette vault (on-demand, pm.ps1 once)...' -ForegroundColor DarkGray
+        Write-Host '[*] Loading Lazarette vault (on-demand, once per process)...' -ForegroundColor DarkGray
         try {
             $null = Import-PacketRatLazaretteSession -Quiet
         } catch {
