@@ -97,7 +97,7 @@ function Initialize-PacketRatLegacyEnvironment {
     #>
     [CmdletBinding()]
     param()
-    foreach ($suffix in @('LLM_PROFILE', 'PROVIDER', 'USER_EMAIL', 'SAVE_RAW_AI', 'MAX_EMAILS', 'BODY_PREVIEW_CHARS')) {
+    foreach ($suffix in @('LLM_PROFILE', 'PROVIDER', 'USER_EMAIL', 'SAVE_RAW_AI', 'MAX_EMAILS', 'BODY_PREVIEW_CHARS', 'AUTO_STOP')) {
         $new = [Environment]::GetEnvironmentVariable('PACKETRAT_' + $suffix)
         if (-not [string]::IsNullOrWhiteSpace($new)) { continue }
         $old = [Environment]::GetEnvironmentVariable('MAILHAWK_' + $suffix)

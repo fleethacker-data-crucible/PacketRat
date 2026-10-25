@@ -22,7 +22,7 @@
       <button class="nav" data-view="report"><span class="nav-icon">✧</span> AI intelligence</button>
       <button class="nav" data-view="dismissals"><span class="nav-icon">⊘</span> Dismissal memory</button>
     </div>
-    <div class="nav-group"><div class="nav-title">PREFERENCES</div><button class="nav" data-view="settings"><span class="nav-icon">⚙</span> Configuration</button></div>
+    <div class="nav-group"><div class="nav-title">PREFERENCES</div><button class="nav" data-view="settings"><span class="nav-icon">⚙</span> Configuration</button><button class="nav end-session" id="endSession" type="button" title="Stop the local PacketRat service"><span class="nav-icon">⏻</span> End session</button></div>
     <div class="sidebar-bottom"><div class="local-box"><span class="status-dot"></span><div><strong id="modeLabel">Local engine</strong><small id="engineStatus">Waiting for analysis</small></div></div><div class="sidebar-brandline">SCAN <span>•</span> PRIORITIZE <span>•</span> ACT</div></div>
   </aside>
   <div class="main">
@@ -90,6 +90,7 @@
     </main>
   </div>
 </div>
+<div id="sessionEnded" class="session-ended hidden" role="status"><div><h1>Session <em>ended.</em></h1><p>The local PacketRat service has stopped. Close this tab, or run Launch-PacketRat.bat to start a new session.</p></div></div>
 <dialog id="draftDialog"><div class="dialog-head"><div><div class="eyebrow">AI-ASSISTED COMPOSITION</div><h2>Draft a response</h2><p id="draftSubject"></p></div><button id="closeDialog" aria-label="Close draft dialog">✕</button></div><label class="dialog-label">Optional guidance <input id="instruction" placeholder="e.g. Thank them and ask for a timeline"></label><button class="primary" id="generateDraft">✦ Generate draft</button><div class="draft-protocol-note">One suggested response per generation. AI does not write your signature.</div>
 <label class="dialog-label">Suggested subject<input id="draftSubjectSuggested" maxlength="240" placeholder="Suggested subject appears after generation"></label>
 <label class="draft-subject-toggle"><input type="checkbox" id="draftApplySubject"> Replace the original reply subject in Outlook (may affect threading)</label>

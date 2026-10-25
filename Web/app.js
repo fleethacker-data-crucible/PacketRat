@@ -400,4 +400,29 @@ $('clearCredentials').addEventListener('click',async()=>{
 });
 $('saveSettings').addEventListener('click',()=>{try{saveSettings();notify('Preferences saved in this browser.')}catch(error){notify(error.message,true)}});$('exitDemo').addEventListener('click',()=>{location.href=location.pathname});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('draftDialog').open)$('draftDialog').close();if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();show('triage');$('queueSearch').focus()}});
+/* Lifecycle: this tab owns the local PowerShell service. Heartbeat every 5 s; on pagehide a
+   sendBeacon "leaving" signal (it cannot set headers, so the nonce rides in the JSON body of
+   /api/heartbeat only). The service stops itself once no PacketRat tab is alive. */
+const tabId=(()=>{try{return crypto.randomUUID()}catch{return 'tab-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}})();
+let sessionEnded=false;
+function startHeartbeat(intervalMs=5000){
+ if(!/^[0-9a-f]{32}$/.test(token))return ()=>{};
+ const send=leaving=>{if(sessionEnded)return;try{fetch('/api/heartbeat',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:JSON.stringify({tab:tabId,leaving}),keepalive:true,cache:'no-store'}).catch(()=>{})}catch{}};
+ send(false);
+ const timer=setInterval(()=>send(false),intervalMs);
+ const onHide=()=>{if(sessionEnded)return;let sent=false;try{if(navigator.sendBeacon)sent=navigator.sendBeacon('/api/heartbeat',new Blob([JSON.stringify({tab:tabId,leaving:true,token})],{type:'application/json'}))}catch{sent=false}if(!sent)send(true)};
+ const onShow=event=>{if(event.persisted)send(false)};
+ const onVisible=()=>{if(document.visibilityState==='visible')send(false)};
+ window.addEventListener('pagehide',onHide);window.addEventListener('pageshow',onShow);document.addEventListener('visibilitychange',onVisible);
+ return ()=>{clearInterval(timer);window.removeEventListener('pagehide',onHide);window.removeEventListener('pageshow',onShow);document.removeEventListener('visibilitychange',onVisible)};
+}
+let stopHeartbeat=()=>{};
+function showSessionEnded(){sessionEnded=true;stopHeartbeat();$('sessionEnded').classList.remove('hidden');document.title='PacketRat | Session ended'}
+$('endSession').addEventListener('click',async()=>{
+ if(demo&&!/^[0-9a-f]{32}$/.test(token)){notify('Demo mode: there is no local service to stop.');return}
+ if(busy){notify('Wait for the current analysis to finish before ending the session.',true);return}
+ if(!window.confirm('End this PacketRat session? The local PowerShell service stops; unsaved draft text in this tab is lost.'))return;
+ try{await fetch('/api/session/stop',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:'{}',cache:'no-store'});showSessionEnded()}catch{notify('Local PacketRat service not reachable; it may already have stopped.',true)}
+});
+stopHeartbeat=startHeartbeat();
 function tick(){$('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}tick();setInterval(tick,30000);loadSettings();if(demo){$('demoBanner').classList.remove('hidden');$('modeLabel').textContent='Demo mode';}load();
