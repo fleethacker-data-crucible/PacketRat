@@ -111,3 +111,4 @@
 .draft-subject-toggle input{accent-color:#48b8e9;width:17px;height:17px;flex:none}
 .draft-signature-note{font-size:11px;color:#90b6ca;line-height:1.65;margin:0 0 15px;padding:10px 0}
 #draftSubjectSuggested{width:100%;max-width:100%;border:1px solid #365b75;background:#102235;color:#e4f7ff;padding:11px 12px;border-radius:7px;font-size:12px}
+.nav.end-session{margin-top:8px;color:#c59a92}.nav.end-session:hover{background:#2b1c24;color:#ffd1c9}.session-ended{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:var(--bg);padding:24px}.session-ended>div{max-width:60ch}.session-ended p{color:#8296b1;font-size:14px;line-height:1.7}
