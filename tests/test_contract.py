@@ -41,6 +41,9 @@ order=['$env:LAZARETTE_PATH','$env:ARC_PATH',"'LAZARETTE_PATH', 'ARC_PATH'","'La
 positions=[BRIDGE.index(x) for x in order]
 assert positions==sorted(positions), 'Lazarette must be resolved before ARC'
 assert BRIDGE.index("'Get-LazaretteSecret', 'Get-ArcSecret'") < BRIDGE.index('Get-PmStarkApiKey -ServiceName')
+assert "'Lazarette.ps1', 'Arc.ps1'" in BRIDGE, 'Discovery by lib\\Lazarette.ps1 / lib\\Arc.ps1 (ARC 5)'
+assert BRIDGE.index("'Lazarette.ps1', 'Arc.ps1'") < BRIDGE.index("Join-Path $full 'pm.ps1'"), 'pm.ps1 only as the last resort'
+assert "'Unlock-LazaretteVaultInteractive', 'Unlock-ArcVaultInteractive'" in BRIDGE
 assert "'genapi'" in BRIDGE and "'advana-api'" in BRIDGE, 'Vault item names unchanged'
 STORE=(ROOT/'Private/PacketRatStore.ps1').read_text()
 assert "'mailhawk-store.json'" in STORE and 'Copy-Item' in STORE and 'Remove-Item' not in STORE

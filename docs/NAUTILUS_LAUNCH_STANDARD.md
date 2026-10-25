@@ -16,7 +16,7 @@ Purpose: keep PowerShell/browser apps consistent with proven Lazarette and Halya
 ## Current comparison (2026-10-22)
 
 - Halyard (formerly Cascade) launcher: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...
-- Lazarette (formerly ARC) pm.ps1: native PowerShell 5.1 entrypoint loaded via dot-source and pm commands; no dedicated batch startup shown in the top-level README.
+- Lazarette (formerly ARC): integrators dot-source `lib\Arc.ps1` (ARC 5; `lib\Lazarette.ps1` when present) and call `Unlock-ArcVaultInteractive` / `Get-ArcSecret`. ARC 3/4's `pm.ps1` is now a stub that throws (see Lazarette `docs/INTEGRATION.md`).
 - MailHawk (now PacketRat) original Start-MailHawk.bat (retired): explicitly uses -ExecutionPolicy Bypass -STA.
 - MailHawk (now PacketRat) v2 web/demo batch scripts accidentally omitted the execution-policy argument. The revised launchers match Halyard and retain STA.
 
@@ -26,6 +26,6 @@ Run Launch-PacketRat.bat diagnostics first. It reports policy context without mo
 
 ## PacketRat current launcher contract
 
-The only user-facing Windows batch files are `Launch-PacketRat.bat` (browser GUI, `demo`, and `diagnostics` subcommands) and `PacketRat-CLI.bat` (console mode). Root `Start-PacketRat-*.bat` files have been removed. The `.ps1` PowerShell hosts remain internal application components.
+The only user-facing Windows batch files are `Launch-PacketRat.bat` (browser GUI, `demo`, and `diagnostics` subcommands) and `PacketRat-CLI.bat` (console mode). `MailHawk.bat` and `MailHawk-CLI.bat` only forward to them so pre-rename shortcuts keep working. Root `Start-PacketRat-*.bat` files have been removed. The `.ps1` PowerShell hosts remain internal application components.
 
 For Lazarette instability, the browser Configuration workspace supports explicit **Lazarette / configured environment** or **Manual · current session** token selection. The latter is memory-only in the running PowerShell process and must be authorized for the target workstation and data classification.

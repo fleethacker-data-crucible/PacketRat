@@ -43,7 +43,7 @@ The browser tab owns the local PowerShell service. The page sends a heartbeat ev
 
 Launching while PacketRat already runs asks *Stop it and start fresh?*. `Launch-PacketRat.bat --replace` answers yes; `Launch-PacketRat.bat --stay` (or `PACKETRAT_AUTO_STOP=0` in the environment or `Config/packetrat.env`; the former `MAILHAWK_AUTO_STOP` still works) keeps the service running after the tab closes. Each running service writes `Logs/packetrat-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops. `Stop-PacketRat.ps1` and the single-instance check also find a server started by an older MailHawk build (`Logs/mailhawk-server-<pid>.json` or a `Start-MailHawk-Web.ps1` process).
 
-The five former user-facing BAT files were retired. Internal PowerShell files (`Start-PacketRat-Web.ps1`, `Start-PacketRat.ps1`) remain as implementation entrypoints and are not additional launchers.
+`MailHawk.bat` and `MailHawk-CLI.bat` are three-line forwarding stubs kept from before the rename so existing shortcuts keep working; they pass all options through to `Launch-PacketRat.bat` and `PacketRat-CLI.bat`. The five former user-facing BAT files were retired. Internal PowerShell files (`Start-PacketRat-Web.ps1`, `Start-PacketRat.ps1`) remain as implementation entrypoints and are not additional launchers.
 
 The PowerShell process-scoped startup convention matches Halyard, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
 
@@ -127,7 +127,7 @@ The HTTP service binds to local loopback only. POST requests require same-origin
 
 ## Project layout
 
-- `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers.
+- `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers (`MailHawk.bat` / `MailHawk-CLI.bat` just forward to them).
 - `Start-PacketRat-Web.ps1` — local HTTP/JSON service.
 - `Stop-PacketRat.ps1` — stops every running PacketRat browser service (`Launch-PacketRat.bat stop`).
 - `Start-PacketRat.ps1` — legacy engine with console mode used by the CLI.
@@ -144,10 +144,10 @@ See `docs/NAUTILUS_LAUNCH_STANDARD.md` for the Lazarette/Halyard launch conventi
 
 The rename keeps existing installs working:
 
-- **Launchers:** `MailHawk.bat` is now `Launch-PacketRat.bat` and `MailHawk-CLI.bat` is now `PacketRat-CLI.bat`. Update any shortcuts.
+- **Launchers:** `MailHawk.bat` is now `Launch-PacketRat.bat` and `MailHawk-CLI.bat` is now `PacketRat-CLI.bat`. The old names remain as forwarding stubs (options such as `stop`, `--replace` and `--stay` pass through), so existing shortcuts keep working; point new shortcuts at the new names.
 - **Local data:** on first start, `Logs/mailhawk-store.json` (action queue, dismissals, rules) is copied to `Logs/packetrat-store.json`. The original file is left in place. New log files are written as `packetrat*.log`.
 - **Configuration:** `Config/packetrat.env` is read first; an existing `Config/mailhawk.env` is still read when the new file is absent. Every `PACKETRAT_*` setting falls back to its former `MAILHAWK_*` name.
 - **Browser settings:** the saved preferences key `mailhawk-prefs` is copied to `packetrat-prefs` once; the old key is left in place.
-- **Lazarette (formerly ARC):** found via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. Vault item names (`genapi`, `advana-api`) are unchanged.
+- **Lazarette (formerly ARC):** a folder counts as Lazarette when it contains `lib\Lazarette.ps1` or `lib\Arc.ps1` (ARC 5); `pm.ps1` is only a last-resort fallback for ARC 3/4. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. Vault item names (`genapi`, `advana-api`) are unchanged.
 - **Port:** unchanged (8766), so browser storage for the existing origin is kept.
 - **AI envelopes:** the `MAILHAWK_*_V1` wire-protocol markers are unchanged.
