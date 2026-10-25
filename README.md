@@ -1,4 +1,9 @@
-<p align="center"><img src="assets/brand/emblem-light.png" width="280" alt="PacketRat"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/emblem-dark.png">
+    <img src="assets/brand/emblem-light.png" width="280" alt="PacketRat emblem: a ship's rat in a sailor's cap carrying a sealed letter along a mooring rope, inside a brass compass ring">
+  </picture>
+</p>
 
 # PacketRat
 
