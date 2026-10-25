@@ -1,7 +1,7 @@
-# MailHawk - file logging
+# PacketRat - file logging
 #requires -Version 5.1
 
-function Get-MailHawkLogDir {
+function Get-PacketRatLogDir {
     param([string]$Root)
     if (-not $Root) {
         $Root = $PSScriptRoot
@@ -16,7 +16,7 @@ function Get-MailHawkLogDir {
     return $dir
 }
 
-function Write-MailHawkLog {
+function Write-PacketRatLog {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Message,
@@ -25,8 +25,8 @@ function Write-MailHawkLog {
         [string]$Root
     )
     try {
-        $dir = Get-MailHawkLogDir -Root $Root
-        $path = Join-Path $dir 'mailhawk.log'
+        $dir = Get-PacketRatLogDir -Root $Root
+        $path = Join-Path $dir 'packetrat.log'
         $line = '{0} [{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'), $Level, $Message
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::AppendAllText($path, $line + [Environment]::NewLine, $utf8NoBom)
@@ -42,7 +42,7 @@ function Write-MailHawkLog {
     }
 }
 
-function Write-MailHawkError {
+function Write-PacketRatError {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$ErrorRecord,
@@ -50,8 +50,8 @@ function Write-MailHawkError {
         [string]$Root
     )
     try {
-        $dir = Get-MailHawkLogDir -Root $Root
-        $path = Join-Path $dir 'mailhawk-error.log'
+        $dir = Get-PacketRatLogDir -Root $Root
+        $path = Join-Path $dir 'packetrat-error.log'
         $msg = ''
         $type = ''
         $stack = ''
@@ -82,8 +82,27 @@ $stack
 "@
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::AppendAllText($path, $block, $utf8NoBom)
-        Write-MailHawkLog -Level ERROR -Message ("{0}: {1}" -f $Context, $msg) -Root $Root
+        Write-PacketRatLog -Level ERROR -Message ("{0}: {1}" -f $Context, $msg) -Root $Root
     } catch {
         Write-Host "ERROR-LOG-FAIL: $($ErrorRecord.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+function Initialize-PacketRatLegacyEnvironment {
+    <#
+    .SYNOPSIS
+      Rename compatibility (MailHawk -> PacketRat). For each setting, PACKETRAT_* is read first;
+      when it is unset and the former MAILHAWK_* name is set, the old value is copied into the
+      new name for this process only. The old variables are never removed or changed.
+    #>
+    [CmdletBinding()]
+    param()
+    foreach ($suffix in @('LLM_PROFILE', 'PROVIDER', 'USER_EMAIL', 'SAVE_RAW_AI', 'MAX_EMAILS', 'BODY_PREVIEW_CHARS')) {
+        $new = [Environment]::GetEnvironmentVariable('PACKETRAT_' + $suffix)
+        if (-not [string]::IsNullOrWhiteSpace($new)) { continue }
+        $old = [Environment]::GetEnvironmentVariable('MAILHAWK_' + $suffix)
+        if (-not [string]::IsNullOrWhiteSpace($old)) {
+            [Environment]::SetEnvironmentVariable('PACKETRAT_' + $suffix, $old, 'Process')
+        }
     }
 }

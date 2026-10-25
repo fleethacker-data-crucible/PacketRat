@@ -1,4 +1,4 @@
-/* MailHawk report presentation: pure browser helpers, no network calls or credentials. */
+/* PacketRat report presentation: pure browser helpers, no network calls or credentials. */
 (function(root){
  'use strict';
  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -188,5 +188,5 @@
    return html+'</section>';
   }).join('');
  }
- root.MailHawkReport={normalizeText,deriveSections,renderMarkdown,renderStructured,renderSources,audit,escapeHtml};
+ root.PacketRatReport={normalizeText,deriveSections,renderMarkdown,renderStructured,renderSources,audit,escapeHtml};
 })(typeof globalThis!=='undefined'?globalThis:this);
