@@ -129,7 +129,7 @@ function Import-PacketRatLazaretteSession {
       Safe to call repeatedly; never re-dot-sources after the first attempt. Does not unlock.
     #>
     [CmdletBinding()]
-    param([Alias('ArcRoot')][string]$LazaretteRoot, [switch]$Quiet)
+    param([string]$LazaretteRoot, [switch]$Quiet)
 
     # Already have helpers (e.g. this session already loaded Lazarette) - do not re-source
     if (Test-PacketRatLazaretteHelpersAvailable) {

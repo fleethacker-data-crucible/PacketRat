@@ -224,7 +224,7 @@ function ConvertTo-PacketRatLlmText {
 function Invoke-PacketRatChat {
     <#
     .SYNOPSIS
-      Call GenAi or Grok endpoint (same shape as Halyard's chat call, formerly Cascade Invoke-CascadeChat).
+      Call GenAi or Grok endpoint (same shape as Halyard's chat call).
     #>
     [CmdletBinding()]
     param(
