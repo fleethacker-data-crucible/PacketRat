@@ -297,7 +297,7 @@ $emailJson
         Summary        = $summary
         Report         = $reportMd
         ReportStructure = @($reportStructure)
-        ResponseProtocol = 'MAILHAWK_REPORT_V1'
+        ResponseProtocol = 'PACKETRAT_REPORT_V1'
         ReportItems    = @($verifiedItems)
         ReportSections = @($reportSections)
         ReportQuality  = $reportQuality

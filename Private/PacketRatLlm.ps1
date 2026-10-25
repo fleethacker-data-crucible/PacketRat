@@ -9,16 +9,16 @@ $script:PacketRatLlmDefaults = @{
 }
 
 # Runtime-only credential selection. Never write manually entered tokens to files.
-# 'ARC' is the internal credential-source value shared with Web/app.js (kept for compatibility); it means Lazarette.
-$script:PacketRatCredentialSource = 'ARC'
+# 'Lazarette' is the in-memory credential-source value shared with Web/app.js (never persisted).
+$script:PacketRatCredentialSource = 'Lazarette'
 $script:PacketRatManualTokens = @{ GenAi = $null; Grok = $null }
 
 function Get-PacketRatCredentialStatus {
     [CmdletBinding()]
     param()
-    $arcFound = $false
+    $lazaretteFound = $false
     if (Get-Command Find-PacketRatLazaretteRoot -ErrorAction SilentlyContinue) {
-        $arcFound = [bool](Find-PacketRatLazaretteRoot)
+        $lazaretteFound = [bool](Find-PacketRatLazaretteRoot)
     }
     return @{
         source = $script:PacketRatCredentialSource
@@ -26,8 +26,8 @@ function Get-PacketRatCredentialStatus {
             GenAi = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.GenAi)
             Grok = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.Grok)
         }
-        arcDetected = $arcFound
-        arcItems = @{
+        lazaretteDetected = $lazaretteFound
+        lazaretteItems = @{
             GenAi = Resolve-PacketRatLazaretteServiceName -Profile GenAi
             Grok = Resolve-PacketRatLazaretteServiceName -Profile Grok
         }
@@ -37,11 +37,11 @@ function Get-PacketRatCredentialStatus {
 function Set-PacketRatCredentialConfiguration {
     [CmdletBinding()]
     param(
-        [ValidateSet('ARC','Manual')][string]$Source,
+        [ValidateSet('Lazarette','Manual')][string]$Source,
         [ValidateSet('GenAi','Grok')][string]$Profile = 'GenAi',
         [AllowEmptyString()][string]$Token = ''
     )
-    if ($Source -eq 'ARC') {
+    if ($Source -eq 'Lazarette') {
         $script:PacketRatManualTokens.GenAi = $null
         $script:PacketRatManualTokens.Grok = $null
     } elseif (-not [string]::IsNullOrWhiteSpace($Token)) {
@@ -117,7 +117,7 @@ function Get-PacketRatLlmToken {
       Profile-isolated tokens:
         GenAi  -> GENAI_TOKEN  / Lazarette item genapi
         Grok   -> DATABRICKS_TOKEN / Lazarette item advana-api
-      Env overrides: PACKETRAT_LAZARETTE_ITEM_*, then MAILHAWK_ARC_ITEM_* / CASCADE_ARC_ITEM_*, preferred over hard-coded names.
+      Env overrides: PACKETRAT_LAZARETTE_ITEM_*, then MAILHAWK_ARC_ITEM_*, then HALYARD_LAZARETTE_ITEM_* / CASCADE_ARC_ITEM_*, preferred over hard-coded names.
       Never prints secret values (length only).
     #>
     [CmdletBinding()]
@@ -158,8 +158,8 @@ function Get-PacketRatLlmToken {
         return $env:LLM_TOKEN.Trim()
     }
 
-    # 3) Lazarette vault — resolve canonical (or env-overridden) service name
-    $arcItem = Resolve-PacketRatLazaretteServiceName -Profile $ForProfile
+    # 3) Lazarette vault - resolve canonical (or env-overridden) service name
+    $lazaretteItem = Resolve-PacketRatLazaretteServiceName -Profile $ForProfile
 
     if (Get-Command Import-PacketRatLazaretteSession -ErrorAction SilentlyContinue) {
         Write-Host '[*] Loading Lazarette vault (on-demand, once per process)...' -ForegroundColor DarkGray
@@ -172,13 +172,13 @@ function Get-PacketRatLlmToken {
 
     if (Get-Command Get-PacketRatLazaretteSecretByName -ErrorAction SilentlyContinue) {
         try {
-            Write-Host ("[*] Looking up Lazarette item '{0}'..." -f $arcItem) -ForegroundColor DarkGray
-            $got = Get-PacketRatLazaretteSecretByName -ServiceName $arcItem
+            Write-Host ("[*] Looking up Lazarette item '{0}'..." -f $lazaretteItem) -ForegroundColor DarkGray
+            $got = Get-PacketRatLazaretteSecretByName -ServiceName $lazaretteItem
             if (-not [string]::IsNullOrWhiteSpace($got)) {
                 $plain = [string]$got.Trim()
                 Set-Item -Path "Env:$envTarget" -Value $plain
-                # length only — never print secret material
-                Write-Host ("[*] Loaded {0} from Lazarette item '{1}' (len={2})" -f $envTarget, $arcItem, $plain.Length) -ForegroundColor DarkGray
+                # length only - never print secret material
+                Write-Host ("[*] Loaded {0} from Lazarette item '{1}' (len={2})" -f $envTarget, $lazaretteItem, $plain.Length) -ForegroundColor DarkGray
                 return $plain
             }
         } catch {
@@ -186,7 +186,7 @@ function Get-PacketRatLlmToken {
         }
     }
 
-    throw ("No managed LLM token available for {0}. Check Lazarette is installed/unlocked with item {1}, or switch to Manual under PacketRat Configuration > Credentials." -f $ForProfile, $arcItem)
+    throw ("No managed LLM token available for {0}. Check Lazarette is installed/unlocked with item {1}, or switch to Manual under PacketRat Configuration > Credentials." -f $ForProfile, $lazaretteItem)
 }
 
 function ConvertTo-PacketRatLlmText {
