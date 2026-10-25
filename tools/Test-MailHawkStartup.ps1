@@ -21,7 +21,8 @@ if(($machinePolicy -and $machinePolicy -ne 'Undefined') -or ($userPolicy -and $u
 }
 if($PSVersionTable.PSVersion.Major -lt 5){$failures.Add('Windows PowerShell 5.1 or later is required.')}
 $required=@(
-  'Start-MailHawk-Web.ps1','MailHawk.bat','MailHawk-CLI.bat',
+  'Start-MailHawk-Web.ps1','Stop-MailHawk.ps1','MailHawk.bat','MailHawk-CLI.bat',
+  'Private/MailHawkLifecycle.ps1',
   'Web/index.html','Web/app.js','Web/style.css',
   'Web/mailhawk-logo.png','Web/mailhawk-icon.png',
   'Private/ArcBridge.ps1','Private/MailHawkLlm.ps1',
@@ -33,7 +34,7 @@ foreach($relative in $required) {
   $path=Join-Path $root $relative
   if(-not (Test-Path -LiteralPath $path -PathType Leaf)){$failures.Add('Missing file: '+$relative)}
 }
-foreach($relative in @('Start-MailHawk-Web.ps1','tools/Test-MailHawkStartup.ps1',
+foreach($relative in @('Start-MailHawk-Web.ps1','Stop-MailHawk.ps1','Private/MailHawkLifecycle.ps1','tools/Test-MailHawkStartup.ps1',
   'Private/ArcBridge.ps1','Private/MailHawkLlm.ps1','Private/MailHawkStore.ps1',
   'Private/Get-OutlookMailSummary.ps1','Private/MailHawkDraft.ps1',
   'Private/MailHawkGraph.ps1','Private/MailHawkLogging.ps1',

@@ -35,4 +35,13 @@ LLM=(ROOT/'Private/MailHawkLlm.ps1').read_text()
 assert 'MailHawkManualTokens' in LLM and "MailHawkCredentialSource" in LLM
 assert 'Write-MailHawkLog' not in LLM, 'No credential logging in LLM bridge'
 assert (ROOT/'MailHawk.bat').exists() and (ROOT/'MailHawk-CLI.bat').exists()
+LIFE=(ROOT/'Private/MailHawkLifecycle.ps1').read_text()
+assert "'/api/heartbeat'" in SERVICE and "'/api/session/stop'" in SERVICE
+assert 'MailHawkLifecycle' in SERVICE and 'Write-MailHawkRuntimeFile' in SERVICE and 'Remove-MailHawkRuntimeFile' in SERVICE
+assert 'mailhawk-server-' in LIFE and 'MAILHAWK_AUTO_STOP' in LIFE
+assert 'Nonce' not in LIFE, 'Runtime files must never carry the session nonce'
+assert "navigator.sendBeacon('/api/heartbeat'" in CLIENT and "'pagehide'" in CLIENT
+assert 'id="endSession"' in HTML
+assert (ROOT/'Stop-MailHawk.ps1').is_file()
+assert 'MAILHAWK_AUTO_STOP' in (ROOT/'Config/mailhawk.env.example').read_text()
 print('Source and asset contract checks passed')
