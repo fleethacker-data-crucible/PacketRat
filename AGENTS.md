@@ -9,6 +9,6 @@ Exactly two user-facing BAT files in the root: `Launch-PacketRat.bat` for browse
 
 ## AI output and email signature contract
 
-Before modifying prompts, parsers, drafting or report UI, read `docs/AI_WIRE_PROTOCOL_V1.md`. Model outputs must use strict, versioned envelopes: exactly one `MAILHAWK_DRAFT_V1` subject/body reply, one `MAILHAWK_REPORT_V1` JSON report with deterministic sections, and `MAILHAWK_INSIGHT_V1` for follow-up report generations. Reject malformed or truncated envelopes instead of dumping raw model text. Never trust model-provided Outlook message IDs or execute HTML from report fields.
+Before modifying prompts, parsers, drafting or report UI, read `docs/AI_WIRE_PROTOCOL_V1.md`. Model outputs must use strict, versioned envelopes: exactly one `PACKETRAT_DRAFT_V1` subject/body reply, one `PACKETRAT_REPORT_V1` JSON report with deterministic sections, and `PACKETRAT_INSIGHT_V1` for follow-up report generations. Reject malformed or truncated envelopes instead of dumping raw model text. Never trust model-provided Outlook message IDs or execute HTML from report fields.
 
 Outlook's existing authenticated account reply signature must be preserved after displaying the reply inspector, with reviewed AI text inserted *before* that content. The model never authors or duplicates the user's signature. The original reply subject stays unchanged unless the user explicitly elects an override. No automatic sending. Add Windows PowerShell 5.1 and browser regression tests for protocol changes.

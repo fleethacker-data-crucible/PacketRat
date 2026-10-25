@@ -78,13 +78,13 @@ function demoStructuredReport(){
  ];
 }
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
-function demoStore(){try{migrateStorageKey(sessionStorage,'mailhawk-demo-store','packetrat-demo-store')}catch{}try{const x=JSON.parse(sessionStorage.getItem('packetrat-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
+function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('packetrat-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
 function demoPersist(){sessionStorage.setItem('packetrat-demo-store',JSON.stringify(store));}
 async function api(route,data){
- if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
-  if(route==='credentials/status')return {ok:true,credentials:{source:'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
-   if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
-   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
+ if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'PACKETRAT_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
+  if(route==='credentials/status')return {ok:true,credentials:{source:'Lazarette',manual:{GenAi:false,Grok:false},lazaretteDetected:false,lazaretteItems:{GenAi:'genapi',Grok:'advana-api'}}};
+   if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'Lazarette',manual:{GenAi:false,Grok:false},lazaretteDetected:false,lazaretteItems:{GenAi:'genapi',Grok:'advana-api'}}};
+   if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'PACKETRAT_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
   if(route==='report/generate'){
    const modes={Brief:'Leadership briefing',Actions:'Prioritized action plan',Risks:'Risk and uncertainty review',Explain:'Plain-language explanation'};
@@ -98,7 +98,7 @@ async function api(route,data){
   if(route==='dismiss'){if(!item)throw Error('Unknown demo item');item.Status='dismissed';store.Dismissals=[...store.Dismissals.filter(x=>x.Key!==key),{Key:key,Subject:item.Subject,From:item.From,Reason:data.reason||'No action needed'}];demoPersist();return {ok:true,store}}
   if(route==='restore'){store.Dismissals=store.Dismissals.filter(x=>x.Key!==key);if(item)item.Status='open';demoPersist();return {ok:true,store}}
   if(route==='draft'){return {ok:true,draft:{
-    Version:'MAILHAWK_DRAFT_V1',Subject:'RE: '+String(item?.Subject||'Request'),
+    Version:'PACKETRAT_DRAFT_V1',Subject:'RE: '+String(item?.Subject||'Request'),
     Body:'Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a deadline I should prioritize.',
     Draft:'Thank you for the update. I will review the details and follow up with you shortly.',
     SignatureSource:'OutlookReply',Profile:'Demo',OutputTokenBudget:20000
@@ -212,13 +212,13 @@ function updateCredentialPanel(){
 function renderCredentialStatus(state){
  if(!state)return;
  credentialDetails=state;
- $('credentialSource').value=state.source==='Manual'?'Manual':'ARC';
+ $('credentialSource').value=state.source==='Manual'?'Manual':'Lazarette';
  updateCredentialPanel();
- const manual=state.manual||{},arc=state.arcItems||{};
+ const manual=state.manual||{},items=state.lazaretteItems||{};
  const gen=manual.GenAi?'set':'missing',grok=manual.Grok?'set':'missing';
  const line=state.source==='Manual'
    ?'Manual session · GenAi '+gen+' · Grok '+grok
-   :'Lazarette '+(state.arcDetected?'found':'not detected')+' · GenAi: '+(arc.GenAi||'genapi')+' · Grok: '+(arc.Grok||'advana-api');
+   :'Lazarette '+(state.lazaretteDetected?'found':'not detected')+' · GenAi: '+(items.GenAi||'genapi')+' · Grok: '+(items.Grok||'advana-api');
  $('credentialStatus').textContent=demo?'Demo mode: no credentials accepted or stored.':line;
 }
 async function applyCredentialSource(){
@@ -308,14 +308,14 @@ async function saveTriageRules(){
 function migrateStorageKey(storage,oldKey,newKey){try{if(storage.getItem(newKey)===null){const old=storage.getItem(oldKey);if(old!==null)storage.setItem(newKey,old)}}catch{}}
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
 function loadSettings(){migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs');try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{GenAi:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
  render();show('triage');
 }
 function initializeSingleDraft(draft){
- if(!draft||draft.Version!=='MAILHAWK_DRAFT_V1'||typeof draft.Subject!=='string'||typeof draft.Body!=='string'){
+ if(!draft||draft.Version!=='PACKETRAT_DRAFT_V1'||typeof draft.Subject!=='string'||typeof draft.Body!=='string'){
   throw Error('AI draft response did not match PacketRat DRAFT_V1 protocol.');
  }
  $('draftSubjectSuggested').value=draft.Subject;

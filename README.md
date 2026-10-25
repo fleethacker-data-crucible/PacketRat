@@ -69,9 +69,9 @@ PacketRat no longer attempts to interpret free-form GenAI replies as email draft
 
 | Protocol | Output | Handling |
 |---|---|---|
-| `MAILHAWK_DRAFT_V1` | One suggested subject and one plain-text body, wrapped in exact ASCII markers | Parsed into a single editable response; never duplicate A/B options |
-| `MAILHAWK_REPORT_V1` | One JSON envelope with six required sections and indexed source recommendations | Validated and compiled into HTML by PacketRat, with source links grounded in the Outlook scan |
-| `MAILHAWK_INSIGHT_V1` | One JSON envelope for action plans, explanations, risk reviews and leadership briefings | Generated on demand and compiled into read-only report content |
+| `PACKETRAT_DRAFT_V1` | One suggested subject and one plain-text body, wrapped in exact ASCII markers | Parsed into a single editable response; never duplicate A/B options |
+| `PACKETRAT_REPORT_V1` | One JSON envelope with six required sections and indexed source recommendations | Validated and compiled into HTML by PacketRat, with source links grounded in the Outlook scan |
+| `PACKETRAT_INSIGHT_V1` | One JSON envelope for action plans, explanations, risk reviews and leadership briefings | Generated on demand and compiled into read-only report content |
 
 Malformed or incomplete outputs fail visibly instead of placing raw model output in the GUI or Outlook. Report serialization uses deterministic section layouts; UTF-8 character handling is kept separate from parsing.
 
@@ -150,4 +150,4 @@ The rename keeps existing installs working:
 - **Browser settings:** the saved preferences key `mailhawk-prefs` is copied to `packetrat-prefs` once; the old key is left in place.
 - **Lazarette (formerly ARC):** a folder counts as Lazarette when it contains `lib\Lazarette.ps1` or `lib\Arc.ps1` (ARC 5); `pm.ps1` is only a last-resort fallback for ARC 3/4. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. Vault item names (`genapi`, `advana-api`) are unchanged.
 - **Port:** unchanged (8766), so browser storage for the existing origin is kept.
-- **AI envelopes:** the `MAILHAWK_*_V1` wire-protocol markers are unchanged.
+- **AI envelopes:** the model response markers are now `PACKETRAT_*_V1`. They are never saved and parsed again, so no old-name fallback is needed.
