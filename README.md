@@ -1,43 +1,51 @@
-# MailHawk — Outlook Intelligence Workspace
+<p align="center"><img src="assets/brand/emblem-light.png" width="280" alt="PacketRat"></p>
 
-MailHawk helps triage Outlook emails into a human-reviewed action queue. The browser UI runs on a local Windows PowerShell 5.1 service. No Python or Node.js installation is required on the target workstation.
+# PacketRat
 
-![Selected MailHawk logo](Web/mailhawk-logo.png)
+Outlook triage into a human-reviewed action queue, run from a local Windows PowerShell 5.1 service with a browser UI.
 
-> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, ARC/CAC, AI provider connectivity, and Navy workstation execution need validation in the approved environment. Not accredited or production-ready.
+No Python or Node.js installation is required on the target workstation.
+
+## The name
+
+Packet ships carried the mail on scheduled routes, and the sailors aboard were called packet rats. PacketRat makes the same run through your Outlook inbox and sorts it into a human-reviewed action queue.
+
+Formerly MailHawk.
+
+> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/CAC, AI provider connectivity, and Navy workstation execution need validation in the approved environment. Not accredited or production-ready.
 
 ## Only two launchers
 
-- **`MailHawk.bat`** — opens the modern browser GUI, the default.
-- **`MailHawk-CLI.bat`** — runs console-only inbox analysis (`-Profile GenAi` or `-Profile Grok` are accepted).
+- **`Launch-PacketRat.bat`** — opens the modern browser GUI, the default.
+- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile GenAi` or `-Profile Grok` are accepted).
 
 The browser launcher also supports optional commands from an existing CMD prompt:
 
 ```bat
-MailHawk.bat
-MailHawk.bat demo
-MailHawk.bat diagnostics
-MailHawk.bat -NoBrowser
-MailHawk.bat -Port 8766
-MailHawk.bat --replace
-MailHawk.bat --stay
-MailHawk.bat stop
-MailHawk-CLI.bat -Profile GenAi
+Launch-PacketRat.bat
+Launch-PacketRat.bat demo
+Launch-PacketRat.bat diagnostics
+Launch-PacketRat.bat -NoBrowser
+Launch-PacketRat.bat -Port 8766
+Launch-PacketRat.bat --replace
+Launch-PacketRat.bat --stay
+Launch-PacketRat.bat stop
+PacketRat-CLI.bat -Profile GenAi
 ```
 
-### Closing the tab stops MailHawk
+### Closing the tab stops PacketRat
 
-The browser tab owns the local PowerShell service. The page sends a heartbeat every 5 seconds and a leaving signal when it closes; the service stops itself 20 seconds after the last heartbeat (5 seconds after a leaving signal), but never while a scan, report, draft or store write is running. A reload or a second MailHawk tab keeps it alive. Other ways to stop it:
+The browser tab owns the local PowerShell service. The page sends a heartbeat every 5 seconds and a leaving signal when it closes; the service stops itself 20 seconds after the last heartbeat (5 seconds after a leaving signal), but never while a scan, report, draft or store write is running. A reload or a second PacketRat tab keeps it alive. Other ways to stop it:
 
 - **End session** in the sidebar.
-- `MailHawk.bat stop` (runs `Stop-MailHawk.ps1`), which stops every running MailHawk service without needing a PID.
+- `Launch-PacketRat.bat stop` (runs `Stop-PacketRat.ps1`), which stops every running PacketRat service without needing a PID.
 - Ctrl+C in the console, if it is visible.
 
-Launching while MailHawk already runs asks *Stop it and start fresh?*. `MailHawk.bat --replace` answers yes; `MailHawk.bat --stay` (or `MAILHAWK_AUTO_STOP=0` in the environment or `Config/mailhawk.env`) keeps the service running after the tab closes. Each running service writes `Logs/mailhawk-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops.
+Launching while PacketRat already runs asks *Stop it and start fresh?*. `Launch-PacketRat.bat --replace` answers yes; `Launch-PacketRat.bat --stay` (or `PACKETRAT_AUTO_STOP=0` in the environment or `Config/packetrat.env`; the former `MAILHAWK_AUTO_STOP` still works) keeps the service running after the tab closes. Each running service writes `Logs/packetrat-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops. `Stop-PacketRat.ps1` and the single-instance check also find a server started by an older MailHawk build (`Logs/mailhawk-server-<pid>.json` or a `Start-MailHawk-Web.ps1` process).
 
-The five former user-facing BAT files were retired. Internal PowerShell files (`Start-MailHawk-Web.ps1`, `Start-MailHawk.ps1`) remain as implementation entrypoints and are not additional launchers.
+`MailHawk.bat` and `MailHawk-CLI.bat` are three-line forwarding stubs kept from before the rename so existing shortcuts keep working; they pass all options through to `Launch-PacketRat.bat` and `PacketRat-CLI.bat`. The five former user-facing BAT files were retired. Internal PowerShell files (`Start-PacketRat-Web.ps1`, `Start-PacketRat.ps1`) remain as implementation entrypoints and are not additional launchers.
 
-The PowerShell process-scoped startup convention matches Cascade, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
+The PowerShell process-scoped startup convention matches Halyard, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
 
 ## Interactive intelligence report
 
@@ -49,7 +57,7 @@ The report is now an interactive, **source-verified intelligence workspace**, no
 - Generate **Action plan**, **Leadership briefing**, **Risk review**, or **Explanation** from the full report or a selected section; follow-ups are generated on demand and do not send email or silently alter the action queue.
 - Report-quality indicators for unresolved character artifacts, unsupported model references, missing structured output, and conflicts between AI suggestions and local triage rules.
 
-Legacy reports without source indices show a verified source list rather than pretending arbitrary prose can be mapped safely to an Outlook message. If GenAI returns incomplete structured output, MailHawk warns instead of displaying partial JSON as trustworthy triage.
+Legacy reports without source indices show a verified source list rather than pretending arbitrary prose can be mapped safely to an Outlook message. If GenAI returns incomplete structured output, PacketRat warns instead of displaying partial JSON as trustworthy triage.
 
 See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for detailed findings, remediation, limitations, and the longer-term schema-first architecture proposal.
 
@@ -57,17 +65,17 @@ See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for deta
 
 ## Standardized AI responses (v1)
 
-MailHawk no longer attempts to interpret free-form GenAI replies as email drafts or dashboard reports. It uses three explicit, versioned response contracts:
+PacketRat no longer attempts to interpret free-form GenAI replies as email drafts or dashboard reports. It uses three explicit, versioned response contracts:
 
 | Protocol | Output | Handling |
 |---|---|---|
 | `MAILHAWK_DRAFT_V1` | One suggested subject and one plain-text body, wrapped in exact ASCII markers | Parsed into a single editable response; never duplicate A/B options |
-| `MAILHAWK_REPORT_V1` | One JSON envelope with six required sections and indexed source recommendations | Validated and compiled into HTML by MailHawk, with source links grounded in the Outlook scan |
+| `MAILHAWK_REPORT_V1` | One JSON envelope with six required sections and indexed source recommendations | Validated and compiled into HTML by PacketRat, with source links grounded in the Outlook scan |
 | `MAILHAWK_INSIGHT_V1` | One JSON envelope for action plans, explanations, risk reviews and leadership briefings | Generated on demand and compiled into read-only report content |
 
 Malformed or incomplete outputs fail visibly instead of placing raw model output in the GUI or Outlook. Report serialization uses deterministic section layouts; UTF-8 character handling is kept separate from parsing.
 
-**Outlook signatures:** MailHawk displays the classic Outlook reply first, allowing Outlook to insert the configured reply signature for the chosen account. The AI body is inserted above Outlook's preexisting HTML body without duplicating a signature or erasing quoted content. No signature is invented when none is configured. Suggested subject overrides are always **opt-in** to preserve the original reply thread.
+**Outlook signatures:** PacketRat displays the classic Outlook reply first, allowing Outlook to insert the configured reply signature for the chosen account. The AI body is inserted above Outlook's preexisting HTML body without duplicating a signature or erasing quoted content. No signature is invented when none is configured. Suggested subject overrides are always **opt-in** to preserve the original reply thread.
 
 See [AI Wire Protocol v1](docs/AI_WIRE_PROTOCOL_V1.md) for delimiters, schemas, validation, and test requirements. The 20,000-output-token ceiling for drafts remains a provider request budget, not an email length requirement.
 
@@ -86,25 +94,25 @@ The default .mil rule requires a **verified direct recipient and actionable lang
 
 Open **Configuration → Credentials & connections** in the GUI.
 
-1. Select **ARC / configured environment** to use the existing approved ARC bridge (GenAi service `genapi` or Grok service `advana-api`; override names in `Config/mailhawk.env` if needed).
+1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (GenAi item `genapi` or Grok item `advana-api`; override names in `Config/packetrat.env` if needed).
 2. Or select **Manual · current session**, select GenAi or Grok, paste a token for an **approved** provider, then select **Apply credential source**. Repeat for another provider if needed.
 3. Select **Check available token** to verify that the selected provider's token resolves locally. This does **not** contact an AI endpoint or scan your inbox.
 4. Select **Forget manual tokens** to erase manual credential references held in the current PowerShell process.
 
-Manual credentials are **not saved to disk, environment files, localStorage, or GitHub** by MailHawk. They are held only in the PowerShell service process while it runs and are cleared on service exit or when switching back to ARC. A local process/browser is not an enterprise credential vault; only use this option if permitted under your organization's token-handling policy. Never use unapproved AI endpoints for sensitive or official mail.
+Manual credentials are **not saved to disk, environment files, localStorage, or GitHub** by PacketRat. They are held only in the PowerShell service process while it runs and are cleared on service exit or when switching back to Lazarette. A local process/browser is not an enterprise credential vault; only use this option if permitted under your organization's token-handling policy. Never use unapproved AI endpoints for sensitive or official mail.
 
-**Why “no LLM token” happened:** Earlier browser releases silently searched environment variables/ARC without user-configurable source selection. Now the selected source is explicit, errors include useful setup instructions, and **Analyze inbox checks token availability before reading messages**.
+**Why “no LLM token” happened:** Earlier browser releases silently searched environment variables/Lazarette without user-configurable source selection. Now the selected source is explicit, errors include useful setup instructions, and **Analyze inbox checks token availability before reading messages**.
 
-`Config/mailhawk.env.example` contains optional ARC discovery, service names, and provider configuration. Do not commit real token values.
+`Config/packetrat.env.example` contains optional Lazarette discovery, service names, and provider configuration. Do not commit real token values.
 
 ## What works and what still needs verification
 
 | Workflow | State |
 |---|---|
 | Browser dashboard, inbox action queue, dismissal memory, draft review | Implemented |
-| Offline demonstration (`MailHawk.bat demo`) | No Outlook or LLM connection |
+| Offline demonstration (`Launch-PacketRat.bat demo`) | No Outlook or LLM connection |
 | Outlook COM analysis, draft-opening and reply detection | Implementation present; target Windows validation required |
-| ARC managed credential integration | Implementation present; requires ARC unlock/session test |
+| Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
 | Microsoft Graph | Requires organization-authorized Graph configuration |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
@@ -115,19 +123,31 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 
 ## Security
 
-The HTTP service binds to local loopback only. POST requests require same-origin checks and a per-process request nonce. The selected hawk logo ships as an actual PNG, not a remote reference. User email state and logs belong under the ignored `Logs/` directory. Generated drafts require human review; MailHawk never sends messages automatically.
+The HTTP service binds to local loopback only. POST requests require same-origin checks and a per-process request nonce. The in-app logo ships as an actual PNG, not a remote reference. User email state and logs belong under the ignored `Logs/` directory. Generated drafts require human review; PacketRat never sends messages automatically.
 
 ## Project layout
 
-- `MailHawk.bat` and `MailHawk-CLI.bat` — the only user launchers.
-- `Start-MailHawk-Web.ps1` — local HTTP/JSON service.
-- `Stop-MailHawk.ps1` — stops every running MailHawk browser service (`MailHawk.bat stop`).
-- `Start-MailHawk.ps1` — legacy engine with console mode used by the CLI.
+- `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers (`MailHawk.bat` / `MailHawk-CLI.bat` just forward to them).
+- `Start-PacketRat-Web.ps1` — local HTTP/JSON service.
+- `Stop-PacketRat.ps1` — stops every running PacketRat browser service (`Launch-PacketRat.bat stop`).
+- `Start-PacketRat.ps1` — legacy engine with console mode used by the CLI.
 - `Web/` — browser application, styling, and logo assets.
-- `Private/`, `Public/` — Outlook, ARC, AI, persistence and analysis modules.
-- `tools/Test-MailHawkStartup.ps1` — noninvasive diagnostics invoked by `MailHawk.bat diagnostics`.
+- `Private/`, `Public/` — Outlook, Lazarette, AI, persistence and analysis modules.
+- `tools/Test-PacketRatStartup.ps1` — noninvasive diagnostics invoked by `Launch-PacketRat.bat diagnostics`.
 - `tests/` — development-only source/browser tests.
 
-**Browser demo:** `MailHawk.bat demo` loads hard-coded test messages and does not touch Outlook or LLM endpoints. Real API keys must not be entered in demo mode.
+**Browser demo:** `Launch-PacketRat.bat demo` loads hard-coded test messages and does not touch Outlook or LLM endpoints. Real API keys must not be entered in demo mode.
 
-See `docs/NAUTILUS_LAUNCH_STANDARD.md` for the ARC/Cascade launch convention and security constraints.
+See `docs/NAUTILUS_LAUNCH_STANDARD.md` for the Lazarette/Halyard launch convention and security constraints.
+
+## Upgrading from MailHawk
+
+The rename keeps existing installs working:
+
+- **Launchers:** `MailHawk.bat` is now `Launch-PacketRat.bat` and `MailHawk-CLI.bat` is now `PacketRat-CLI.bat`. The old names remain as forwarding stubs (options such as `stop`, `--replace` and `--stay` pass through), so existing shortcuts keep working; point new shortcuts at the new names.
+- **Local data:** on first start, `Logs/mailhawk-store.json` (action queue, dismissals, rules) is copied to `Logs/packetrat-store.json`. The original file is left in place. New log files are written as `packetrat*.log`.
+- **Configuration:** `Config/packetrat.env` is read first; an existing `Config/mailhawk.env` is still read when the new file is absent. Every `PACKETRAT_*` setting falls back to its former `MAILHAWK_*` name.
+- **Browser settings:** the saved preferences key `mailhawk-prefs` is copied to `packetrat-prefs` once; the old key is left in place.
+- **Lazarette (formerly ARC):** a folder counts as Lazarette when it contains `lib\Lazarette.ps1` or `lib\Arc.ps1` (ARC 5); `pm.ps1` is only a last-resort fallback for ARC 3/4. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. Vault item names (`genapi`, `advana-api`) are unchanged.
+- **Port:** unchanged (8766), so browser storage for the existing origin is kept.
+- **AI envelopes:** the `MAILHAWK_*_V1` wire-protocol markers are unchanged.

@@ -1,4 +1,4 @@
-name: MailHawk checks
+name: PacketRat checks
 on:
   pull_request:
   push:
@@ -49,7 +49,7 @@ jobs:
           }
       - name: Offline triage and draft tests
         run: |
-          .\tests\Test-MailHawkTriage.ps1
-          .\tests\Test-MailHawkReport.ps1
-          .\tests\Test-MailHawkProtocol.ps1
-          .\tests\Test-MailHawkLifecycle.ps1
+          .\tests\Test-PacketRatTriage.ps1
+          .\tests\Test-PacketRatReport.ps1
+          .\tests\Test-PacketRatProtocol.ps1
+          .\tests\Test-PacketRatLifecycle.ps1

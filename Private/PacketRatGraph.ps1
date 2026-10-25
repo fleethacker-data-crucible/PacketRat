@@ -1,17 +1,17 @@
-# MailHawk - optional Microsoft Graph provider
+# PacketRat - optional Microsoft Graph provider
 #requires -Version 5.1
 # Only used when -Provider Graph is selected and Microsoft.Graph modules are available.
 
-function Test-MailHawkGraphAvailable {
+function Test-PacketRatGraphAvailable {
     return [bool](Get-Module -ListAvailable -Name Microsoft.Graph.Authentication, Microsoft.Graph.Mail -ErrorAction SilentlyContinue)
 }
 
-function Connect-MailHawkGraph {
+function Connect-PacketRatGraph {
     [CmdletBinding()]
     param(
         [string[]]$Scopes = @('Mail.Read', 'Mail.ReadWrite', 'User.Read')
     )
-    if (-not (Test-MailHawkGraphAvailable)) {
+    if (-not (Test-PacketRatGraphAvailable)) {
         throw "Microsoft.Graph modules not installed. Install-Module Microsoft.Graph.Mail, Microsoft.Graph.Authentication"
     }
     Import-Module Microsoft.Graph.Authentication, Microsoft.Graph.Mail -ErrorAction Stop
@@ -22,7 +22,7 @@ function Connect-MailHawkGraph {
     return $true
 }
 
-function Get-MailHawkInboxSummaryGraph {
+function Get-PacketRatInboxSummaryGraph {
     [CmdletBinding()]
     param(
         [int]$MaxEmails = 40,
@@ -31,7 +31,7 @@ function Get-MailHawkInboxSummaryGraph {
         $Store = $null
     )
 
-    $null = Connect-MailHawkGraph
+    $null = Connect-PacketRatGraph
 
     $cutoff = (Get-Date).AddDays(-$DaysBack).ToString('o')
     $filter = "receivedDateTime ge $cutoff"
@@ -54,7 +54,7 @@ function Get-MailHawkInboxSummaryGraph {
         } catch {}
 
         $isDirect=$false
-        $myAddress=[string]$env:MAILHAWK_USER_EMAIL
+        $myAddress=[string]$env:PACKETRAT_USER_EMAIL
         if(-not $myAddress){try{$myAddress=[string](Get-MgContext).Account}catch{}}
         if($myAddress){
             foreach($recipient in @($m.ToRecipients)){
@@ -82,13 +82,13 @@ function Get-MailHawkInboxSummaryGraph {
             $preview = '[REDACTED - PII heuristic]'
         }
 
-        $fp = Get-MailHawkMailFingerprint -EntryID $m.Id -Subject $subject -FromEmail $fromEmail -Received $received
+        $fp = Get-PacketRatMailFingerprint -EntryID $m.Id -Subject $subject -FromEmail $fromEmail -Received $received
 
         $userDismissed = $false
         if ($Store) {
-            $userDismissed = Test-MailHawkDismissed -Store $Store -Key $fp
+            $userDismissed = Test-PacketRatDismissed -Store $Store -Key $fp
             if (-not $userDismissed) {
-                $userDismissed = Test-MailHawkDismissed -Store $Store -Key "id:$($m.Id)"
+                $userDismissed = Test-PacketRatDismissed -Store $Store -Key "id:$($m.Id)"
             }
         }
 

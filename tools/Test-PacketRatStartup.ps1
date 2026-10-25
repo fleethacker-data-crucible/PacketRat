@@ -1,14 +1,14 @@
 #requires -Version 5.1
 <#
   Safe workstation startup preflight: read-only checks plus ephemeral TCP bind.
-  Does not load ARC, connect to Outlook, query email, or change security policy.
+  Does not load Lazarette, connect to Outlook, query email, or change security policy.
 #>
 [CmdletBinding()]
 param()
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 $failures=New-Object System.Collections.Generic.List[string]
-Write-Host '=== MailHawk Startup Preflight ===' -ForegroundColor Cyan
+Write-Host '=== PacketRat Startup Preflight ===' -ForegroundColor Cyan
 Write-Host ('PowerShell version: ' + $PSVersionTable.PSVersion.ToString())
 Write-Host ('PowerShell edition: ' + $PSVersionTable.PSEdition)
 Write-Host ('Process policy: ' + (Get-ExecutionPolicy -Scope Process))
@@ -21,24 +21,24 @@ if(($machinePolicy -and $machinePolicy -ne 'Undefined') -or ($userPolicy -and $u
 }
 if($PSVersionTable.PSVersion.Major -lt 5){$failures.Add('Windows PowerShell 5.1 or later is required.')}
 $required=@(
-  'Start-MailHawk-Web.ps1','Stop-MailHawk.ps1','MailHawk.bat','MailHawk-CLI.bat',
-  'Private/MailHawkLifecycle.ps1',
+  'Start-PacketRat-Web.ps1','Stop-PacketRat.ps1','Launch-PacketRat.bat','PacketRat-CLI.bat',
+  'Private/PacketRatLifecycle.ps1',
   'Web/index.html','Web/app.js','Web/style.css',
-  'Web/mailhawk-logo.png','Web/mailhawk-icon.png',
-  'Private/ArcBridge.ps1','Private/MailHawkLlm.ps1',
-  'Private/MailHawkStore.ps1','Private/Get-OutlookMailSummary.ps1',
-  'Private/MailHawkDraft.ps1','Private/MailHawkGraph.ps1',
-  'Private/MailHawkLogging.ps1','Public/Invoke-MailHawkInboxAnalysis.ps1'
+  'Web/packetrat-logo.png','Web/packetrat-icon.png',
+  'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1',
+  'Private/PacketRatStore.ps1','Private/Get-OutlookMailSummary.ps1',
+  'Private/PacketRatDraft.ps1','Private/PacketRatGraph.ps1',
+  'Private/PacketRatLogging.ps1','Public/Invoke-PacketRatInboxAnalysis.ps1'
 )
 foreach($relative in $required) {
   $path=Join-Path $root $relative
   if(-not (Test-Path -LiteralPath $path -PathType Leaf)){$failures.Add('Missing file: '+$relative)}
 }
-foreach($relative in @('Start-MailHawk-Web.ps1','Stop-MailHawk.ps1','Private/MailHawkLifecycle.ps1','tools/Test-MailHawkStartup.ps1',
-  'Private/ArcBridge.ps1','Private/MailHawkLlm.ps1','Private/MailHawkStore.ps1',
-  'Private/Get-OutlookMailSummary.ps1','Private/MailHawkDraft.ps1',
-  'Private/MailHawkGraph.ps1','Private/MailHawkLogging.ps1',
-  'Public/Invoke-MailHawkInboxAnalysis.ps1')) {
+foreach($relative in @('Start-PacketRat-Web.ps1','Stop-PacketRat.ps1','Private/PacketRatLifecycle.ps1','tools/Test-PacketRatStartup.ps1',
+  'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1','Private/PacketRatStore.ps1',
+  'Private/Get-OutlookMailSummary.ps1','Private/PacketRatDraft.ps1',
+  'Private/PacketRatGraph.ps1','Private/PacketRatLogging.ps1',
+  'Public/Invoke-PacketRatInboxAnalysis.ps1')) {
   $path=Join-Path $root $relative
   if(-not(Test-Path -LiteralPath $path)){continue}
   $tokens=$null; $errors=$null
@@ -57,5 +57,5 @@ if($failures.Count -gt 0){
   foreach($entry in $failures){Write-Host (' - '+$entry) -ForegroundColor Red}
   exit 1
 }
-Write-Host 'Preflight OK. Real Outlook, AI provider and ARC credentials were not tested.' -ForegroundColor Green
+Write-Host 'Preflight OK. Real Outlook, AI provider and Lazarette credentials were not tested.' -ForegroundColor Green
 exit 0
