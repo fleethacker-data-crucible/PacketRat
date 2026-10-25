@@ -78,7 +78,7 @@ function demoStructuredReport(){
  ];
 }
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
-function demoStore(){try{migrateStorageKey(sessionStorage,'mailhawk-demo-store','packetrat-demo-store')}catch{}try{const x=JSON.parse(sessionStorage.getItem('packetrat-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
+function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('packetrat-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
 function demoPersist(){sessionStorage.setItem('packetrat-demo-store',JSON.stringify(store));}
 async function api(route,data){
  if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'PACKETRAT_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
