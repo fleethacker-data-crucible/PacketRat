@@ -1,7 +1,7 @@
-# MailHawk - LLM client (compatible with Cascade GenAi / Grok endpoints)
+# PacketRat - LLM client (compatible with Halyard GenAi / Grok endpoints)
 #requires -Version 5.1
 
-$script:MailHawkLlmDefaults = @{
+$script:PacketRatLlmDefaults = @{
     GrokUrl    = 'https://advana-jupiter.cloud.databricks.mil/serving-endpoints/databricks-grok-4-6/invocations'
     GrokModel  = 'system.ai.grok-4-6'
     GenAiUrl   = 'https://api.genai.mil/v1/chat/completions'
@@ -9,31 +9,32 @@ $script:MailHawkLlmDefaults = @{
 }
 
 # Runtime-only credential selection. Never write manually entered tokens to files.
-$script:MailHawkCredentialSource = 'ARC'
-$script:MailHawkManualTokens = @{ GenAi = $null; Grok = $null }
+# 'ARC' is the internal credential-source value shared with Web/app.js (kept for compatibility); it means Lazarette.
+$script:PacketRatCredentialSource = 'ARC'
+$script:PacketRatManualTokens = @{ GenAi = $null; Grok = $null }
 
-function Get-MailHawkCredentialStatus {
+function Get-PacketRatCredentialStatus {
     [CmdletBinding()]
     param()
     $arcFound = $false
-    if (Get-Command Find-MailHawkArcRoot -ErrorAction SilentlyContinue) {
-        $arcFound = [bool](Find-MailHawkArcRoot)
+    if (Get-Command Find-PacketRatLazaretteRoot -ErrorAction SilentlyContinue) {
+        $arcFound = [bool](Find-PacketRatLazaretteRoot)
     }
     return @{
-        source = $script:MailHawkCredentialSource
+        source = $script:PacketRatCredentialSource
         manual = @{
-            GenAi = -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.GenAi)
-            Grok = -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.Grok)
+            GenAi = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.GenAi)
+            Grok = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.Grok)
         }
         arcDetected = $arcFound
         arcItems = @{
-            GenAi = Resolve-MailHawkArcServiceName -Profile GenAi
-            Grok = Resolve-MailHawkArcServiceName -Profile Grok
+            GenAi = Resolve-PacketRatLazaretteServiceName -Profile GenAi
+            Grok = Resolve-PacketRatLazaretteServiceName -Profile Grok
         }
     }
 }
 
-function Set-MailHawkCredentialConfiguration {
+function Set-PacketRatCredentialConfiguration {
     [CmdletBinding()]
     param(
         [ValidateSet('ARC','Manual')][string]$Source,
@@ -41,8 +42,8 @@ function Set-MailHawkCredentialConfiguration {
         [AllowEmptyString()][string]$Token = ''
     )
     if ($Source -eq 'ARC') {
-        $script:MailHawkManualTokens.GenAi = $null
-        $script:MailHawkManualTokens.Grok = $null
+        $script:PacketRatManualTokens.GenAi = $null
+        $script:PacketRatManualTokens.Grok = $null
     } elseif (-not [string]::IsNullOrWhiteSpace($Token)) {
         if ($Token.Length -gt 8192 -or $Token -match '[\r\n\x00-\x1F]') {
             throw 'Manual token is invalid (length/control characters).'
@@ -50,21 +51,21 @@ function Set-MailHawkCredentialConfiguration {
         $clean = $Token.Trim().Trim("'").Trim('"')
         if ($clean -match '^(?i)Bearer\s+(.+)$') { $clean = $Matches[1].Trim() }
         if ([string]::IsNullOrWhiteSpace($clean)) { throw 'Manual token cannot be blank.' }
-        $script:MailHawkManualTokens[$Profile] = $clean
+        $script:PacketRatManualTokens[$Profile] = $clean
     }
-    $script:MailHawkCredentialSource = $Source
-    return Get-MailHawkCredentialStatus
+    $script:PacketRatCredentialSource = $Source
+    return Get-PacketRatCredentialStatus
 }
 
-function Clear-MailHawkManualTokens {
+function Clear-PacketRatManualTokens {
     [CmdletBinding()]
     param()
-    $script:MailHawkManualTokens.GenAi = $null
-    $script:MailHawkManualTokens.Grok = $null
-    return Get-MailHawkCredentialStatus
+    $script:PacketRatManualTokens.GenAi = $null
+    $script:PacketRatManualTokens.Grok = $null
+    return Get-PacketRatCredentialStatus
 }
 
-function Get-MailHawkLlmConfig {
+function Get-PacketRatLlmConfig {
     [CmdletBinding()]
     param(
         [ValidateSet('Auto', 'Grok', 'GenAi')]
@@ -78,9 +79,9 @@ function Get-MailHawkLlmConfig {
     if ($Profile -eq 'Auto') {
         if ($url -match 'databricks\.mil|serving-endpoints') { $resolved = 'Grok' }
         elseif ($url -match 'genai\.mil') { $resolved = 'GenAi' }
-        elseif ($script:MailHawkCredentialSource -eq 'Manual' -and
-                [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.GenAi) -and
-                -not [string]::IsNullOrWhiteSpace([string]$script:MailHawkManualTokens.Grok)) {
+        elseif ($script:PacketRatCredentialSource -eq 'Manual' -and
+                [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.GenAi) -and
+                -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.Grok)) {
             $resolved = 'Grok'
         }
         elseif (-not [string]::IsNullOrWhiteSpace($env:DATABRICKS_TOKEN) -and [string]::IsNullOrWhiteSpace($env:GENAI_TOKEN)) {
@@ -95,12 +96,12 @@ function Get-MailHawkLlmConfig {
     }
 
     if ([string]::IsNullOrWhiteSpace($url)) {
-        if ($resolved -eq 'GenAi') { $url = $script:MailHawkLlmDefaults.GenAiUrl }
-        else { $url = $script:MailHawkLlmDefaults.GrokUrl }
+        if ($resolved -eq 'GenAi') { $url = $script:PacketRatLlmDefaults.GenAiUrl }
+        else { $url = $script:PacketRatLlmDefaults.GrokUrl }
     }
     if ([string]::IsNullOrWhiteSpace($model)) {
-        if ($resolved -eq 'GenAi') { $model = $script:MailHawkLlmDefaults.GenAiModel }
-        else { $model = $script:MailHawkLlmDefaults.GrokModel }
+        if ($resolved -eq 'GenAi') { $model = $script:PacketRatLlmDefaults.GenAiModel }
+        else { $model = $script:PacketRatLlmDefaults.GrokModel }
     }
 
     return [pscustomobject]@{
@@ -110,13 +111,13 @@ function Get-MailHawkLlmConfig {
     }
 }
 
-function Get-MailHawkLlmToken {
+function Get-PacketRatLlmToken {
     <#
     .SYNOPSIS
       Profile-isolated tokens:
-        GenAi  -> GENAI_TOKEN  / ARC service genapi
-        Grok   -> DATABRICKS_TOKEN / ARC service advana-api
-      Env overrides: MAILHAWK_ARC_ITEM_* / CASCADE_ARC_ITEM_* preferred over hard-coded names.
+        GenAi  -> GENAI_TOKEN  / Lazarette item genapi
+        Grok   -> DATABRICKS_TOKEN / Lazarette item advana-api
+      Env overrides: PACKETRAT_LAZARETTE_ITEM_*, then MAILHAWK_ARC_ITEM_* / CASCADE_ARC_ITEM_*, preferred over hard-coded names.
       Never prints secret values (length only).
     #>
     [CmdletBinding()]
@@ -127,7 +128,7 @@ function Get-MailHawkLlmToken {
     )
 
     if ($ForProfile -eq 'Auto') {
-        $cfg = Get-MailHawkLlmConfig -Profile Auto
+        $cfg = Get-PacketRatLlmConfig -Profile Auto
         $ForProfile = $cfg.Profile
     }
 
@@ -137,9 +138,9 @@ function Get-MailHawkLlmToken {
         $envTarget = 'DATABRICKS_TOKEN'
     }
 
-    # Manual credentials are session-only and never fall back to environment or ARC.
-    if ($script:MailHawkCredentialSource -eq 'Manual') {
-        $manual = [string]$script:MailHawkManualTokens[$ForProfile]
+    # Manual credentials are session-only and never fall back to environment or Lazarette.
+    if ($script:PacketRatCredentialSource -eq 'Manual') {
+        $manual = [string]$script:PacketRatManualTokens[$ForProfile]
         if ([string]::IsNullOrWhiteSpace($manual)) {
             throw ("No manual token configured for {0}. Open Configuration > Credentials, select Manual, enter an approved token and click Apply." -f $ForProfile)
         }
@@ -157,38 +158,38 @@ function Get-MailHawkLlmToken {
         return $env:LLM_TOKEN.Trim()
     }
 
-    # 3) ARC vault — resolve canonical (or env-overridden) service name
-    $arcItem = Resolve-MailHawkArcServiceName -Profile $ForProfile
+    # 3) Lazarette vault — resolve canonical (or env-overridden) service name
+    $arcItem = Resolve-PacketRatLazaretteServiceName -Profile $ForProfile
 
-    if (Get-Command Import-MailHawkArcSession -ErrorAction SilentlyContinue) {
-        Write-Host '[*] Loading ARC vault (on-demand, pm.ps1 once)...' -ForegroundColor DarkGray
+    if (Get-Command Import-PacketRatLazaretteSession -ErrorAction SilentlyContinue) {
+        Write-Host '[*] Loading Lazarette vault (on-demand, once per process)...' -ForegroundColor DarkGray
         try {
-            $null = Import-MailHawkArcSession -Quiet
+            $null = Import-PacketRatLazaretteSession -Quiet
         } catch {
-            Write-Host ("[!] ARC load skipped: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+            Write-Host ("[!] Lazarette load skipped: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
         }
     }
 
-    if (Get-Command Get-MailHawkArcSecretByName -ErrorAction SilentlyContinue) {
+    if (Get-Command Get-PacketRatLazaretteSecretByName -ErrorAction SilentlyContinue) {
         try {
-            Write-Host ("[*] Looking up ARC service '{0}'..." -f $arcItem) -ForegroundColor DarkGray
-            $got = Get-MailHawkArcSecretByName -ServiceName $arcItem
+            Write-Host ("[*] Looking up Lazarette item '{0}'..." -f $arcItem) -ForegroundColor DarkGray
+            $got = Get-PacketRatLazaretteSecretByName -ServiceName $arcItem
             if (-not [string]::IsNullOrWhiteSpace($got)) {
                 $plain = [string]$got.Trim()
                 Set-Item -Path "Env:$envTarget" -Value $plain
                 # length only — never print secret material
-                Write-Host ("[*] Loaded {0} from ARC service '{1}' (len={2})" -f $envTarget, $arcItem, $plain.Length) -ForegroundColor DarkGray
+                Write-Host ("[*] Loaded {0} from Lazarette item '{1}' (len={2})" -f $envTarget, $arcItem, $plain.Length) -ForegroundColor DarkGray
                 return $plain
             }
         } catch {
-            Write-Verbose "ARC secret load failed: $($_.Exception.Message)"
+            Write-Verbose "Lazarette secret load failed: $($_.Exception.Message)"
         }
     }
 
-    throw ("No managed LLM token available for {0}. Check ARC is installed/unlocked with service {1}, or switch to Manual under MailHawk Configuration > Credentials." -f $ForProfile, $arcItem)
+    throw ("No managed LLM token available for {0}. Check Lazarette is installed/unlocked with item {1}, or switch to Manual under PacketRat Configuration > Credentials." -f $ForProfile, $arcItem)
 }
 
-function ConvertTo-MailHawkLlmText {
+function ConvertTo-PacketRatLlmText {
     <#
      .SYNOPSIS
        Extract text from strings, typed content block arrays, or nested provider content.
@@ -201,7 +202,7 @@ function ConvertTo-MailHawkLlmText {
     if($Value -is [System.Collections.IEnumerable] -and $Value -isnot [System.Collections.IDictionary] -and $Value -isnot [string]){
         $pieces=New-Object System.Collections.Generic.List[string]
         foreach($piece in $Value){
-            $t=ConvertTo-MailHawkLlmText -Value $piece -Depth ($Depth+1)
+            $t=ConvertTo-PacketRatLlmText -Value $piece -Depth ($Depth+1)
             if(-not [string]::IsNullOrWhiteSpace($t)){[void]$pieces.Add($t)}
         }
         return ($pieces -join "`n")
@@ -214,16 +215,16 @@ function ConvertTo-MailHawkLlmText {
             $part=$Value.$prop
         }
         if($null -eq $part){continue}
-        $t=ConvertTo-MailHawkLlmText -Value $part -Depth ($Depth+1)
+        $t=ConvertTo-PacketRatLlmText -Value $part -Depth ($Depth+1)
         if(-not [string]::IsNullOrWhiteSpace($t)){return $t}
     }
     return ''
 }
 
-function Invoke-MailHawkChat {
+function Invoke-PacketRatChat {
     <#
     .SYNOPSIS
-      Call GenAi or Grok endpoint (same shape as Cascade Invoke-CascadeChat).
+      Call GenAi or Grok endpoint (same shape as Halyard's chat call, formerly Cascade Invoke-CascadeChat).
     #>
     [CmdletBinding()]
     param(
@@ -237,12 +238,12 @@ function Invoke-MailHawkChat {
         [int]$TimeoutSec = 180
     )
 
-    $cfg = Get-MailHawkLlmConfig -Profile $Profile
+    $cfg = Get-PacketRatLlmConfig -Profile $Profile
     if ($Model) {
         $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model }
     }
 
-    $token = Get-MailHawkLlmToken -ForProfile $cfg.Profile
+    $token = Get-PacketRatLlmToken -ForProfile $cfg.Profile
     $token = $token.Trim().Trim("'").Trim('"')
     if ($token -match '^(?i)Bearer\s+(.+)$') { $token = $Matches[1].Trim() }
     $token = ($token -replace '[\r\n]', '').Trim()
@@ -280,7 +281,7 @@ function Invoke-MailHawkChat {
     $json  = $payload | ConvertTo-Json -Depth 8
     $bytes = [Text.Encoding]::UTF8.GetBytes($json)
 
-    Write-Host ("[*] MailHawk LLM  profile={0}  model={1}" -f $cfg.Profile, $cfg.Model) -ForegroundColor DarkCyan
+    Write-Host ("[*] PacketRat LLM  profile={0}  model={1}" -f $cfg.Profile, $cfg.Model) -ForegroundColor DarkCyan
     Write-Host ("    {0}" -f $cfg.Url) -ForegroundColor DarkGray
 
     try {
@@ -302,16 +303,16 @@ function Invoke-MailHawkChat {
     # Avoid casting arrays into "System.Object[]" instead of real report text.
     $text=''
     if($resp.choices -and $resp.choices[0].message){
-        $text=ConvertTo-MailHawkLlmText -Value $resp.choices[0].message.content
+        $text=ConvertTo-PacketRatLlmText -Value $resp.choices[0].message.content
     }
     if(-not $text -and $resp.choices -and $resp.choices[0].text){
-        $text=ConvertTo-MailHawkLlmText -Value $resp.choices[0].text
+        $text=ConvertTo-PacketRatLlmText -Value $resp.choices[0].text
     }
     if(-not $text -and $resp.candidates -and $resp.candidates[0].content){
-        $text=ConvertTo-MailHawkLlmText -Value $resp.candidates[0].content
+        $text=ConvertTo-PacketRatLlmText -Value $resp.candidates[0].content
     }
     if(-not $text -and $resp.content){
-        $text=ConvertTo-MailHawkLlmText -Value $resp.content
+        $text=ConvertTo-PacketRatLlmText -Value $resp.content
     }
     if(-not $text){throw 'The AI endpoint returned no recognized text content.'}
 

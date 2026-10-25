@@ -10,7 +10,7 @@ new vm.Script(app);
 const context={};
 vm.createContext(context);
 vm.runInContext(report,context);
-const ui=context.MailHawkReport;
+const ui=context.PacketRatReport;
 const samples=[
  {Index:1,Key:'verified-1',Subject:'Access approval',From:'Reviewer',Section:'Must Reply',Reason:'Direct task',Urgency:'High',Tracked:true},
  {Index:2,Key:'verified-2',Subject:'Routine digest',From:'Digest',Section:'No Action Needed',Reason:'FYI',Urgency:'Low',Tracked:false}

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  MailHawk - Inbox triage GUI
+  PacketRat - Inbox triage GUI
 #>
 #requires -Version 5.1
 [CmdletBinding()]
@@ -35,7 +35,12 @@ if (-not $ConsoleOnly) {
 }
 
 # --- env ---
-$envFile = Join-Path $Root 'Config\mailhawk.env'
+$envFile = Join-Path $Root 'Config\packetrat.env'
+# Former name: an installed copy's Config\mailhawk.env is still read when the new file is absent.
+if (-not (Test-Path -LiteralPath $envFile)) {
+    $legacyEnv = Join-Path $Root 'Config\mailhawk.env'
+    if (Test-Path -LiteralPath $legacyEnv) { $envFile = $legacyEnv }
+}
 if (Test-Path -LiteralPath $envFile) {
     Get-Content -LiteralPath $envFile | ForEach-Object {
         $line = $_.Trim()
@@ -46,42 +51,44 @@ if (Test-Path -LiteralPath $envFile) {
             if ($k) { Set-Item -Path "Env:$k" -Value $v -Force }
         }
     }
-    Write-Host 'Loaded Config\mailhawk.env' -ForegroundColor DarkGray
+    Write-Host ('Loaded Config\' + (Split-Path $envFile -Leaf)) -ForegroundColor DarkGray
 }
-if ($env:MAILHAWK_LLM_PROFILE -and $Profile -eq 'Auto') { $Profile = $env:MAILHAWK_LLM_PROFILE }
-if ($env:MAILHAWK_PROVIDER) { $Provider = $env:MAILHAWK_PROVIDER }
-
 # --- modules ---
-. (Join-Path $Root 'Private\ArcBridge.ps1')
-. (Join-Path $Root 'Private\MailHawkLogging.ps1')
-. (Join-Path $Root 'Private\MailHawkLlm.ps1')
-. (Join-Path $Root 'Private\MailHawkStore.ps1')
-. (Join-Path $Root 'Private\MailHawkRules.ps1')
-. (Join-Path $Root 'Private\MailHawkProtocol.ps1')
-. (Join-Path $Root 'Private\MailHawkReport.ps1')
+. (Join-Path $Root 'Private\LazaretteBridge.ps1')
+. (Join-Path $Root 'Private\PacketRatLogging.ps1')
+. (Join-Path $Root 'Private\PacketRatLlm.ps1')
+. (Join-Path $Root 'Private\PacketRatStore.ps1')
+. (Join-Path $Root 'Private\PacketRatRules.ps1')
+. (Join-Path $Root 'Private\PacketRatProtocol.ps1')
+. (Join-Path $Root 'Private\PacketRatReport.ps1')
 . (Join-Path $Root 'Private\Get-OutlookMailSummary.ps1')
-. (Join-Path $Root 'Private\MailHawkGraph.ps1')
-. (Join-Path $Root 'Private\MailHawkDraft.ps1')
-. (Join-Path $Root 'Public\Invoke-MailHawkInboxAnalysis.ps1')
+. (Join-Path $Root 'Private\PacketRatGraph.ps1')
+. (Join-Path $Root 'Private\PacketRatDraft.ps1')
+. (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
 
-Write-Host '[*] MailHawk modules loaded' -ForegroundColor DarkGray
-Write-MailHawkLog -Level INFO -Message 'MailHawk GUI/console starting' -Root $Root
+# PACKETRAT_* settings win; former MAILHAWK_* names are copied in only when the new ones are unset.
+Initialize-PacketRatLegacyEnvironment
+if ($env:PACKETRAT_LLM_PROFILE -and $Profile -eq 'Auto') { $Profile = $env:PACKETRAT_LLM_PROFILE }
+if ($env:PACKETRAT_PROVIDER) { $Provider = $env:PACKETRAT_PROVIDER }
 
-function ConvertTo-MailHawkAscii {
+Write-Host '[*] PacketRat modules loaded' -ForegroundColor DarkGray
+Write-PacketRatLog -Level INFO -Message 'PacketRat GUI/console starting' -Root $Root
+
+function ConvertTo-PacketRatAscii {
     param([string]$Text)
     if ($null -eq $Text) { return '' }
     return [regex]::Replace($Text, '[^\x09\x0A\x0D\x20-\x7E]', '')
 }
 
-function Save-MailHawkReport {
+function Save-PacketRatReport {
     param([string]$Text)
     $logDir = Join-Path $Root 'Logs'
     if (-not (Test-Path -LiteralPath $logDir)) {
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null
     }
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    $path = Join-Path $logDir "MailHawkReport_$stamp.md"
-    $clean = ConvertTo-MailHawkAscii -Text $Text
+    $path = Join-Path $logDir "PacketRatReport_$stamp.md"
+    $clean = ConvertTo-PacketRatAscii -Text $Text
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($path, $clean, $utf8NoBom)
     return $path
@@ -90,18 +97,18 @@ function Save-MailHawkReport {
 # ========================= CONSOLE =========================
 if ($ConsoleOnly) {
     Write-Host ''
-    Write-Host '=== MailHawk (Console) ===' -ForegroundColor Cyan
-    $result = Invoke-MailHawkInboxAnalysis -Profile $Profile -Provider $Provider -MaxEmails $MaxEmails -DaysBack $DaysBack -Root $Root
+    Write-Host '=== PacketRat (Console) ===' -ForegroundColor Cyan
+    $result = Invoke-PacketRatInboxAnalysis -Profile $Profile -Provider $Provider -MaxEmails $MaxEmails -DaysBack $DaysBack -Root $Root
     if (-not $result.Success) {
         Write-Host $result.Message -ForegroundColor Yellow
         return
     }
     Write-Host ''
-    Write-Host (ConvertTo-MailHawkAscii $result.Report)
+    Write-Host (ConvertTo-PacketRatAscii $result.Report)
     Write-Host ''
     Write-Host '--- Must Reply ---' -ForegroundColor Cyan
     $result.MustReply | Format-Table Index, Urgency, From, Subject -AutoSize
-    $saved = Save-MailHawkReport -Text $result.Report
+    $saved = Save-PacketRatReport -Text $result.Report
     Write-Host "Report saved: $saved" -ForegroundColor DarkGray
     return
 }
@@ -120,13 +127,13 @@ $logDir = Join-Path $Root 'Logs'
 if (-not (Test-Path -LiteralPath $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
-$uiErrorLog = Join-Path $logDir 'mailhawk-error.log'
+$uiErrorLog = Join-Path $logDir 'packetrat-error.log'
 try {
     Add-Type -TypeDefinition @"
 using System;
 using System.IO;
 using System.Windows.Forms;
-public static class MailHawkUiGuard {
+public static class PacketRatUiGuard {
     public static string LogPath;
     private static bool _armed;
     public static void Arm(string path) {
@@ -151,15 +158,15 @@ public static class MailHawkUiGuard {
                 File.AppendAllText(LogPath, block);
             }
             MessageBox.Show(
-                (ex != null ? ex.Message : "Unknown error") + "\n\nLogged to mailhawk-error.log",
-                "MailHawk",
+                (ex != null ? ex.Message : "Unknown error") + "\n\nLogged to packetrat-error.log",
+                "PacketRat",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         } catch { }
     }
 }
 "@ -ReferencedAssemblies System.Windows.Forms.dll, System.Drawing.dll
-    [MailHawkUiGuard]::Arm($uiErrorLog)
+    [PacketRatUiGuard]::Arm($uiErrorLog)
     Write-Host '[*] UI exception guard armed' -ForegroundColor DarkGray
 } catch {
     Write-Host "[!] UI guard not armed: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -169,7 +176,7 @@ $script:LastResult = $null
 $script:CurrentDraftEntryID = $null
 $script:Store = $null
 try {
-    $script:Store = Get-MailHawkStore -Root $Root
+    $script:Store = Get-PacketRatStore -Root $Root
 } catch {
     Write-Host "[!] Store load failed: $($_.Exception.Message)" -ForegroundColor Yellow
     $script:Store = [pscustomobject]@{ Version = 1; Dismissals = @(); Checklist = @() }
@@ -178,7 +185,7 @@ try {
 Write-Host '[*] Building window...' -ForegroundColor DarkGray
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'MailHawk'
+$form.Text = 'PacketRat'
 $form.Width = 1200
 $form.Height = 820
 $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
@@ -426,7 +433,7 @@ $script:lblStatusRef = $lblStatus
 
 function Refresh-ChecklistGrid {
     try {
-        $script:Store = Get-MailHawkStore -Root $Root
+        $script:Store = Get-PacketRatStore -Root $Root
         $grid.Rows.Clear()
         $count = 0
         foreach ($r in @($script:Store.Checklist)) {
@@ -448,16 +455,16 @@ function Refresh-ChecklistGrid {
             [void]$grid.Rows.Add($status, $urg, $from, $subj, $why, $key, $eid)
             $count++
         }
-        Write-MailHawkLog -Level DEBUG -Message ("Checklist grid rows={0}" -f $count) -Root $Root
+        Write-PacketRatLog -Level DEBUG -Message ("Checklist grid rows={0}" -f $count) -Root $Root
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'Refresh-ChecklistGrid' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'Refresh-ChecklistGrid' -Root $Root } catch {}
         Safe-Status "Checklist refresh error: $($_.Exception.Message)"
     }
 }
 
 function Refresh-DismissGrid {
     try {
-        $script:Store = Get-MailHawkStore -Root $Root
+        $script:Store = Get-PacketRatStore -Root $Root
         $gridDismiss.Rows.Clear()
         foreach ($d in @($script:Store.Dismissals)) {
             if ($null -eq $d) { continue }
@@ -470,7 +477,7 @@ function Refresh-DismissGrid {
             [void]$gridDismiss.Rows.Add($subj, $from, $reason, $at, $key)
         }
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'Refresh-DismissGrid' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'Refresh-DismissGrid' -Root $Root } catch {}
     }
 }
 
@@ -498,7 +505,7 @@ function Get-SelectedChecklistRow {
             EntryID = & $get $row 6
         }
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'Get-SelectedChecklistRow' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'Get-SelectedChecklistRow' -Root $Root } catch {}
         return $null
     }
 }
@@ -511,7 +518,7 @@ $btnAnalyze.Add_Click({
         $tabs.SelectedTab = $tabReport
         $form.Refresh()
         [System.Windows.Forms.Application]::DoEvents()
-        Write-MailHawkLog -Level INFO -Message 'Analyze button clicked' -Root $Root
+        Write-PacketRatLog -Level INFO -Message 'Analyze button clicked' -Root $Root
 
         $selectedProfile = 'Auto'
         try { if ($cmbProfile.SelectedItem) { $selectedProfile = [string]$cmbProfile.SelectedItem } } catch {}
@@ -520,7 +527,7 @@ $btnAnalyze.Add_Click({
         $max = 40
         try { $max = [int]$numMax.Value } catch {}
 
-        $result = Invoke-MailHawkInboxAnalysis -Profile $selectedProfile -Provider $selectedProvider -MaxEmails $max -DaysBack $DaysBack -Root $Root
+        $result = Invoke-PacketRatInboxAnalysis -Profile $selectedProfile -Provider $selectedProvider -MaxEmails $max -DaysBack $DaysBack -Root $Root
         $script:LastResult = $result
         if ($null -ne $result.Store) { $script:Store = $result.Store }
 
@@ -528,14 +535,14 @@ $btnAnalyze.Add_Click({
         try { if ($result.Report) { $reportLen = $result.Report.Length } } catch {}
         $mrCount = 0
         try { $mrCount = @($result.MustReply).Count } catch {}
-        Write-MailHawkLog -Level INFO -Message ("Analyze returned Success={0} ReportLen={1} MustReply={2}" -f $result.Success, $reportLen, $mrCount) -Root $Root
+        Write-PacketRatLog -Level INFO -Message ("Analyze returned Success={0} ReportLen={1} MustReply={2}" -f $result.Success, $reportLen, $mrCount) -Root $Root
 
         if (-not $result.Success) {
             $txtReport.Text = [string]$result.Message
             Safe-Status 'No emails'
         } else {
             $header = @"
-MailHawk Report
+PacketRat Report
 Generated : $($result.GeneratedAt)
 Profile   : $($result.Profile)  |  Model: $($result.Model)  |  Provider: $($result.Provider)
 Analyzed  : $($result.AnalyzedCount) emails
@@ -549,13 +556,13 @@ Must-reply extracted: $mrCount
             $body = ''
             try { $body = [string]$result.Report } catch {}
             $body = ($body -replace "`r`n", "`n" -replace "`r", "`n") -replace "`n", "`r`n"
-            $full = ConvertTo-MailHawkAscii ($header + $body)
+            $full = ConvertTo-PacketRatAscii ($header + $body)
             $txtReport.Text = $full
             try {
                 $txtReport.SelectionStart = 0
                 $txtReport.ScrollToCaret()
             } catch {}
-            $saved = Save-MailHawkReport -Text $full
+            $saved = Save-PacketRatReport -Text $full
             Safe-Status "Done - saved $saved | Must-reply: $mrCount"
             Refresh-ChecklistGrid
             Refresh-DismissGrid
@@ -566,14 +573,14 @@ Must-reply extracted: $mrCount
             }
         }
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'AnalyzeInbox' -Root $Root } catch {}
-        $txtReport.Text = "ERROR:`r`n$($_.Exception.Message)`r`n`r`nSee Logs\mailhawk-error.log"
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'AnalyzeInbox' -Root $Root } catch {}
+        $txtReport.Text = "ERROR:`r`n$($_.Exception.Message)`r`n`r`nSee Logs\packetrat-error.log"
         $tabs.SelectedTab = $tabReport
         Safe-Status 'Error'
         try {
             [System.Windows.Forms.MessageBox]::Show(
-                "Analyze failed:`n$($_.Exception.Message)`n`nDetails: Logs\mailhawk-error.log",
-                'MailHawk Error')
+                "Analyze failed:`n$($_.Exception.Message)`n`nDetails: Logs\packetrat-error.log",
+                'PacketRat Error')
         } catch {}
     } finally {
         try { $btnAnalyze.Enabled = $true } catch {}
@@ -591,10 +598,10 @@ $btnOpen.Add_Click({
             [System.Windows.Forms.MessageBox]::Show('No EntryID for this item.')
             return
         }
-        Open-MailHawkMailItem -EntryID $sel.EntryID
+        Open-PacketRatMailItem -EntryID $sel.EntryID
         Safe-Status "Opened: $($sel.Subject)"
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'OpenMail' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'OpenMail' -Root $Root } catch {}
         [System.Windows.Forms.MessageBox]::Show("Open failed: $($_.Exception.Message)")
     }
 })
@@ -627,14 +634,14 @@ $btnDraftSel.Add_Click({
         $form.Refresh()
         $prof = 'Auto'
         try { if ($cmbProfile.SelectedItem) { $prof = [string]$cmbProfile.SelectedItem } } catch {}
-        $draft = New-MailHawkDraftReply -Email $email -Profile $prof
+        $draft = New-PacketRatDraftReply -Email $email -Profile $prof
         $txtDraft.Text = [string]$draft.Draft
         $txtDraftMeta.Text = "Draft for: $($sel.Subject)  |  From: $($sel.From)"
         $script:CurrentDraftEntryID = $sel.EntryID
         $tabs.SelectedTab = $tabDraft
         Safe-Status 'Draft ready'
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'DraftReply' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'DraftReply' -Root $Root } catch {}
         [System.Windows.Forms.MessageBox]::Show("Draft failed: $($_.Exception.Message)")
         Safe-Status 'Draft error'
     }
@@ -644,11 +651,11 @@ $btnDone.Add_Click({
     try {
         $sel = Get-SelectedChecklistRow
         if ($null -eq $sel -or [string]::IsNullOrWhiteSpace($sel.Key)) { return }
-        $script:Store = Set-MailHawkChecklistStatus -Store $script:Store -Key $sel.Key -Status 'done' -Root $Root
+        $script:Store = Set-PacketRatChecklistStatus -Store $script:Store -Key $sel.Key -Status 'done' -Root $Root
         Refresh-ChecklistGrid
         Safe-Status "Marked done: $($sel.Subject)"
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'MarkDone' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'MarkDone' -Root $Root } catch {}
         [System.Windows.Forms.MessageBox]::Show("Mark done failed: $($_.Exception.Message)")
     }
 })
@@ -666,16 +673,16 @@ $btnDismiss.Add_Click({
                 'Why dismiss this item?', 'False Positive / Dismiss', $reason)
             if (-not [string]::IsNullOrWhiteSpace($input)) { $reason = $input }
         } catch {}
-        $script:Store = Add-MailHawkDismissal -Store $script:Store -Key $sel.Key -Subject $sel.Subject -From $sel.From -Reason $reason -Root $Root
-        $script:Store = Set-MailHawkChecklistStatus -Store $script:Store -Key $sel.Key -Status 'dismissed' -Notes $reason -Root $Root
+        $script:Store = Add-PacketRatDismissal -Store $script:Store -Key $sel.Key -Subject $sel.Subject -From $sel.From -Reason $reason -Root $Root
+        $script:Store = Set-PacketRatChecklistStatus -Store $script:Store -Key $sel.Key -Status 'dismissed' -Notes $reason -Root $Root
         Refresh-ChecklistGrid
         Refresh-DismissGrid
         Safe-Status "Dismissed: $($sel.Subject)"
         [System.Windows.Forms.MessageBox]::Show(
             "Dismissed. Future runs will treat this as no-action.`n`nReason: $reason",
-            'MailHawk')
+            'PacketRat')
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'Dismiss' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'Dismiss' -Root $Root } catch {}
         [System.Windows.Forms.MessageBox]::Show("Dismiss failed: $($_.Exception.Message)")
     }
 })
@@ -707,10 +714,10 @@ $btnOpenDraft.Add_Click({
             [System.Windows.Forms.MessageBox]::Show('Open-as-reply requires COM provider.')
             return
         }
-        New-MailHawkOutlookReplyDraft -EntryID $script:CurrentDraftEntryID -Body $txtDraft.Text -Display | Out-Null
+        New-PacketRatOutlookReplyDraft -EntryID $script:CurrentDraftEntryID -Body $txtDraft.Text -Display | Out-Null
         Safe-Status 'Outlook reply opened (not sent)'
     } catch {
-        try { Write-MailHawkError -ErrorRecord $_ -Context 'OpenDraft' -Root $Root } catch {}
+        try { Write-PacketRatError -ErrorRecord $_ -Context 'OpenDraft' -Root $Root } catch {}
         [System.Windows.Forms.MessageBox]::Show("Could not create reply: $($_.Exception.Message)")
     }
 })
@@ -718,8 +725,8 @@ $btnOpenDraft.Add_Click({
 Write-Host '[*] Refreshing checklist...' -ForegroundColor DarkGray
 Refresh-ChecklistGrid
 Refresh-DismissGrid
-Write-Host '[*] Opening MailHawk window...' -ForegroundColor Green
-Write-MailHawkLog -Level INFO -Message 'Showing main form' -Root $Root
+Write-Host '[*] Opening PacketRat window...' -ForegroundColor Green
+Write-PacketRatLog -Level INFO -Message 'Showing main form' -Root $Root
 try {
     $form.Add_Shown({
         try {

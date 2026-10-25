@@ -18,6 +18,34 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+def check_prefs_migration(browser, html):
+    """Rename migration: 'mailhawk-prefs' is copied forward to 'packetrat-prefs' once; the old key stays."""
+    page = browser.new_page(viewport={'width': 1450, 'height': 960})
+    errors = []
+    page.on('pageerror', lambda err: errors.append(str(err)))
+    page.set_content(html)
+    page.evaluate("""() => {
+        const mem = {'mailhawk-prefs': JSON.stringify({profile:'Grok',provider:'COM',maxEmails:77,daysBack:9})};
+        const store = {getItem:k=>Object.prototype.hasOwnProperty.call(mem,k)?mem[k]:null,setItem:(k,v)=>{mem[k]=String(v)},removeItem:k=>{delete mem[k]}};
+        window.__prefs = mem;
+        Object.defineProperty(window, 'localStorage', {configurable:true, value:store});
+        const s = {};
+        Object.defineProperty(window, 'sessionStorage', {configurable:true, value:{getItem:k=>s[k]||null,setItem:(k,v)=>s[k]=v}});
+    }""")
+    page.add_script_tag(content=(WEB/'report-experience.js').read_text())
+    page.add_script_tag(content=(WEB/'app.js').read_text())
+    page.wait_for_selector('#mOpen:text-is("3")')
+    prefs = page.evaluate('() => window.__prefs')
+    assert 'mailhawk-prefs' in prefs, 'old key must be left in place'
+    assert prefs.get('packetrat-prefs') == prefs['mailhawk-prefs'], 'old prefs copied forward'
+    assert page.locator('#maxEmails').input_value() == '77'
+    # Idempotent: an existing new key is never overwritten by the old one.
+    page.evaluate("""() => { window.__prefs['packetrat-prefs'] = JSON.stringify({maxEmails:12}); migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs'); }""")
+    assert page.evaluate("() => JSON.parse(window.__prefs['packetrat-prefs']).maxEmails") == 12
+    assert not errors, f'Browser errors: {errors}'
+    page.close()
+
+
 def run():
     with socketserver.TCPServer(('127.0.0.1', 0), Handler) as server:
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -34,7 +62,7 @@ def run():
                 html = html.replace('<link rel="stylesheet" href="style.css">','')
                 html = html.replace('<script defer src="app.js"></script>','')
                 html = html.replace('<script defer src="report-experience.js"></script>','')
-                for name in ('mailhawk-icon.png','mailhawk-logo.png'):
+                for name in ('packetrat-icon.png','packetrat-logo.png'):
                     encoded = base64.b64encode((WEB/name).read_bytes()).decode()
                     html = html.replace('src="'+name+'"','src="data:image/png;base64,'+encoded+'"')
                 page.set_content(html)
@@ -51,7 +79,7 @@ def run():
                 assert page.locator('#demoBanner').is_visible()
                 assert page.locator('.brand img').evaluate('(img) => img.naturalWidth') > 0
                 assert page.locator('.hero-art img').evaluate('(img) => img.naturalWidth') > 0
-                page.screenshot(path=str(Path(tempfile.gettempdir())/'mailhawk-overview-smoke.png'),full_page=True)
+                page.screenshot(path=str(Path(tempfile.gettempdir())/'packetrat-overview-smoke.png'),full_page=True)
                 page.locator('#priorityList .item-title').first.click()
                 page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode')")
                 page.locator('[data-metric="high"]').click()
@@ -66,7 +94,7 @@ def run():
                 page.locator('#queueSearch').fill('milestone')
                 assert page.locator('#queue .item').count()==1
                 page.locator('#queueSearch').fill('')
-                page.screenshot(path=str(Path(tempfile.gettempdir())/'mailhawk-queue-smoke.png'),full_page=True)
+                page.screenshot(path=str(Path(tempfile.gettempdir())/'packetrat-queue-smoke.png'),full_page=True)
                 page.once('dialog', lambda dialog: dialog.accept('Sample false positive'))
                 page.locator('#queue [data-act="dismiss"]').first.click()
                 page.wait_for_function("document.getElementById('mDismiss').textContent === '1'")
@@ -123,6 +151,7 @@ def run():
                 assert page.locator('#draftDialog').is_visible()
                 page.locator('#closeDialog').click()
                 assert not errors, f'Browser errors: {errors}'
+                check_prefs_migration(browser, html)
                 browser.close()
         finally:
             server.shutdown()
@@ -152,7 +181,7 @@ def run_lifecycle():
             return route.fulfill(status=404, body='Not found')
         data = file.read_bytes()
         if name == 'index.html':
-            data = data.replace(b'__MAILHAWK_NONCE__', nonce.encode())
+            data = data.replace(b'__PACKETRAT_NONCE__', nonce.encode())
         return route.fulfill(status=200, content_type=mime[file.suffix], body=data)
 
     def wait_for(predicate, what, timeout=8.0):
@@ -175,7 +204,7 @@ def run_lifecycle():
         wait_for(lambda: len(beats()) >= 1, 'first heartbeat')
         first = beats()[0]
         assert first['method'] == 'POST'
-        assert first['headers'].get('x-mailhawk-token') == nonce, 'heartbeat carries the session header'
+        assert first['headers'].get('x-packetrat-token') == nonce, 'heartbeat carries the session header'
         assert first['body']['leaving'] is False and first['body']['tab']
         assert 'token' not in first['body'], 'header heartbeats do not put the nonce in the body'
         assert 'token' not in calls[0]['path'] and '?' not in first['path']
@@ -187,7 +216,7 @@ def run_lifecycle():
         leaving = [c for c in beats() if c['body'].get('leaving')][0]
         assert leaving['body']['tab'] == old_tab
         assert leaving['body'].get('token') == nonce, 'beacon carries the nonce in its body'
-        assert 'x-mailhawk-token' not in leaving['headers'], 'sendBeacon path used, not fetch'
+        assert 'x-packetrat-token' not in leaving['headers'], 'sendBeacon path used, not fetch'
         # Reload: the new page heartbeats at once under a new tab id, inside the grace period.
         page.reload()
         wait_for(lambda: any(c['body']['tab'] != old_tab and not c['body']['leaving'] for c in beats()), 'heartbeat from reloaded page')
@@ -201,7 +230,7 @@ def run_lifecycle():
         page.locator('#endSession').click()
         wait_for(lambda: any(c['path'] == '/api/session/stop' for c in calls), 'session stop request')
         stop = [c for c in calls if c['path'] == '/api/session/stop'][0]
-        assert stop['method'] == 'POST' and stop['headers'].get('x-mailhawk-token') == nonce
+        assert stop['method'] == 'POST' and stop['headers'].get('x-packetrat-token') == nonce
         page.wait_for_selector('#sessionEnded:not(.hidden)')
         count = len(beats())
         page.wait_for_timeout(5600)

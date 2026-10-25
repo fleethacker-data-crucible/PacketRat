@@ -1,6 +1,6 @@
 #requires -Version 5.1
 # Editable, deterministic mail triage policy. No model-generated rules are executed.
-function Get-MailHawkDefaultRules {
+function Get-PacketRatDefaultRules {
     return @(
         [pscustomobject]@{Id='security';Name='Security / mandatory action';Enabled=$true;Match='SecurityAction';Value='';Effect='High'},
         [pscustomobject]@{Id='directmil';Name='Direct .mil request';Enabled=$true;Match='DirectMilRequest';Value='';Effect='High'},
@@ -10,15 +10,15 @@ function Get-MailHawkDefaultRules {
     )
 }
 
-function Initialize-MailHawkRules {
+function Initialize-PacketRatRules {
     param($Store)
     if($null -eq $Store.PSObject.Properties['Rules'] -or $null -eq $Store.Rules){
-        $Store | Add-Member -NotePropertyName Rules -NotePropertyValue @(Get-MailHawkDefaultRules) -Force
+        $Store | Add-Member -NotePropertyName Rules -NotePropertyValue @(Get-PacketRatDefaultRules) -Force
     }
     return $Store
 }
 
-function Set-MailHawkRules {
+function Set-PacketRatRules {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][array]$Rules,[string]$Root)
     if($Rules.Count -gt 30){throw 'Maximum 30 triage rules'}
@@ -41,11 +41,11 @@ function Set-MailHawkRules {
         })
     }
     $Store | Add-Member -NotePropertyName Rules -NotePropertyValue @($validated.ToArray()) -Force
-    Save-MailHawkStore -Store $Store -Root $Root
+    Save-PacketRatStore -Store $Store -Root $Root
     return $Store
 }
 
-function Test-MailHawkRule {
+function Test-PacketRatRule {
     [CmdletBinding()]
     param($Rule,$Mail)
     $sender=[string]$Mail.FromEmail
@@ -74,10 +74,10 @@ function Test-MailHawkRule {
     return $false
 }
 
-function Invoke-MailHawkRuleTriage {
+function Invoke-PacketRatRuleTriage {
     [CmdletBinding()]
     param([Parameter(Mandatory)][array]$Emails,[Parameter(Mandatory)][AllowEmptyCollection()][array]$Suggested,[Parameter(Mandatory)]$Store)
-    $null=Initialize-MailHawkRules -Store $Store
+    $null=Initialize-PacketRatRules -Store $Store
     $items=@{}
     foreach($item in $Suggested){
         if($item.Key){$items[[string]$item.Key]=$item}
@@ -90,7 +90,7 @@ function Invoke-MailHawkRuleTriage {
         $key=[string]$mail.Fingerprint
         foreach($rule in @($Store.Rules)){
             if(-not [bool]$rule.Enabled){continue}
-            if(-not (Test-MailHawkRule -Rule $rule -Mail $mail)){continue}
+            if(-not (Test-PacketRatRule -Rule $rule -Mail $mail)){continue}
             $matched++
             if($rule.Effect -eq 'Skip'){
                 if($items.ContainsKey($key)){$items.Remove($key)}

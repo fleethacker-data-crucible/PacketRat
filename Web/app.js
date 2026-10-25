@@ -1,13 +1,13 @@
 'use strict';
-/* MailHawk browser client: no secrets, external libraries, or automatic email sending. */
+/* PacketRat browser client: no secrets, external libraries, or automatic email sending. */
 const $=id=>document.getElementById(id);
 const demo=new URLSearchParams(location.search).get('demo')==='1'||document.documentElement.dataset.demo==='1';
-const token=document.querySelector('meta[name="mailhawk-token"]')?.content||'';
+const token=document.querySelector('meta[name="packetrat-token"]')?.content||'';
 const names={overview:'Overview',triage:'Action queue',report:'AI intelligence',dismissals:'Dismissal memory',settings:'Configuration'};
 let store={Checklist:[],Dismissals:[]},report='',lastRun=null,filter='all',draftKey='',busy=false,noticeTimer=null;
 let ruleDraft=null,draftVersion=null;
 let reportItems=[],reportSections=[],reportStructure=[],reportQuality=null,generatedReportText='';
-const reportUI=window.MailHawkReport;
+const reportUI=window.PacketRatReport;
 let credentialDetails=null;
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultRules=[
@@ -78,8 +78,8 @@ function demoStructuredReport(){
  ];
 }
 function demoDefault(){return {Checklist:fakeItems.map(x=>({...x})),Dismissals:[],Rules:defaultRules.map(x=>({...x})),UpdatedAt:new Date().toISOString()};}
-function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('mailhawk-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
-function demoPersist(){sessionStorage.setItem('mailhawk-demo-store',JSON.stringify(store));}
+function demoStore(){try{migrateStorageKey(sessionStorage,'mailhawk-demo-store','packetrat-demo-store')}catch{}try{const x=JSON.parse(sessionStorage.getItem('packetrat-demo-store')||'null');return x&&Array.isArray(x.Checklist)&&Array.isArray(x.Dismissals)?{...x,Rules:Array.isArray(x.Rules)?x.Rules:defaultRules.map(r=>({...r}))}:demoDefault()}catch{return demoDefault()}}
+function demoPersist(){sessionStorage.setItem('packetrat-demo-store',JSON.stringify(store));}
 async function api(route,data){
  if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'MAILHAWK_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
   if(route==='credentials/status')return {ok:true,credentials:{source:'ARC',manual:{GenAi:false,Grok:false},arcDetected:false,arcItems:{GenAi:'genapi',Grok:'advana-api'}}};
@@ -107,8 +107,8 @@ async function api(route,data){
   throw Error('Unknown demo action');
  }
  const headers={'Accept':'application/json'};
- if(data!==undefined){headers['Content-Type']='application/json';headers['X-MailHawk-Token']=token;}
- let response;try{response=await fetch('/api/'+route,{method:data!==undefined?'POST':'GET',headers,body:data!==undefined?JSON.stringify(data):undefined,cache:'no-store'})}catch{throw Error('Local MailHawk service not reachable. Relaunch MailHawk.bat.')}let payload;try{payload=await response.json()}catch{throw Error('Unexpected response from PowerShell service')}if(!response.ok||payload.ok===false)throw Error(payload.error||payload.message||`Request failed (${response.status})`);return payload;
+ if(data!==undefined){headers['Content-Type']='application/json';headers['X-PacketRat-Token']=token;}
+ let response;try{response=await fetch('/api/'+route,{method:data!==undefined?'POST':'GET',headers,body:data!==undefined?JSON.stringify(data):undefined,cache:'no-store'})}catch{throw Error('Local PacketRat service not reachable. Relaunch Launch-PacketRat.bat.')}let payload;try{payload=await response.json()}catch{throw Error('Unexpected response from PowerShell service')}if(!response.ok||payload.ok===false)throw Error(payload.error||payload.message||`Request failed (${response.status})`);return payload;
 }
 function notify(message,error=false){const el=$('notice');el.textContent=message;el.classList.toggle('error',error);el.classList.toggle('hidden',!message);clearTimeout(noticeTimer);if(message)noticeTimer=setTimeout(()=>el.classList.add('hidden'),8500)}
 function show(viewName){if(!names[viewName])return;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('hidden',el.id!==viewName));document.querySelectorAll('.nav').forEach(el=>el.classList.toggle('active',el.dataset.view===viewName));$('crumb').textContent=names[viewName];window.scrollTo({top:0,behavior:'instant'});}
@@ -218,7 +218,7 @@ function renderCredentialStatus(state){
  const gen=manual.GenAi?'set':'missing',grok=manual.Grok?'set':'missing';
  const line=state.source==='Manual'
    ?'Manual session · GenAi '+gen+' · Grok '+grok
-   :'ARC '+(state.arcDetected?'found':'not detected')+' · GenAi: '+(arc.GenAi||'genapi')+' · Grok: '+(arc.Grok||'advana-api');
+   :'Lazarette '+(state.arcDetected?'found':'not detected')+' · GenAi: '+(arc.GenAi||'genapi')+' · Grok: '+(arc.Grok||'advana-api');
  $('credentialStatus').textContent=demo?'Demo mode: no credentials accepted or stored.':line;
 }
 async function applyCredentialSource(){
@@ -304,8 +304,10 @@ async function saveTriageRules(){
   notify('Rules saved. Existing manual priorities are preserved.');
  }catch(error){notify(error.message,true)}
 }
-function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('mailhawk-prefs',JSON.stringify(cfg))}catch{}return cfg}
-function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('mailhawk-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
+// Rename migration (MailHawk -> PacketRat): copy a former storage key forward once and leave the old key in place.
+function migrateStorageKey(storage,oldKey,newKey){try{if(storage.getItem(newKey)===null){const old=storage.getItem(oldKey);if(old!==null)storage.setItem(newKey,old)}}catch{}}
+function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
+function loadSettings(){migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs');try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
 async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'ARC',arcDetected:false,manual:{GenAi:false,Grok:false},arcItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
@@ -314,7 +316,7 @@ function setQueueFilter(next){
 }
 function initializeSingleDraft(draft){
  if(!draft||draft.Version!=='MAILHAWK_DRAFT_V1'||typeof draft.Subject!=='string'||typeof draft.Body!=='string'){
-  throw Error('AI draft response did not match MailHawk DRAFT_V1 protocol.');
+  throw Error('AI draft response did not match PacketRat DRAFT_V1 protocol.');
  }
  $('draftSubjectSuggested').value=draft.Subject;
  $('draftBody').value=draft.Body;
@@ -400,12 +402,12 @@ $('saveSettings').addEventListener('click',()=>{try{saveSettings();notify('Prefe
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('draftDialog').open)$('draftDialog').close();if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();show('triage');$('queueSearch').focus()}});
 /* Lifecycle: this tab owns the local PowerShell service. Heartbeat every 5 s; on pagehide a
    sendBeacon "leaving" signal (it cannot set headers, so the nonce rides in the JSON body of
-   /api/heartbeat only). The service stops itself once no MailHawk tab is alive. */
+   /api/heartbeat only). The service stops itself once no PacketRat tab is alive. */
 const tabId=(()=>{try{return crypto.randomUUID()}catch{return 'tab-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10)}})();
 let sessionEnded=false;
 function startHeartbeat(intervalMs=5000){
  if(!/^[0-9a-f]{32}$/.test(token))return ()=>{};
- const send=leaving=>{if(sessionEnded)return;try{fetch('/api/heartbeat',{method:'POST',headers:{'Content-Type':'application/json','X-MailHawk-Token':token},body:JSON.stringify({tab:tabId,leaving}),keepalive:true,cache:'no-store'}).catch(()=>{})}catch{}};
+ const send=leaving=>{if(sessionEnded)return;try{fetch('/api/heartbeat',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:JSON.stringify({tab:tabId,leaving}),keepalive:true,cache:'no-store'}).catch(()=>{})}catch{}};
  send(false);
  const timer=setInterval(()=>send(false),intervalMs);
  const onHide=()=>{if(sessionEnded)return;let sent=false;try{if(navigator.sendBeacon)sent=navigator.sendBeacon('/api/heartbeat',new Blob([JSON.stringify({tab:tabId,leaving:true,token})],{type:'application/json'}))}catch{sent=false}if(!sent)send(true)};
@@ -415,12 +417,12 @@ function startHeartbeat(intervalMs=5000){
  return ()=>{clearInterval(timer);window.removeEventListener('pagehide',onHide);window.removeEventListener('pageshow',onShow);document.removeEventListener('visibilitychange',onVisible)};
 }
 let stopHeartbeat=()=>{};
-function showSessionEnded(){sessionEnded=true;stopHeartbeat();$('sessionEnded').classList.remove('hidden');document.title='MailHawk | Session ended'}
+function showSessionEnded(){sessionEnded=true;stopHeartbeat();$('sessionEnded').classList.remove('hidden');document.title='PacketRat | Session ended'}
 $('endSession').addEventListener('click',async()=>{
  if(demo&&!/^[0-9a-f]{32}$/.test(token)){notify('Demo mode: there is no local service to stop.');return}
  if(busy){notify('Wait for the current analysis to finish before ending the session.',true);return}
- if(!window.confirm('End this MailHawk session? The local PowerShell service stops; unsaved draft text in this tab is lost.'))return;
- try{await fetch('/api/session/stop',{method:'POST',headers:{'Content-Type':'application/json','X-MailHawk-Token':token},body:'{}',cache:'no-store'});showSessionEnded()}catch{notify('Local MailHawk service not reachable; it may already have stopped.',true)}
+ if(!window.confirm('End this PacketRat session? The local PowerShell service stops; unsaved draft text in this tab is lost.'))return;
+ try{await fetch('/api/session/stop',{method:'POST',headers:{'Content-Type':'application/json','X-PacketRat-Token':token},body:'{}',cache:'no-store'});showSessionEnded()}catch{notify('Local PacketRat service not reachable; it may already have stopped.',true)}
 });
 stopHeartbeat=startHeartbeat();
 function tick(){$('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}tick();setInterval(tick,30000);loadSettings();if(demo){$('demoBanner').classList.remove('hidden');$('modeLabel').textContent='Demo mode';}load();
