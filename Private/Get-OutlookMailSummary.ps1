@@ -130,7 +130,7 @@ function Get-PacketRatInboxSummary {
             $fromEmail = [string]$item.SenderEmailAddress
         } catch {}
 
-        # Resolve Exchange senders to SMTP; otherwise .mil domain rules may miss them.
+        # Resolve Exchange senders to SMTP; otherwise organization-domain rules may miss them.
         if ($fromEmail -notmatch '@' -and $item.Sender) {
             try {
                 $exchangeSender = $item.Sender.GetExchangeUser()

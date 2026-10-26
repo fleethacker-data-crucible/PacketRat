@@ -1,17 +1,60 @@
-# PacketRat - LLM client (compatible with Halyard GenAi / Grok endpoints)
+# PacketRat - LLM client (compatible with Halyard AI endpoint / Grok endpoints)
 #requires -Version 5.1
 
+# The AiEndpoint profile defaults to the local phoenix-lai server's OpenAI-compatible API on this PC
+# (loopback only). PACKETRAT_AI_ENDPOINT_URL overrides it, and the shared LLM_URL overrides every profile.
+# The Grok profile is an outside provider, so it has no built-in URL: set PACKETRAT_GROK_URL (or LLM_URL)
+# in Config\packetrat.env. No other host is built in.
 $script:PacketRatLlmDefaults = @{
-    GrokUrl    = 'https://advana-jupiter.cloud.databricks.mil/serving-endpoints/databricks-grok-4-6/invocations'
-    GrokModel  = 'system.ai.grok-4-6'
-    GenAiUrl   = 'https://api.genai.mil/v1/chat/completions'
-    GenAiModel = 'gemini-3.8-flash'
+    GrokUrlEnv        = 'PACKETRAT_GROK_URL'
+    GrokModel         = 'system.ai.grok-4-6'
+    AiEndpointUrlEnv  = 'PACKETRAT_AI_ENDPOINT_URL'
+    AiEndpointUrl     = 'http://127.0.0.1:1234/v1/chat/completions'   # local phoenix-lai
+    AiEndpointModel   = 'gemini-3.8-flash'
+    LocalDefaultModel = 'phoenixlai'   # phoenix-lai's name for "the model it has loaded"
+}
+
+# Profile token environment variables, in lookup order.
+$script:PacketRatLlmTokenEnv = @{
+    AiEndpoint = @('AI_ENDPOINT_TOKEN', 'GENAI_TOKEN')   # second entry: legacy alias (deprecated), still read
+    Grok       = @('DATABRICKS_TOKEN')
+}
+
+# Legacy alias: the former AI-endpoint profile name is still accepted and mapped to AiEndpoint.
+$script:PacketRatLlmProfileAliases = @{ 'GenAi' = 'AiEndpoint' }
+
+function ConvertTo-PacketRatLlmProfile {
+    <#
+    .SYNOPSIS
+      Normalize a -Profile value to Auto | Grok | AiEndpoint. Deprecated names are mapped; anything else throws.
+    #>
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Profile = 'Auto')
+    if ([string]::IsNullOrWhiteSpace($Profile)) { return 'Auto' }
+    $p = $Profile.Trim()
+    foreach ($known in @('Auto', 'Grok', 'AiEndpoint')) {
+        if ($p -eq $known) { return $known }
+    }
+    foreach ($alias in $script:PacketRatLlmProfileAliases.Keys) {
+        if ($p -eq $alias) { return $script:PacketRatLlmProfileAliases[$alias] }
+    }
+    throw ("Unknown AI profile '{0}'. Use Auto, Grok or AiEndpoint." -f $p)
+}
+
+function Get-PacketRatLlmEnvToken {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][ValidateSet('Grok', 'AiEndpoint')][string]$Profile)
+    foreach ($name in $script:PacketRatLlmTokenEnv[$Profile]) {
+        $v = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
+    }
+    return $null
 }
 
 # Runtime-only credential selection. Never write manually entered tokens to files.
 # 'Lazarette' is the in-memory credential-source value shared with Web/app.js (never persisted).
 $script:PacketRatCredentialSource = 'Lazarette'
-$script:PacketRatManualTokens = @{ GenAi = $null; Grok = $null }
+$script:PacketRatManualTokens = @{ AiEndpoint = $null; Grok = $null }
 
 function Get-PacketRatCredentialStatus {
     [CmdletBinding()]
@@ -23,12 +66,12 @@ function Get-PacketRatCredentialStatus {
     return @{
         source = $script:PacketRatCredentialSource
         manual = @{
-            GenAi = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.GenAi)
+            AiEndpoint = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.AiEndpoint)
             Grok = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.Grok)
         }
         lazaretteDetected = $lazaretteFound
         lazaretteItems = @{
-            GenAi = Resolve-PacketRatLazaretteServiceName -Profile GenAi
+            AiEndpoint = Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint
             Grok = Resolve-PacketRatLazaretteServiceName -Profile Grok
         }
     }
@@ -38,11 +81,13 @@ function Set-PacketRatCredentialConfiguration {
     [CmdletBinding()]
     param(
         [ValidateSet('Lazarette','Manual')][string]$Source,
-        [ValidateSet('GenAi','Grok')][string]$Profile = 'GenAi',
+        [string]$Profile = 'AiEndpoint',
         [AllowEmptyString()][string]$Token = ''
     )
+    $Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile
+    if ($Profile -eq 'Auto') { throw 'Select AiEndpoint or Grok for a manual token.' }
     if ($Source -eq 'Lazarette') {
-        $script:PacketRatManualTokens.GenAi = $null
+        $script:PacketRatManualTokens.AiEndpoint = $null
         $script:PacketRatManualTokens.Grok = $null
     } elseif (-not [string]::IsNullOrWhiteSpace($Token)) {
         if ($Token.Length -gt 8192 -or $Token -match '[\r\n\x00-\x1F]') {
@@ -60,7 +105,7 @@ function Set-PacketRatCredentialConfiguration {
 function Clear-PacketRatManualTokens {
     [CmdletBinding()]
     param()
-    $script:PacketRatManualTokens.GenAi = $null
+    $script:PacketRatManualTokens.AiEndpoint = $null
     $script:PacketRatManualTokens.Grok = $null
     return Get-PacketRatCredentialStatus
 }
@@ -68,75 +113,111 @@ function Clear-PacketRatManualTokens {
 function Get-PacketRatLlmConfig {
     [CmdletBinding()]
     param(
-        [ValidateSet('Auto', 'Grok', 'GenAi')]
         [string]$Profile = 'Auto'
     )
+    $Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile
 
     $url   = $env:LLM_URL
     $model = $env:LLM_MODEL
     $resolved = $Profile
 
     if ($Profile -eq 'Auto') {
-        if ($url -match 'databricks\.mil|serving-endpoints') { $resolved = 'Grok' }
-        elseif ($url -match 'genai\.mil') { $resolved = 'GenAi' }
+        if ($url -match 'serving-endpoints') { $resolved = 'Grok' }
         elseif ($script:PacketRatCredentialSource -eq 'Manual' -and
-                [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.GenAi) -and
+                [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.AiEndpoint) -and
                 -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.Grok)) {
             $resolved = 'Grok'
         }
-        elseif (-not [string]::IsNullOrWhiteSpace($env:DATABRICKS_TOKEN) -and [string]::IsNullOrWhiteSpace($env:GENAI_TOKEN)) {
+        elseif ((Get-PacketRatLlmEnvToken -Profile Grok) -and -not (Get-PacketRatLlmEnvToken -Profile AiEndpoint)) {
             $resolved = 'Grok'
         }
-        elseif (-not [string]::IsNullOrWhiteSpace($env:GENAI_TOKEN)) {
-            $resolved = 'GenAi'
-        }
         else {
-            $resolved = 'GenAi'
+            $resolved = 'AiEndpoint'
         }
     }
 
     if ([string]::IsNullOrWhiteSpace($url)) {
-        if ($resolved -eq 'GenAi') { $url = $script:PacketRatLlmDefaults.GenAiUrl }
-        else { $url = $script:PacketRatLlmDefaults.GrokUrl }
+        if ($resolved -eq 'AiEndpoint') { $url = [Environment]::GetEnvironmentVariable($script:PacketRatLlmDefaults.AiEndpointUrlEnv) }
+        else { $url = [Environment]::GetEnvironmentVariable($script:PacketRatLlmDefaults.GrokUrlEnv) }
+    }
+    $isDefault = $false
+    if ([string]::IsNullOrWhiteSpace($url) -and $resolved -eq 'AiEndpoint') {
+        $url = $script:PacketRatLlmDefaults.AiEndpointUrl
+        $isDefault = $true
     }
     if ([string]::IsNullOrWhiteSpace($model)) {
-        if ($resolved -eq 'GenAi') { $model = $script:PacketRatLlmDefaults.GenAiModel }
+        if ($isDefault) { $model = $script:PacketRatLlmDefaults.LocalDefaultModel }
+        elseif ($resolved -eq 'AiEndpoint') { $model = $script:PacketRatLlmDefaults.AiEndpointModel }
         else { $model = $script:PacketRatLlmDefaults.GrokModel }
     }
 
     return [pscustomobject]@{
-        Profile = $resolved
-        Url     = $url.TrimEnd('/')
-        Model   = $model
+        Profile    = $resolved
+        Url        = ([string]$url).Trim().TrimEnd('/')
+        Model      = $model
+        DefaultUrl = $isDefault
     }
+}
+
+function Test-PacketRatLoopbackUrl {
+    <#
+    .SYNOPSIS
+      True when the URL points at this PC (127.0.0.0/8, ::1 or localhost).
+    #>
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Url)
+    $u = $null
+    if ([string]::IsNullOrWhiteSpace($Url) -or -not [Uri]::TryCreate($Url.Trim(), [UriKind]::Absolute, [ref]$u)) { return $false }
+    return [bool]$u.IsLoopback
+}
+
+function Get-PacketRatLlmAuthToken {
+    <#
+    .SYNOPSIS
+      The token to send for a resolved endpoint configuration, or $null when none is needed.
+      Remote endpoints need a token (see Get-PacketRatLlmToken). A loopback endpoint such as the local
+      phoenix-lai server has its API key off by default, so its token is optional: a manual, profile or
+      LLM_TOKEN value is used when set, the vault is not opened, and no Authorization header is sent without one.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Config)
+    if (-not (Test-PacketRatLoopbackUrl -Url ([string]$Config.Url))) {
+        return Get-PacketRatLlmToken -ForProfile $Config.Profile
+    }
+    if ($script:PacketRatCredentialSource -eq 'Manual') {
+        $manual = [string]$script:PacketRatManualTokens[$Config.Profile]
+        if ([string]::IsNullOrWhiteSpace($manual)) { return $null }
+        return $manual.Trim()
+    }
+    $existing = Get-PacketRatLlmEnvToken -Profile $Config.Profile
+    if (-not [string]::IsNullOrWhiteSpace($existing)) { return $existing }
+    if (-not [string]::IsNullOrWhiteSpace($env:LLM_TOKEN)) { return $env:LLM_TOKEN.Trim() }
+    return $null
 }
 
 function Get-PacketRatLlmToken {
     <#
     .SYNOPSIS
       Profile-isolated tokens:
-        GenAi  -> GENAI_TOKEN  / Lazarette item genapi
-        Grok   -> DATABRICKS_TOKEN / Lazarette item advana-api
-      Env overrides: PACKETRAT_LAZARETTE_ITEM_*, then MAILHAWK_ARC_ITEM_*, then HALYARD_LAZARETTE_ITEM_* / CASCADE_ARC_ITEM_*, preferred over hard-coded names.
+        AiEndpoint -> AI_ENDPOINT_TOKEN / Lazarette item ai-endpoint-api
+        Grok       -> DATABRICKS_TOKEN  / Lazarette item grok-api
+      Deprecated environment and item names are still read (see $script:PacketRatLlmTokenEnv and
+      $script:PacketRatLlmVaultItems). Item-name env overrides are preferred over the canonical names.
       Never prints secret values (length only).
     #>
     [CmdletBinding()]
     param(
-        [ValidateSet('Auto', 'Grok', 'GenAi')]
         [string]$ForProfile = 'Auto',
         [switch]$AllowPrompt
     )
+    $ForProfile = ConvertTo-PacketRatLlmProfile -Profile $ForProfile
 
     if ($ForProfile -eq 'Auto') {
         $cfg = Get-PacketRatLlmConfig -Profile Auto
         $ForProfile = $cfg.Profile
     }
 
-    if ($ForProfile -eq 'GenAi') {
-        $envTarget = 'GENAI_TOKEN'
-    } else {
-        $envTarget = 'DATABRICKS_TOKEN'
-    }
+    $envTarget = $script:PacketRatLlmTokenEnv[$ForProfile][0]
 
     # Manual credentials are session-only and never fall back to environment or Lazarette.
     if ($script:PacketRatCredentialSource -eq 'Manual') {
@@ -147,10 +228,10 @@ function Get-PacketRatLlmToken {
         return $manual
     }
 
-    # 1) Profile-specific env token
-    $existing = [Environment]::GetEnvironmentVariable($envTarget)
+    # 1) Profile-specific env token (current name first, then its legacy alias)
+    $existing = Get-PacketRatLlmEnvToken -Profile $ForProfile
     if (-not [string]::IsNullOrWhiteSpace($existing)) {
-        return $existing.Trim()
+        return $existing
     }
 
     # 2) Shared fallback some teams still use
@@ -224,13 +305,12 @@ function ConvertTo-PacketRatLlmText {
 function Invoke-PacketRatChat {
     <#
     .SYNOPSIS
-      Call GenAi or Grok endpoint (same shape as Halyard's chat call).
+      Call the AI endpoint or Grok endpoint (same shape as Halyard's chat call).
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [object[]]$Messages,
-        [ValidateSet('Auto', 'Grok', 'GenAi')]
         [string]$Profile = 'Auto',
         [string]$Model,
         [int]$MaxTokens = 8192,
@@ -239,16 +319,21 @@ function Invoke-PacketRatChat {
     )
 
     $cfg = Get-PacketRatLlmConfig -Profile $Profile
+    if ([string]::IsNullOrWhiteSpace($cfg.Url)) {
+        $urlEnv = if ($cfg.Profile -eq 'AiEndpoint') { $script:PacketRatLlmDefaults.AiEndpointUrlEnv } else { $script:PacketRatLlmDefaults.GrokUrlEnv }
+        throw ("No endpoint URL configured for profile {0}. Set {1} (or LLM_URL) in Config\packetrat.env." -f $cfg.Profile, $urlEnv)
+    }
     if ($Model) {
-        $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model }
+        $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model; DefaultUrl = $cfg.DefaultUrl }
     }
 
-    $token = Get-PacketRatLlmToken -ForProfile $cfg.Profile
+    $local = Test-PacketRatLoopbackUrl -Url $cfg.Url
+    $token = [string](Get-PacketRatLlmAuthToken -Config $cfg)
     $token = $token.Trim().Trim("'").Trim('"')
     if ($token -match '^(?i)Bearer\s+(.+)$') { $token = $Matches[1].Trim() }
     $token = ($token -replace '[\r\n]', '').Trim()
 
-    if ([string]::IsNullOrWhiteSpace($token)) {
+    if ([string]::IsNullOrWhiteSpace($token) -and -not $local) {
         throw "LLM token empty after sanitization."
     }
 
@@ -288,10 +373,9 @@ function Invoke-PacketRatChat {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     } catch {}
 
-    $headers = @{
-        Authorization = ('Bearer ' + $token)
-        Accept        = 'application/json'
-    }
+    # No Authorization header at all when a local endpoint has no token (never an empty "Bearer ").
+    $headers = @{ Accept = 'application/json' }
+    if (-not [string]::IsNullOrWhiteSpace($token)) { $headers['Authorization'] = 'Bearer ' + $token }
 
     $resp = Invoke-RestMethod -Uri $cfg.Url -Method Post `
         -Headers $headers `

@@ -1,6 +1,6 @@
 # PacketRat AI Wire Protocol v1
 
-PacketRat accepts **versioned, delimited structured responses** instead of pasting arbitrary GenAI prose into the Outlook reply or HTML report.
+PacketRat accepts **versioned, delimited structured responses** instead of pasting arbitrary AI model prose into the Outlook reply or HTML report.
 
 ## Why both delimiters and a schema?
 
@@ -79,6 +79,6 @@ This covers briefings, explanations, risk reviews and follow-up plans generated 
 
 ## Testing
 
-Automated Windows PowerShell 5.1 tests check parsing success, duplicate/invalid/truncated rejection, verified source links, Outlook signature HTML preservation, and one draft per generation. Chromium tests check the single-draft GUI and structured report controls. Actual classic Outlook, configured reply signatures, provider output limits, account identity selection, and approved GenAI access still require workstation validation.
+Automated Windows PowerShell 5.1 tests check parsing success, duplicate/invalid/truncated rejection, verified source links, Outlook signature HTML preservation, and one draft per generation. Chromium tests check the single-draft GUI and structured report controls. Actual classic Outlook, configured reply signatures, provider output limits, account identity selection, and approved AI endpoint access still require workstation validation.
 
 **Known limitation:** Classic Outlook and Microsoft Graph/new Outlook have different compose surfaces. The signature-preserving Outlook COM flow is for installed classic Outlook; we have not implemented Graph draft signature handling.
