@@ -6,9 +6,36 @@
 # - Load the engine once per process (dot-sourced into a global dynamic module), unlock with
 #   Unlock-LazaretteVaultInteractive if defined, else Unlock-ArcVaultInteractive, and read with
 #   Get-LazaretteSecret if defined, else Get-ArcSecret. ARC 3/4 pm.ps1 helpers stay as a fallback.
-# - Canonical LLM vault item names (unchanged): genapi, advana-api
+# - Canonical LLM vault item names: ai-endpoint-api, grok-api (deprecated names still read; see below)
 # - Do not use pm.bat / launch-arc.bat
 #requires -Version 5.1
+
+# LLM vault items per profile. One place for every name PacketRat looks up:
+#   Name     - canonical item name (emitted and documented)
+#   Legacy   - legacy aliases (deprecated item names), tried when the canonical item is absent
+#   LegacyLike / Match - extra vault-row matchers for older vaults (matchers only, never a primary name)
+#   EnvKeys  - item-name overrides, in order: PacketRat, then legacy aliases (former PacketRat/MailHawk
+#              names, then Halyard's shared names and its former names, which Halyard still reads)
+$script:PacketRatLlmVaultItems = @{
+    AiEndpoint = @{
+        Name       = 'ai-endpoint-api'
+        Legacy     = @('genapi')
+        LegacyLike = @()
+        Match      = @()
+        EnvKeys    = @('PACKETRAT_LAZARETTE_ITEM_AiEndpoint',
+                       'PACKETRAT_LAZARETTE_ITEM_GenAi', 'MAILHAWK_ARC_ITEM_GenAi',
+                       'HALYARD_LAZARETTE_ITEM_GenAi', 'HALYARD_LAZARETTE_ITEM_Llm',
+                       'CASCADE_ARC_ITEM_GenAi', 'CASCADE_ARC_ITEM_Llm')
+    }
+    Grok = @{
+        Name       = 'grok-api'
+        Legacy     = @('advana-api', 'advana')
+        LegacyLike = @('*advana*')
+        Match      = @('databricks')
+        EnvKeys    = @('PACKETRAT_LAZARETTE_ITEM_Grok', 'MAILHAWK_ARC_ITEM_Grok',
+                       'HALYARD_LAZARETTE_ITEM_Grok', 'CASCADE_ARC_ITEM_Grok')
+    }
+}
 
 # Session flag: the engine is loaded at most once per process
 $script:PacketRatLazaretteSessionState = @{
@@ -215,45 +242,44 @@ function Assert-PacketRatLazaretteUnlocked {
 function Resolve-PacketRatLazaretteServiceName {
     <#
     .SYNOPSIS
-      Resolve vault lookup names. Canonical hard-coded fallbacks only.
-      Aliases (advana, databricks) are for matchers only, not as primary ServiceName.
+      Resolve the vault lookup name for a profile: an item-name env override if set, else the canonical name.
+      Legacy aliases and matchers are only used by Get-PacketRatLazaretteSecretByName, never returned here.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('GenAi', 'Grok')]
         [string]$Profile
     )
-
-    if ($Profile -eq 'GenAi') {
-        # PacketRat name first, then the former MailHawk name, then Halyard's shared names
-        # (HALYARD_LAZARETTE_ITEM_*, then its former CASCADE_ARC_ITEM_* names, which Halyard still reads).
-        $keys = @(
-            'PACKETRAT_LAZARETTE_ITEM_GenAi',
-            'MAILHAWK_ARC_ITEM_GenAi',
-            'HALYARD_LAZARETTE_ITEM_GenAi',
-            'HALYARD_LAZARETTE_ITEM_Llm',
-            'CASCADE_ARC_ITEM_GenAi',
-            'CASCADE_ARC_ITEM_Llm'
-        )
-        foreach ($k in $keys) {
-            $v = [Environment]::GetEnvironmentVariable($k)
-            if (-not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
-        }
-        return 'genapi'   # canonical
+    if (Get-Command ConvertTo-PacketRatLlmProfile -ErrorAction SilentlyContinue) {
+        $Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile
     }
-
-    $keys = @(
-        'PACKETRAT_LAZARETTE_ITEM_Grok',
-        'MAILHAWK_ARC_ITEM_Grok',
-        'HALYARD_LAZARETTE_ITEM_Grok',
-        'CASCADE_ARC_ITEM_Grok'
-    )
-    foreach ($k in $keys) {
+    if (-not $script:PacketRatLlmVaultItems.ContainsKey($Profile)) {
+        throw ("Unknown AI profile for vault lookup: {0}" -f $Profile)
+    }
+    $spec = $script:PacketRatLlmVaultItems[$Profile]
+    foreach ($k in $spec.EnvKeys) {
         $v = [Environment]::GetEnvironmentVariable($k)
         if (-not [string]::IsNullOrWhiteSpace($v)) { return $v.Trim() }
     }
-    return 'advana-api'   # canonical
+    return $spec.Name   # canonical
+}
+
+function Get-PacketRatLlmVaultSpec {
+    # The vault-item spec whose canonical name (or legacy alias) is $ServiceName; $null for a custom name.
+    param([string]$ServiceName)
+    foreach ($spec in $script:PacketRatLlmVaultItems.Values) {
+        if ($spec.Name -eq $ServiceName -or @($spec.Legacy) -contains $ServiceName) { return $spec }
+    }
+    return $null
+}
+
+function Test-PacketRatLlmVaultAlias {
+    # True when a vault service/name matches a spec's legacy aliases or matchers.
+    param($Spec, [string]$Value)
+    if (-not $Spec -or [string]::IsNullOrWhiteSpace($Value)) { return $false }
+    if ($Value -eq $Spec.Name -or @($Spec.Legacy) -contains $Value -or @($Spec.Match) -contains $Value) { return $true }
+    foreach ($pattern in @($Spec.LegacyLike)) { if ($Value -like $pattern) { return $true } }
+    return $false
 }
 
 function Get-PacketRatLazaretteSecretByName {
@@ -261,8 +287,9 @@ function Get-PacketRatLazaretteSecretByName {
     .SYNOPSIS
       Resolve a vault secret by Lazarette item (service) name. Never prints secret values.
     .NOTES
-      Primary lookup uses exact ServiceName (canonical: genapi, advana-api).
-      Matcher aliases for Grok path only: advana, databricks (vault row filter only).
+      Primary lookup uses exact ServiceName (canonical: ai-endpoint-api, grok-api).
+      When ServiceName is a canonical name (or a legacy alias), the canonical name, legacy aliases and matchers from
+      $script:PacketRatLlmVaultItems are tried next (deprecated vault item names keep working).
     #>
     [CmdletBinding()]
     param(
@@ -279,13 +306,15 @@ function Get-PacketRatLazaretteSecretByName {
             return $null
         }
         $names = @($ServiceName)
-        # Matcher aliases only when the primary name is the Grok canonical item
-        if ($ServiceName -eq 'advana-api') {
+        # Legacy aliases and matchers only when the primary name is a canonical item
+        $spec = Get-PacketRatLlmVaultSpec -ServiceName $ServiceName
+        if ($spec) {
+            $names += @(@($spec.Name) + @($spec.Legacy) | Where-Object { $_ -ne $ServiceName })
             $list = Get-PacketRatFirstCommand @('Get-LazaretteItemNames', 'Get-ArcItemNames')
-            if ($list) {
+            if ($list -and (@($spec.Match).Count -gt 0 -or @($spec.LegacyLike).Count -gt 0)) {
                 try {
                     $names += @(& $list | ForEach-Object { [string]$_.Service } |
-                        Where-Object { $_ -and $_ -ne $ServiceName -and ($_ -eq 'advana' -or $_ -eq 'databricks' -or $_ -like '*advana*') } |
+                        Where-Object { $_ -and $names -notcontains $_ -and (Test-PacketRatLlmVaultAlias -Spec $spec -Value $_) } |
                         Select-Object -Unique)
                 } catch {}
             }
@@ -299,12 +328,17 @@ function Get-PacketRatLazaretteSecretByName {
         return $null
     }
 
-    # 2) ARC 3/4 pm.ps1 helper lookup (canonical or env-overridden name)
+    # 2) ARC 3/4 pm.ps1 helper lookup (canonical or env-overridden name, then legacy aliases)
     if (Get-Command Get-PmStarkApiKey -ErrorAction SilentlyContinue) {
-        try {
-            $v = Get-PmStarkApiKey -ServiceName $ServiceName -ErrorAction Stop
-            if (-not [string]::IsNullOrWhiteSpace([string]$v)) { return [string]$v }
-        } catch {}
+        $pmNames = @($ServiceName)
+        $pmSpec = Get-PacketRatLlmVaultSpec -ServiceName $ServiceName
+        if ($pmSpec) { $pmNames += @(@($pmSpec.Name) + @($pmSpec.Legacy) | Where-Object { $_ -ne $ServiceName }) }
+        foreach ($pmName in $pmNames) {
+            try {
+                $v = Get-PmStarkApiKey -ServiceName $pmName -ErrorAction Stop
+                if (-not [string]::IsNullOrWhiteSpace([string]$v)) { return [string]$v }
+            } catch {}
+        }
     }
 
     # 3) Vault row match - exact Service/Name first
@@ -316,14 +350,12 @@ function Get-PacketRatLazaretteSecretByName {
                     $_.Service -eq $ServiceName -or $_.Name -eq $ServiceName
                 } | Select-Object -First 1
 
-                # Matcher aliases only when primary name is the Grok canonical item
-                if (-not $row -and $ServiceName -eq 'advana-api') {
+                # Legacy aliases and matchers only when the primary name is a canonical item
+                $rowSpec = Get-PacketRatLlmVaultSpec -ServiceName $ServiceName
+                if (-not $row -and $rowSpec) {
                     $row = $vault | Where-Object {
-                        $s = [string]$_.Service
-                        $n = [string]$_.Name
-                        $s -eq 'advana' -or $n -eq 'advana' -or
-                        $s -eq 'databricks' -or $n -eq 'databricks' -or
-                        $s -like '*advana*' -or $n -like '*advana*'
+                        (Test-PacketRatLlmVaultAlias -Spec $rowSpec -Value ([string]$_.Service)) -or
+                        (Test-PacketRatLlmVaultAlias -Spec $rowSpec -Value ([string]$_.Name))
                     } | Select-Object -First 1
                 }
 
