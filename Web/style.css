@@ -26,8 +26,10 @@ p{margin-top:0}
 .app{display:grid;grid-template-columns:var(--fl-sidebar-width) minmax(0,1fr);grid-template-rows:minmax(0,1fr) var(--fl-statusbar-height);height:100vh;height:100dvh}
 .sidebar-collapsed .app{grid-template-columns:var(--fl-sidebar-collapsed) minmax(0,1fr)}
 .sidebar{grid-row:1;display:flex;flex-direction:column;gap:8px;min-height:0;overflow-y:auto;overflow-x:hidden;background:var(--fl-sidebar);border-right:1px solid var(--fl-border);padding:0 0 12px}
-.brand{display:flex;align-items:center;gap:12px;min-height:var(--fl-header-height);padding:8px 12px;border-bottom:1px solid var(--fl-border)}
-.brand img{flex:none;width:40px;height:40px}
+/* Brand: the full emblem with its wordmark when expanded, the emblem's circle when collapsed. */
+.brand{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:var(--fl-header-height);padding:4px 12px 8px;border-bottom:1px solid var(--fl-border)}
+.brand .brand-emblem{width:184px;height:184px}
+.brand .brand-icon{display:none;width:40px;height:40px}
 .wordmark{display:grid;gap:4px;line-height:1;min-width:0}
 .wordmark-name{font:var(--fl-text-page) var(--fl-font-display);letter-spacing:.1em;color:var(--fl-foreground);white-space:nowrap}
 .wordmark-rule{display:flex;align-items:center;gap:4px;color:var(--fl-brass)}
@@ -44,7 +46,8 @@ p{margin-top:0}
 .sidebar-foot{display:grid;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--fl-border)}
 .sidebar .fl-nav .end-session .nav-icon{color:var(--fl-danger)}
 .sidebar-collapsed .brand{justify-content:center;padding:8px 0}
-.sidebar-collapsed .brand img{width:36px;height:36px}
+:root.sidebar-collapsed .brand .brand-emblem{display:none}
+.sidebar-collapsed .brand .brand-icon{display:block}
 .sidebar-collapsed .wordmark,.sidebar-collapsed .nav-title,.sidebar-collapsed .nav-count{display:none}
 .sidebar-collapsed .sidebar .fl-nav button{justify-content:center;padding:0}
 .sidebar-collapsed .nav-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -99,7 +102,7 @@ select.fl-input{padding-right:4px}
 .hero p{max-width:460px;color:var(--fl-muted-foreground);line-height:1.5;font-size:var(--fl-text-body);margin-bottom:24px}
 .hero-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .hero-art{display:flex;justify-content:center;align-items:center}
-.emblem{width:220px;height:220px;border-radius:var(--fl-radius-card);border:1px solid var(--fl-border)}
+.emblem{width:240px;height:240px}
 .emblem-light{display:none}
 :root[data-theme='light'] .emblem-dark{display:none}
 :root[data-theme='light'] .emblem-light{display:block}

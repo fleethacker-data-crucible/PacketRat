@@ -25,7 +25,7 @@ $required=@(
   'Private/PacketRatLifecycle.ps1',
   'Web/index.html','Web/app.js','Web/style.css',
   'Web/shell.js','Web/icons.js','Web/vendor/fleet/fleet.css',
-  'Web/brand/mark.svg','Web/brand/emblem-dark.png','Web/brand/emblem-light.png',
+  'Web/brand/mark.svg','Web/brand/emblem-dark.png','Web/brand/emblem-light.png','Web/brand/icon-256.png','Web/brand/favicon.ico',
   'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1',
   'Private/PacketRatStore.ps1','Private/Get-OutlookMailSummary.ps1',
   'Private/PacketRatDraft.ps1','Private/PacketRatGraph.ps1',

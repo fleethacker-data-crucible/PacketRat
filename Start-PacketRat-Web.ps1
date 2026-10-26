@@ -67,9 +67,9 @@ $script:BusyUntil=[DateTime]::MinValue
 $script:StopReason=''
 $script:LastResult=$null
 $script:Nonce=[guid]::NewGuid().ToString('N')
-$script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png';'.svg'='image/svg+xml; charset=utf-8'}
+$script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png';'.ico'='image/x-icon';'.svg'='image/svg+xml; charset=utf-8'}
 # Exact allow-list of served files (Fleet UI: vendored fleet.css, brand mark and emblems, Lucide icons).
-$script:AllowedAssets=@('index.html','app.js','report-experience.js','style.css','shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png')
+$script:AllowedAssets=@('index.html','app.js','report-experience.js','style.css','shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png','brand/icon-256.png','brand/favicon.ico')
 $script:UTF8=New-Object System.Text.UTF8Encoding $false
 
 function Send-PacketRatResponse {
@@ -404,7 +404,7 @@ try {
           $file=Join-Path (Join-Path $Root 'Web') $name
           if(-not (Test-Path -LiteralPath $file)){Send-PacketRatText $stream 404 'Not found' 'text/plain; charset=utf-8';continue}
           $ext=[IO.Path]::GetExtension($file)
-          if($ext -eq '.png'){
+          if($ext -eq '.png' -or $ext -eq '.ico'){
               Send-PacketRatResponse -Stream $stream -Status 200 -Bytes ([IO.File]::ReadAllBytes($file)) -Type $script:Mime[$ext]
           }else{
               $content=[IO.File]::ReadAllText($file)
