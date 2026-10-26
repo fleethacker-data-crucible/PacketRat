@@ -103,7 +103,15 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 
 **Why “no LLM token” happened:** Earlier browser releases silently searched environment variables/Lazarette without user-configurable source selection. Now the selected source is explicit, errors include useful setup instructions, and **Analyze inbox checks token availability before reading messages**.
 
-`Config/packetrat.env.example` contains optional Lazarette discovery, service names, and provider configuration. No AI endpoint URL is built in: set `PACKETRAT_AI_ENDPOINT_URL` and/or `PACKETRAT_GROK_URL` (or `LLM_URL`) there before a live analysis. Do not commit real token values.
+`Config/packetrat.env.example` contains optional Lazarette discovery, service names, and provider configuration. By default the `AiEndpoint` profile uses the local phoenix-lai server's OpenAI-compatible API on this PC, `http://127.0.0.1:1234/v1/chat/completions`, with model `phoenixlai` (whichever model phoenix-lai has loaded). Do not commit real token values.
+
+| Variable | Profile | Default | Notes |
+| --- | --- | --- | --- |
+| `PACKETRAT_AI_ENDPOINT_URL` | AiEndpoint | `http://127.0.0.1:1234/v1/chat/completions` (local phoenix-lai) | Full chat-completions URL. Overrides the default when set. |
+| `PACKETRAT_GROK_URL` | Grok | none | Outside provider, so no URL is built in. Required for the Grok profile. |
+| `LLM_URL` | any | none | Shared override (legacy alias): wins over both variables above. |
+| `LLM_MODEL` | any | `phoenixlai` on the local default, otherwise the profile's model | Set it when an override URL needs a specific model name. |
+| `AI_ENDPOINT_TOKEN` / `LLM_TOKEN` | AiEndpoint / any | none | Optional for a local (loopback) endpoint: phoenix-lai's API key is off by default, and no `Authorization` header is sent without a token. Required for a remote endpoint. |
 
 ## What works and what still needs verification
 

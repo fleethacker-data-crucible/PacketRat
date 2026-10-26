@@ -1,13 +1,17 @@
 # PacketRat - LLM client (compatible with Halyard AI endpoint / Grok endpoints)
 #requires -Version 5.1
 
-# Endpoint URLs are organization-specific and are never hard-coded: set PACKETRAT_AI_ENDPOINT_URL /
-# PACKETRAT_GROK_URL (or the shared LLM_URL) in Config\packetrat.env.
+# The AiEndpoint profile defaults to the local phoenix-lai server's OpenAI-compatible API on this PC
+# (loopback only). PACKETRAT_AI_ENDPOINT_URL overrides it, and the shared LLM_URL overrides every profile.
+# The Grok profile is an outside provider, so it has no built-in URL: set PACKETRAT_GROK_URL (or LLM_URL)
+# in Config\packetrat.env. No other host is built in.
 $script:PacketRatLlmDefaults = @{
-    GrokUrlEnv       = 'PACKETRAT_GROK_URL'
-    GrokModel        = 'system.ai.grok-4-6'
-    AiEndpointUrlEnv = 'PACKETRAT_AI_ENDPOINT_URL'
-    AiEndpointModel  = 'gemini-3.8-flash'
+    GrokUrlEnv        = 'PACKETRAT_GROK_URL'
+    GrokModel         = 'system.ai.grok-4-6'
+    AiEndpointUrlEnv  = 'PACKETRAT_AI_ENDPOINT_URL'
+    AiEndpointUrl     = 'http://127.0.0.1:1234/v1/chat/completions'   # local phoenix-lai
+    AiEndpointModel   = 'gemini-3.8-flash'
+    LocalDefaultModel = 'phoenixlai'   # phoenix-lai's name for "the model it has loaded"
 }
 
 # Profile token environment variables, in lookup order.
@@ -136,16 +140,59 @@ function Get-PacketRatLlmConfig {
         if ($resolved -eq 'AiEndpoint') { $url = [Environment]::GetEnvironmentVariable($script:PacketRatLlmDefaults.AiEndpointUrlEnv) }
         else { $url = [Environment]::GetEnvironmentVariable($script:PacketRatLlmDefaults.GrokUrlEnv) }
     }
+    $isDefault = $false
+    if ([string]::IsNullOrWhiteSpace($url) -and $resolved -eq 'AiEndpoint') {
+        $url = $script:PacketRatLlmDefaults.AiEndpointUrl
+        $isDefault = $true
+    }
     if ([string]::IsNullOrWhiteSpace($model)) {
-        if ($resolved -eq 'AiEndpoint') { $model = $script:PacketRatLlmDefaults.AiEndpointModel }
+        if ($isDefault) { $model = $script:PacketRatLlmDefaults.LocalDefaultModel }
+        elseif ($resolved -eq 'AiEndpoint') { $model = $script:PacketRatLlmDefaults.AiEndpointModel }
         else { $model = $script:PacketRatLlmDefaults.GrokModel }
     }
 
     return [pscustomobject]@{
-        Profile = $resolved
-        Url     = ([string]$url).Trim().TrimEnd('/')
-        Model   = $model
+        Profile    = $resolved
+        Url        = ([string]$url).Trim().TrimEnd('/')
+        Model      = $model
+        DefaultUrl = $isDefault
     }
+}
+
+function Test-PacketRatLoopbackUrl {
+    <#
+    .SYNOPSIS
+      True when the URL points at this PC (127.0.0.0/8, ::1 or localhost).
+    #>
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Url)
+    $u = $null
+    if ([string]::IsNullOrWhiteSpace($Url) -or -not [Uri]::TryCreate($Url.Trim(), [UriKind]::Absolute, [ref]$u)) { return $false }
+    return [bool]$u.IsLoopback
+}
+
+function Get-PacketRatLlmAuthToken {
+    <#
+    .SYNOPSIS
+      The token to send for a resolved endpoint configuration, or $null when none is needed.
+      Remote endpoints need a token (see Get-PacketRatLlmToken). A loopback endpoint such as the local
+      phoenix-lai server has its API key off by default, so its token is optional: a manual, profile or
+      LLM_TOKEN value is used when set, the vault is not opened, and no Authorization header is sent without one.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Config)
+    if (-not (Test-PacketRatLoopbackUrl -Url ([string]$Config.Url))) {
+        return Get-PacketRatLlmToken -ForProfile $Config.Profile
+    }
+    if ($script:PacketRatCredentialSource -eq 'Manual') {
+        $manual = [string]$script:PacketRatManualTokens[$Config.Profile]
+        if ([string]::IsNullOrWhiteSpace($manual)) { return $null }
+        return $manual.Trim()
+    }
+    $existing = Get-PacketRatLlmEnvToken -Profile $Config.Profile
+    if (-not [string]::IsNullOrWhiteSpace($existing)) { return $existing }
+    if (-not [string]::IsNullOrWhiteSpace($env:LLM_TOKEN)) { return $env:LLM_TOKEN.Trim() }
+    return $null
 }
 
 function Get-PacketRatLlmToken {
@@ -277,15 +324,16 @@ function Invoke-PacketRatChat {
         throw ("No endpoint URL configured for profile {0}. Set {1} (or LLM_URL) in Config\packetrat.env." -f $cfg.Profile, $urlEnv)
     }
     if ($Model) {
-        $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model }
+        $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model; DefaultUrl = $cfg.DefaultUrl }
     }
 
-    $token = Get-PacketRatLlmToken -ForProfile $cfg.Profile
+    $local = Test-PacketRatLoopbackUrl -Url $cfg.Url
+    $token = [string](Get-PacketRatLlmAuthToken -Config $cfg)
     $token = $token.Trim().Trim("'").Trim('"')
     if ($token -match '^(?i)Bearer\s+(.+)$') { $token = $Matches[1].Trim() }
     $token = ($token -replace '[\r\n]', '').Trim()
 
-    if ([string]::IsNullOrWhiteSpace($token)) {
+    if ([string]::IsNullOrWhiteSpace($token) -and -not $local) {
         throw "LLM token empty after sanitization."
     }
 
@@ -325,10 +373,9 @@ function Invoke-PacketRatChat {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     } catch {}
 
-    $headers = @{
-        Authorization = ('Bearer ' + $token)
-        Accept        = 'application/json'
-    }
+    # No Authorization header at all when a local endpoint has no token (never an empty "Bearer ").
+    $headers = @{ Accept = 'application/json' }
+    if (-not [string]::IsNullOrWhiteSpace($token)) { $headers['Authorization'] = 'Bearer ' + $token }
 
     $resp = Invoke-RestMethod -Uri $cfg.Url -Method Post `
         -Headers $headers `

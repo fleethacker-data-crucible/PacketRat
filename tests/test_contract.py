@@ -55,6 +55,8 @@ for current, legacy in (('AiEndpoint',legacy_profile),('Grok','Grok')):
     item_positions=[BRIDGE.index(x) for x in item_order]
     assert item_positions==sorted(item_positions), 'Item overrides: PacketRat, MailHawk, then Halyard'
 assert 'https://' not in LLMSRC, 'No organization endpoint is hard-coded'
+assert "AiEndpointUrl     = 'http://127.0.0.1:1234/v1/chat/completions'" in LLMSRC, 'AiEndpoint defaults to local phoenix-lai'
+assert set(re.findall(r"https?://([^/:'\"\s]+)",LLMSRC))=={'127.0.0.1'}, 'Only loopback is built in'
 assert LLMSRC.count('PacketRatLlmProfileAliases = @{')==1, 'Deprecated profile name mapped in one place'
 STORE=(ROOT/'Private/PacketRatStore.ps1').read_text()
 assert "'mailhawk-store.json'" in STORE and 'Copy-Item' in STORE and 'Remove-Item' not in STORE

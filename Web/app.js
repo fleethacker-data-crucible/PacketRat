@@ -386,7 +386,7 @@ $('checkCredentials').addEventListener('click',async()=>{
  try{
   const profile=$('credentialProfile').value;
   const result=await api('credentials/check',{profile});
-  notify(result.profile+' token was resolved locally. Provider connectivity is not yet verified.');
+  notify(result.credentialAvailable===false?result.profile+': '+result.note:result.profile+' token was resolved locally. Provider connectivity is not yet verified.');
  }catch(error){notify(error.message,true);}
 });
 $('clearCredentials').addEventListener('click',async()=>{

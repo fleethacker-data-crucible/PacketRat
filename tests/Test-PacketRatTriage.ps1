@@ -67,10 +67,37 @@ try {
     $envNames=@('LLM_URL','LLM_MODEL','PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_GROK_URL','PACKETRAT_LAZARETTE_ITEM_AiEndpoint','DATABRICKS_TOKEN','LLM_TOKEN')+@($script:PacketRatLlmTokenEnv.AiEndpoint)+@($script:PacketRatLlmVaultItems.AiEndpoint.EnvKeys)
     $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
     try{
+        # Default: the local phoenix-lai API on loopback, with its loaded-model name.
         $cfg=Get-PacketRatLlmConfig -Profile $profileAlias
-        Assert-PacketRat ($cfg.Profile -eq 'AiEndpoint' -and $cfg.Url -eq '') 'no endpoint URL is built in'
-        $threw='';try{$null=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile AiEndpoint}catch{$threw=$_.Exception.Message}
-        Assert-PacketRat ($threw -match 'PACKETRAT_AI_ENDPOINT_URL') 'missing endpoint URL explained before any token or network use'
+        Assert-PacketRat ($cfg.Profile -eq 'AiEndpoint' -and $cfg.Url -eq 'http://127.0.0.1:1234/v1/chat/completions') 'AiEndpoint defaults to local phoenix-lai'
+        Assert-PacketRat ($cfg.DefaultUrl -and $cfg.Model -eq 'phoenixlai') 'local default uses the loaded phoenix-lai model'
+        Assert-PacketRat (Test-PacketRatLoopbackUrl -Url $cfg.Url) 'default endpoint is loopback'
+        Assert-PacketRat (-not (Test-PacketRatLoopbackUrl -Url 'https://ai.example.org/v1/chat/completions')) 'remote URL is not loopback'
+        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Auto).Url -eq $cfg.Url) 'Auto with no tokens uses the local default'
+        Assert-PacketRat ($null -eq (Get-PacketRatLlmAuthToken -Config $cfg)) 'no token needed for the local default'
+        # No token: the request goes out with no Authorization header (never an empty Bearer).
+        $global:sentHeaders=$null;$global:sentUri=$null
+        function global:Invoke-RestMethod { param($Uri,$Method,$Headers,$Body,$ContentType,$TimeoutSec) $global:sentUri=$Uri;$global:sentHeaders=$Headers;return [pscustomobject]@{choices=@([pscustomobject]@{message=[pscustomobject]@{content='ok'}})} }
+        try{
+            $reply=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile AiEndpoint
+            Assert-PacketRat ($reply.Text -eq 'ok' -and $global:sentUri -eq 'http://127.0.0.1:1234/v1/chat/completions') 'chat posts to the local default'
+            Assert-PacketRat (-not $global:sentHeaders.ContainsKey('Authorization')) 'no Authorization header without a token'
+            $env:LLM_TOKEN='local-key'
+            $null=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile AiEndpoint
+            Assert-PacketRat ($global:sentHeaders['Authorization'] -eq 'Bearer local-key') 'optional token sent to the local endpoint when set'
+            $env:LLM_TOKEN=$null
+        }finally{ Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
+        # Overrides: the profile variable replaces the default; the shared LLM_URL (legacy alias) wins over both.
+        $env:PACKETRAT_AI_ENDPOINT_URL='https://ai.example.org/v1/chat/completions/'
+        $cfg=Get-PacketRatLlmConfig -Profile AiEndpoint
+        Assert-PacketRat ($cfg.Url -eq 'https://ai.example.org/v1/chat/completions' -and -not $cfg.DefaultUrl -and $cfg.Model -ne 'phoenixlai') 'PACKETRAT_AI_ENDPOINT_URL overrides the default'
+        $env:LLM_URL='http://localhost:5000/v1/chat/completions'
+        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile AiEndpoint).Url -eq $env:LLM_URL) 'LLM_URL overrides every profile'
+        $env:LLM_URL=$null;$env:PACKETRAT_AI_ENDPOINT_URL=$null
+        # Grok is an outside provider: no built-in URL, explained before any token or network use.
+        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Grok).Url -eq '') 'no Grok URL is built in'
+        $threw='';try{$null=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile Grok}catch{$threw=$_.Exception.Message}
+        Assert-PacketRat ($threw -match 'PACKETRAT_GROK_URL') 'missing Grok URL explained before any token or network use'
         $env:PACKETRAT_GROK_URL='https://databricks.example.org/serving-endpoints/x/invocations'
         Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Grok).Url -eq $env:PACKETRAT_GROK_URL) 'Grok URL read from configuration'
         # Token environment: the current name wins, the deprecated name is still read.

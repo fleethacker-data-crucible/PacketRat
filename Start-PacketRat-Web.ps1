@@ -156,7 +156,8 @@ function Invoke-PacketRatApi {
           # Resolve locally only. Never return token, contact an AI endpoint,
           # or fetch user mailbox data from this diagnostic route.
           $resolved=Get-PacketRatLlmConfig -Profile $requested
-          $null=Get-PacketRatLlmToken -ForProfile $resolved.Profile
+          $found=Get-PacketRatLlmAuthToken -Config $resolved
+          if(-not $found){return @{ok=$true;profile=$resolved.Profile;credentialAvailable=$false;note='Local AI endpoint on this PC: no token needed unless its API key is turned on; endpoint not tested.'}}
           return @{ok=$true;profile=$resolved.Profile;credentialAvailable=$true;note='Credential resolved locally; remote endpoint not tested.'}
       }
       '/api/credentials/clear' {
@@ -170,8 +171,8 @@ function Invoke-PacketRatApi {
           $days=[Math]::Max(1,[Math]::Min(90,[int]$Data.daysBack))
           # Fail before scanning Outlook if the chosen AI credential source is unusable.
           # Profile Auto is resolved to the actual endpoint before checking its token.
-          $llmProfile=(Get-PacketRatLlmConfig -Profile $profile).Profile
-          $null=Get-PacketRatLlmToken -ForProfile $llmProfile
+          # A local (loopback) endpoint needs no token; a remote one throws here when its token is missing.
+          $null=Get-PacketRatLlmAuthToken -Config (Get-PacketRatLlmConfig -Profile $profile)
           $script:LastResult=Invoke-PacketRatInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root
           $run=$script:LastResult
           return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportStructure=@($run.ReportStructure);responseProtocol=[string]$run.ResponseProtocol;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-PacketRatStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
