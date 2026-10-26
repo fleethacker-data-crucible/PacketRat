@@ -1,6 +1,8 @@
 /* PacketRat report presentation: pure browser helpers, no network calls or credentials. */
 (function(root){
  'use strict';
+ // Lucide icons from icons.js when present (browser); plain text elsewhere (Node tests).
+ const icon=name=>{try{return root.PacketRatIcons?root.PacketRatIcons.svg(name,16):''}catch{return ''}};
  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const replacements=[
   ['Ã¢â‚¬â„¢','’'],['Ã¢â‚¬Ëœ','‘'],['Ã¢â‚¬Å“','“'],
@@ -43,7 +45,7 @@
   return escaped.replace(/\[\s*Email\s*#(\d+)\s*\]|\[\s*#(\d+)\s*\]|\bEmail\s*#(\d+)\b/gi,(whole,a,b,c)=>{
    const n=Number(a||b||c);
    if(!lookup.has(n))return whole;
-   return '<button type="button" class="report-reference" data-report-open-index="'+n+'" aria-label="Open verified email '+n+' in Outlook">Email #'+n+' ↗</button>';
+   return '<button type="button" class="report-reference" data-report-open-index="'+n+'" aria-label="Open verified email '+n+' in Outlook">Email #'+n+' '+icon('external')+'</button>';
   });
  }
  function inline(text,lookup){
@@ -95,7 +97,7 @@
    }
    html+='<tr'+(n?' class="report-linked-row" tabindex="0" data-report-open-index="'+n+'" aria-label="Open email '+n+'"':'')+'>'+
     headers.map((_,j)=>'<td>'+inline(row[j]||'',lookup)+'</td>').join('')+
-    '<td>'+(n?'<button class="report-reference" type="button" data-report-open-index="'+n+'">Open #'+n+' ↗</button>':'<span class="report-unlinked">Not linked</span>')+'</td></tr>';
+    '<td>'+(n?'<button class="report-reference" type="button" data-report-open-index="'+n+'">Open #'+n+' '+icon('external')+'</button>':'<span class="report-unlinked">Not linked</span>')+'</td></tr>';
   }
   return {html:html+'</tbody></table></div>',next:i-1};
  }
@@ -114,7 +116,7 @@
    if(h){
     closeSection();const id=sectionIdFor(h,sections,used);
     html.push('<section class="report-section"><div class="report-section-heading"><h2>'+inline(h,lookup)+'</h2>'+
-      (id?'<button class="report-section-action" type="button" data-report-generate-section="'+escapeHtml(id)+'">✧ Generate from section</button>':'')+'</div>');
+      (id?'<button class="report-section-action" type="button" data-report-generate-section="'+escapeHtml(id)+'">'+icon('intelligence')+' Generate from section</button>':'')+'</div>');
     inSection=true;continue;
    }
    if(/^[-*_]{3,}$/.test(line)){closeList();html.push('<hr>');continue}
@@ -145,10 +147,10 @@
     '<p class="report-source-detail">'+escapeHtml(it.From||'')+' · '+escapeHtml(it.Reason||'')+'</p>'+
     (it.RuleSuppressed?'<p class="report-source-warning">Rule exclusion: '+escapeHtml(it.RuleSuppressedBy||'Matched a filtering rule')+'. You can explicitly track this message.</p>':'')+
     (it.RecommendedAction?'<p class="report-source-suggestion">Suggested: '+escapeHtml(it.RecommendedAction)+'</p>':'')+
-    '<div class="report-source-actions"><button type="button" data-report-open="'+key+'">Open Outlook ↗</button>'+
-    '<button type="button" data-report-draft="'+key+'">✧ Draft reply</button>'+
+    '<div class="report-source-actions"><button type="button" data-report-open="'+key+'">Open Outlook '+icon('external')+'</button>'+
+    '<button type="button" data-report-draft="'+key+'">'+icon('draft')+' Draft reply</button>'+
     (tracked?'<button type="button" data-report-queue="'+key+'">View in queue</button>':
-     '<button type="button" data-report-track="'+key+'">+ Track action</button>')+'</div></article>';
+     '<button type="button" data-report-track="'+key+'">'+icon('plus')+' Track action</button>')+'</div></article>';
   }).join('');
  }
  function audit(raw,items,sections){
@@ -166,7 +168,7 @@
   return sections.map((section,i)=>{
    const title=escapeHtml(normalizeText(section.Title||section.title||'Untitled section'));
    const id=reportSections[i]?.Id||'section-'+i;
-   const heading='<div class="report-section-heading"><h2>'+title+'</h2><button type="button" class="report-section-action" data-report-generate-section="'+escapeHtml(id)+'">✧ Generate from section</button></div>';
+   const heading='<div class="report-section-heading"><h2>'+title+'</h2><button type="button" class="report-section-action" data-report-generate-section="'+escapeHtml(id)+'">'+icon('intelligence')+' Generate from section</button></div>';
    const summary=normalizeText(section.Summary||section.summary||'');
    let html='<section class="report-section" data-report-section="'+escapeHtml(section.Id||section.id||'')+'">'+heading;
    if(summary)html+='<p>'+escapeHtml(summary)+'</p>';
@@ -178,7 +180,7 @@
      if(!message.trim())continue;
      const index=Number(entry.EmailIndex||entry.email_index||0);
      const eligible=index>0&&sources.has(index);
-     const sourceLink=eligible?'<button type="button" class="report-reference" data-report-open-index="'+index+'">Email #'+index+' ↗</button> ':
+     const sourceLink=eligible?'<button type="button" class="report-reference" data-report-open-index="'+index+'">Email #'+index+' '+icon('external')+'</button> ':
       index>0?'<span class="report-unlinked">Source #'+index+' not verified</span> ':'';
      html+='<li>'+sourceLink+escapeHtml(message)+'</li>';
      if(eligible)seen.add(index);
