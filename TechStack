@@ -55,3 +55,13 @@ Notes:
 - A hidden PowerShell console counts: if the window is hidden or minimised, the user has no Ctrl+C.
 - To find what holds a DLL, use the Windows Restart Manager (`RmRegisterResources` + `RmGetList`); `Process.Modules` misses .NET-mapped assemblies.
 - Reference implementation: Halyard (`web/src/lib/api.ts` `startHeartbeat`, `Host/HalyardHost.cs`, `scripts/Halyard-Process.ps1`, `Stop-Halyard.ps1`, `Start-Halyard.ps1`).
+
+## Intelligence router
+
+Direction (2026-10-26): Fleet tools stop hard-coding external endpoints and default to the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), for AI/LLM endpoints, git repository access and database connections. Fairlead will own endpoint selection, credentials (through Lazarette / Windows Credential Manager, never in tool config), policy and routing. Until PacketRat is moved behind it, the current settings in the table below stay as they are; nothing has changed in code yet.
+
+| Access | Today | Where | Settings |
+| --- | --- | --- | --- |
+| AI/LLM | OpenAI-compatible chat completions; default local phoenix-lai `http://127.0.0.1:1234/v1/chat/completions` (loopback); optional Grok profile with no built-in URL; manual session token in the UI | `Private/PacketRatLlm.ps1:12`; requests `:380` | `LLM_URL`, `PACKETRAT_AI_ENDPOINT_URL`, `PACKETRAT_GROK_URL`, `PACKETRAT_LLM_PROFILE`, `LLM_MODEL`, `LLM_TOKEN`, `AI_ENDPOINT_TOKEN`/`GENAI_TOKEN`, `DATABRICKS_TOKEN`; vault items `ai-endpoint-api`, `grok-api` (`Private/LazaretteBridge.ps1:19-36`) |
+| Git repositories | none |  |  |
+| Databases | none (mail comes from Outlook COM and, optionally, Microsoft Graph PowerShell modules; not a database) |  |  |
