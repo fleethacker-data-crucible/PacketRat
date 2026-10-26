@@ -11,10 +11,10 @@ function Assert-ReportTest($Value,[string]$Message){
     if(-not $Value){throw ('Report test failed: '+$Message)}
 }
 $emails=@(
-    [pscustomobject]@{Index=1;Fingerprint='id:trusted1';Subject='Access approval';FromName='Reviewer';FromEmail='reviewer@navy.mil';UserDismissed=$false;IsSensitive=$false},
+    [pscustomobject]@{Index=1;Fingerprint='id:trusted1';Subject='Access approval';FromName='Reviewer';FromEmail='reviewer@agency.example';UserDismissed=$false;IsSensitive=$false},
     [pscustomobject]@{Index=2;Fingerprint='id:trusted2';Subject='Routine digest';FromName='Digest';FromEmail='no-reply@example.com';UserDismissed=$false;IsSensitive=$false},
-    [pscustomobject]@{Index=3;Fingerprint='id:restricted';Subject='Sensitive';FromName='Private';FromEmail='private@navy.mil';UserDismissed=$false;IsSensitive=$true},
-    [pscustomobject]@{Index=4;Fingerprint='id:dismissed';Subject='Dismissed item';FromName='Office';FromEmail='office@navy.mil';UserDismissed=$true;IsSensitive=$false}
+    [pscustomobject]@{Index=3;Fingerprint='id:restricted';Subject='Sensitive';FromName='Private';FromEmail='private@agency.example';UserDismissed=$false;IsSensitive=$true},
+    [pscustomobject]@{Index=4;Fingerprint='id:dismissed';Subject='Dismissed item';FromName='Office';FromEmail='office@agency.example';UserDismissed=$true;IsSensitive=$false}
 )
 $model=@(
     [pscustomobject]@{index=1;section='Must Reply';reason='Review required';recommended_action='Respond';urgency='High';fingerprint='fake-id';entry_id='attacker-supplied'},
@@ -53,7 +53,7 @@ $blocks=@(
     [pscustomobject]@{type='text';text='Second section'}
 )
 $allText=ConvertTo-PacketRatLlmText -Value $blocks
-Assert-ReportTest ($allText.Contains('First section') -and $allText.Contains('Second section')) 'Typed GenAI parts extracted without object casts'
+Assert-ReportTest ($allText.Contains('First section') -and $allText.Contains('Second section')) 'Typed AI model parts extracted without object casts'
 $gemini=[pscustomobject]@{content=[pscustomobject]@{parts=@([pscustomobject]@{text='Gemini report'})}}
 Assert-ReportTest ((ConvertTo-PacketRatLlmText -Value $gemini) -eq 'Gemini report') 'Nested provider part extraction'
 

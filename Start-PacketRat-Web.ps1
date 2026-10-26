@@ -144,13 +144,15 @@ function Invoke-PacketRatApi {
           $source=[string]$Data.source
           if($source -cnotin @('Lazarette','Manual')){throw 'Select Lazarette or Manual as the credential source.'}
           $profile=[string]$Data.profile
-          if($profile -cnotin @('GenAi','Grok')){throw 'Select GenAi or Grok for a manual token.'}
+          try{$profile=ConvertTo-PacketRatLlmProfile -Profile $profile}catch{$profile=''}
+          if($profile -cnotin @('AiEndpoint','Grok')){throw 'Select AI endpoint or Grok for a manual token.'}
           $tokenText=if($null -eq $Data.token){''}else{[string]$Data.token}
           $status=Set-PacketRatCredentialConfiguration -Source $source -Profile $profile -Token $tokenText
           return @{ok=$true;credentials=$status}
       }
       '/api/credentials/check' {
-          $requested=if($Data.profile -in @('GenAi','Grok')){[string]$Data.profile}else{'GenAi'}
+          $requested=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'AiEndpoint'}
+          if($requested -eq 'Auto'){$requested='AiEndpoint'}
           # Resolve locally only. Never return token, contact an AI endpoint,
           # or fetch user mailbox data from this diagnostic route.
           $resolved=Get-PacketRatLlmConfig -Profile $requested
@@ -162,7 +164,7 @@ function Invoke-PacketRatApi {
           return @{ok=$true;credentials=$status}
       }
       '/api/analyze' {
-          $profile=if(@('Auto','Grok','GenAi') -contains $Data.profile){$Data.profile}else{'Auto'}
+          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
           $provider=if(@('COM','Graph') -contains $Data.provider){$Data.provider}else{'COM'}
           $max=[Math]::Max(1,[Math]::Min(150,[int]$Data.maxEmails))
           $days=[Math]::Max(1,[Math]::Min(90,[int]$Data.daysBack))
@@ -181,7 +183,7 @@ function Invoke-PacketRatApi {
           $sectionId=[string]$Data.sectionId
           if(-not $sectionId){$sectionId='all'}
           if($sectionId -cne 'all' -and $sectionId -notmatch '^section-\d{1,3}$'){throw 'Invalid report section.'}
-          $profile=if(@('Auto','GenAi','Grok') -contains [string]$Data.profile){[string]$Data.profile}else{'Auto'}
+          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
           $generated=Invoke-PacketRatReportFollowup -Analysis $script:LastResult -Mode $mode -SectionId $sectionId -Profile $profile
           return @{ok=$true;generated=$generated}
       }
@@ -268,7 +270,7 @@ function Invoke-PacketRatApi {
           if(-not $script:LastResult){throw 'Run analysis in this session before drafting'}
           $email=Find-PacketRatReportSource $key
           if(-not $email){throw 'Email not available in current verified analysis'}
-          $profile=if(@('Auto','Grok','GenAi') -contains $Data.profile){$Data.profile}else{'Auto'}
+          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
           $instruction=[string]$Data.instruction
           if($instruction.Length -gt 2000){throw 'Draft instruction exceeds limit'}
           $draft=New-PacketRatDraftReply -Email $email -Profile $profile -ExtraInstruction $instruction

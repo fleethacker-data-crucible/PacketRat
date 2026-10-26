@@ -12,7 +12,7 @@ let credentialDetails=null;
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const defaultRules=[
  {Id:'security',Name:'Security / mandatory action',Enabled:true,Match:'SecurityAction',Value:'',Effect:'High'},
- {Id:'directmil',Name:'Direct .mil request',Enabled:true,Match:'DirectMilRequest',Value:'',Effect:'High'},
+ {Id:'directorg',Name:'Direct request from your organization',Enabled:true,Match:'DirectOrgRequest',Value:'',Effect:'High'},
  {Id:'directask',Name:'Direct request or question',Enabled:true,Match:'DirectRequest',Value:'',Effect:'Medium'},
  {Id:'replied',Name:'Already replied, no new request',Enabled:true,Match:'AlreadyReplied',Value:'',Effect:'Skip'},
  {Id:'automated',Name:'Routine automated digest',Enabled:true,Match:'AutomatedDigest',Value:'',Effect:'Skip'}
@@ -47,7 +47,7 @@ const demoReport=`## 1. Categories
 > Caution: Check original Outlook messages before replying.
 
 ## 6. Quick Summary
-Three pending requests. This is test data, not a live GenAI response.`;
+Three pending requests. This is test data, not a live AI response.`;
 function demoReportItems(){
  const linked=fakeItems.map((item,i)=>({
   Index:i+1,Key:item.Key,Subject:item.Subject,From:item.From,FromEmail:'demo@example.test',
@@ -82,8 +82,8 @@ function demoStore(){try{const x=JSON.parse(sessionStorage.getItem('packetrat-de
 function demoPersist(){sessionStorage.setItem('packetrat-demo-store',JSON.stringify(store));}
 async function api(route,data){
  if(demo){await new Promise(resolve=>setTimeout(resolve,140));if(route==='state')return {ok:true,store:demoStore(),report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'PACKETRAT_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},lastRun:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}};
-  if(route==='credentials/status')return {ok:true,credentials:{source:'Lazarette',manual:{GenAi:false,Grok:false},lazaretteDetected:false,lazaretteItems:{GenAi:'genapi',Grok:'advana-api'}}};
-   if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'Lazarette',manual:{GenAi:false,Grok:false},lazaretteDetected:false,lazaretteItems:{GenAi:'genapi',Grok:'advana-api'}}};
+  if(route==='credentials/status')return {ok:true,credentials:{source:'Lazarette',manual:{AiEndpoint:false,Grok:false},lazaretteDetected:false,lazaretteItems:{AiEndpoint:'ai-endpoint-api',Grok:'grok-api'}}};
+   if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'Lazarette',manual:{AiEndpoint:false,Grok:false},lazaretteDetected:false,lazaretteItems:{AiEndpoint:'ai-endpoint-api',Grok:'grok-api'}}};
    if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'PACKETRAT_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
   if(route==='report/generate'){
@@ -215,10 +215,10 @@ function renderCredentialStatus(state){
  $('credentialSource').value=state.source==='Manual'?'Manual':'Lazarette';
  updateCredentialPanel();
  const manual=state.manual||{},items=state.lazaretteItems||{};
- const gen=manual.GenAi?'set':'missing',grok=manual.Grok?'set':'missing';
+ const gen=manual.AiEndpoint?'set':'missing',grok=manual.Grok?'set':'missing';
  const line=state.source==='Manual'
-   ?'Manual session · GenAi '+gen+' · Grok '+grok
-   :'Lazarette '+(state.lazaretteDetected?'found':'not detected')+' · GenAi: '+(items.GenAi||'genapi')+' · Grok: '+(items.Grok||'advana-api');
+   ?'Manual session · AI endpoint '+gen+' · Grok '+grok
+   :'Lazarette '+(state.lazaretteDetected?'found':'not detected')+' · AI endpoint: '+(items.AiEndpoint||'ai-endpoint-api')+' · Grok: '+(items.Grok||'grok-api');
  $('credentialStatus').textContent=demo?'Demo mode: no credentials accepted or stored.':line;
 }
 async function applyCredentialSource(){
@@ -238,11 +238,11 @@ async function applyCredentialSource(){
 }
 const ruleConditions=[
  ['SecurityAction','Security / mandatory action'],
- ['DirectMilRequest','Verified direct .mil request'],
+ ['DirectOrgRequest','Verified direct request from your organization domain'],
  ['DirectRequest','Verified direct request'],
  ['AlreadyReplied','Already replied without new ask'],
  ['AutomatedDigest','Automated digest or newsletter'],
- ['MilSender','Any .mil sender'],
+ ['OrgSender','Any sender from your organization domain'],
  ['SenderDomain','Sender domain'],
  ['SenderContains','Sender address contains'],
  ['SubjectContains','Subject contains'],
@@ -267,8 +267,8 @@ function renderRules(){
     '<label>When<select data-rule-field="Match">'+ruleSelect(ruleConditions,r.Match)+'</select></label>'+
     '<label>Match value<input data-rule-field="Value" maxlength="160" placeholder="For custom matches" value="'+value+'"></label>'+
     '<label>Then<select data-rule-field="Effect">'+ruleSelect(effects,r.Effect)+'</select></label></div>'+
-    '<p class="rule-hint">'+(r.Match==='DirectMilRequest'?'Requires confirmed recipient match and a request; .mil alone is not urgent.':
-     r.Match==='SenderDomain'?'Use a domain such as navy.mil without @.':
+    '<p class="rule-hint">'+(r.Match==='DirectOrgRequest'?'Requires confirmed recipient match and a request; your organization domain (PACKETRAT_ORG_DOMAIN) alone is not urgent.':
+     r.Match==='SenderDomain'?'Use a domain such as example.org without @.':
      r.Match==='SubjectContains'?'Case-insensitive literal phrase.':
      r.Match==='BodyContains'?'Uses only the limited message preview.':
      r.Match==='AutomatedDigest'?'Excludes routine digests, not known mandatory/security requests.':
@@ -288,7 +288,7 @@ function setRuleField(node){
 function addCustomRule(){
  if(!ruleDraft)ruleDraft=[];
  if(ruleDraft.length>=30)return notify('Maximum 30 rules.',true);
- ruleDraft.push({Id:'custom-'+Date.now().toString(36)+'-'+ruleDraft.length,Name:'New custom rule',Enabled:true,Match:'SenderDomain',Value:'navy.mil',Effect:'Medium'});
+ ruleDraft.push({Id:'custom-'+Date.now().toString(36)+'-'+ruleDraft.length,Name:'New custom rule',Enabled:true,Match:'SenderDomain',Value:'example.org',Effect:'Medium'});
  renderRules();noteRules('New rule added. Edit and save it to activate.');
 }
 async function saveTriageRules(){
@@ -308,7 +308,7 @@ async function saveTriageRules(){
 function migrateStorageKey(storage,oldKey,newKey){try{if(storage.getItem(newKey)===null){const old=storage.getItem(oldKey);if(old!==null)storage.setItem(newKey,old)}}catch{}}
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
 function loadSettings(){migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs');try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{GenAi:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{AiEndpoint:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();$('connectionStatus').innerHTML=`<span class="status-dot"></span> ${demo?'Demo · Offline':'Local connection'}`;}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));

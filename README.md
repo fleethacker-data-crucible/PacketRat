@@ -12,12 +12,12 @@ Packet ships carried the mail on scheduled routes, and the sailors aboard were c
 
 Formerly MailHawk.
 
-> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/CAC, AI provider connectivity, and Navy workstation execution need validation in the approved environment. Not accredited or production-ready.
+> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/smart card, AI provider connectivity, and operational workstation execution need validation in the approved environment. Not accredited or production-ready.
 
 ## Only two launchers
 
 - **`Launch-PacketRat.bat`** — opens the modern browser GUI, the default.
-- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile GenAi` or `-Profile Grok` are accepted).
+- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile AiEndpoint` or `-Profile Grok` are accepted; the former AI-endpoint profile name still works).
 
 The browser launcher also supports optional commands from an existing CMD prompt:
 
@@ -30,7 +30,7 @@ Launch-PacketRat.bat -Port 8766
 Launch-PacketRat.bat --replace
 Launch-PacketRat.bat --stay
 Launch-PacketRat.bat stop
-PacketRat-CLI.bat -Profile GenAi
+PacketRat-CLI.bat -Profile AiEndpoint
 ```
 
 ### Closing the tab stops PacketRat
@@ -49,15 +49,15 @@ The PowerShell process-scoped startup convention matches Halyard, but it **canno
 
 ## Interactive intelligence report
 
-The report is now an interactive, **source-verified intelligence workspace**, not merely pasted GenAI Markdown. It includes:
+The report is now an interactive, **source-verified intelligence workspace**, not merely pasted AI model Markdown. It includes:
 
 - Conservative recovery of common encoding artifacts and model formatting, without stripping ordinary Unicode.
-- Verified inline source references and clickable table rows when GenAI includes source indices. Invalid model references are never made actionable.
+- Verified inline source references and clickable table rows when the AI model includes source indices. Invalid model references are never made actionable.
 - A searchable list of actual source messages from the most recent inbox scan. Open in Outlook, draft a reply, or explicitly create an action from a report source. Graph-to-classic-Outlook opening is not yet implemented.
 - Generate **Action plan**, **Leadership briefing**, **Risk review**, or **Explanation** from the full report or a selected section; follow-ups are generated on demand and do not send email or silently alter the action queue.
 - Report-quality indicators for unresolved character artifacts, unsupported model references, missing structured output, and conflicts between AI suggestions and local triage rules.
 
-Legacy reports without source indices show a verified source list rather than pretending arbitrary prose can be mapped safely to an Outlook message. If GenAI returns incomplete structured output, PacketRat warns instead of displaying partial JSON as trustworthy triage.
+Legacy reports without source indices show a verified source list rather than pretending arbitrary prose can be mapped safely to an Outlook message. If the AI model returns incomplete structured output, PacketRat warns instead of displaying partial JSON as trustworthy triage.
 
 See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for detailed findings, remediation, limitations, and the longer-term schema-first architecture proposal.
 
@@ -65,7 +65,7 @@ See [Deep Report Intelligence Audit](docs/REPORT_INTELLIGENCE_AUDIT.md) for deta
 
 ## Standardized AI responses (v1)
 
-PacketRat no longer attempts to interpret free-form GenAI replies as email drafts or dashboard reports. It uses three explicit, versioned response contracts:
+PacketRat no longer attempts to interpret free-form AI model replies as email drafts or dashboard reports. It uses three explicit, versioned response contracts:
 
 | Protocol | Output | Handling |
 |---|---|---|
@@ -85,17 +85,17 @@ See [AI Wire Protocol v1](docs/AI_WIRE_PROTOCOL_V1.md) for delimiters, schemas, 
 - Priority signals are clickable, and subject titles in the action queue open the original message in desktop Outlook (COM mode).
 - An action can be manually upgraded/downgraded High / Medium / Low. Manual overrides survive rescans and can be reset to the AI/rule suggestion.
 - **Configuration → Intelligence rules** provides editable, ordered, enableable defaults plus custom sender/domain/subject/preview rules. The filter review lists reversible rule exclusions.
-- The report workspace renders GenAI Markdown as readable sections, safe tables, and bullets rather than showing raw blockquote chevrons.
+- The report workspace renders AI model Markdown as readable sections, safe tables, and bullets rather than showing raw blockquote chevrons.
 - Draft generation requests a **20,000-token output ceiling** (provider permitting) and returns exactly one structured subject/body response. The selected response opens in Outlook for human review only.
 
-The default .mil rule requires a **verified direct recipient and actionable language**. A .mil sender alone does not create a mandatory task. See [Triage Rules and Drafts](docs/TRIAGE_RULES_AND_DRAFTS.md).
+The default organization-domain rule requires a **verified direct recipient and actionable language**, and only applies when `PACKETRAT_ORG_DOMAIN` is set in `Config/packetrat.env`. A sender from your organization domain alone does not create a mandatory task. See [Triage Rules and Drafts](docs/TRIAGE_RULES_AND_DRAFTS.md).
 
 ## Choosing an AI token source
 
 Open **Configuration → Credentials & connections** in the GUI.
 
-1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (GenAi item `genapi` or Grok item `advana-api`; override names in `Config/packetrat.env` if needed).
-2. Or select **Manual · current session**, select GenAi or Grok, paste a token for an **approved** provider, then select **Apply credential source**. Repeat for another provider if needed.
+1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (AI endpoint item `ai-endpoint-api` or Grok item `grok-api`; override names in `Config/packetrat.env` if needed. The former item names are still found when these are absent).
+2. Or select **Manual · current session**, select AI endpoint or Grok, paste a token for an **approved** provider, then select **Apply credential source**. Repeat for another provider if needed.
 3. Select **Check available token** to verify that the selected provider's token resolves locally. This does **not** contact an AI endpoint or scan your inbox.
 4. Select **Forget manual tokens** to erase manual credential references held in the current PowerShell process.
 
@@ -103,7 +103,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 
 **Why “no LLM token” happened:** Earlier browser releases silently searched environment variables/Lazarette without user-configurable source selection. Now the selected source is explicit, errors include useful setup instructions, and **Analyze inbox checks token availability before reading messages**.
 
-`Config/packetrat.env.example` contains optional Lazarette discovery, service names, and provider configuration. Do not commit real token values.
+`Config/packetrat.env.example` contains optional Lazarette discovery, service names, and provider configuration. No AI endpoint URL is built in: set `PACKETRAT_AI_ENDPOINT_URL` and/or `PACKETRAT_GROK_URL` (or `LLM_URL`) there before a live analysis. Do not commit real token values.
 
 ## What works and what still needs verification
 
@@ -138,7 +138,7 @@ The HTTP service binds to local loopback only. POST requests require same-origin
 
 **Browser demo:** `Launch-PacketRat.bat demo` loads hard-coded test messages and does not touch Outlook or LLM endpoints. Real API keys must not be entered in demo mode.
 
-See `docs/NAUTILUS_LAUNCH_STANDARD.md` for the Lazarette/Halyard launch convention and security constraints.
+See [`docs/WORKSTATION_LAUNCH_STANDARD.md`](docs/WORKSTATION_LAUNCH_STANDARD.md) for the Lazarette/Halyard launch convention and security constraints.
 
 ## Upgrading from MailHawk
 
@@ -148,6 +148,6 @@ The rename keeps existing installs working:
 - **Local data:** on first start, `Logs/mailhawk-store.json` (action queue, dismissals, rules) is copied to `Logs/packetrat-store.json`. The original file is left in place. New log files are written as `packetrat*.log`.
 - **Configuration:** `Config/packetrat.env` is read first; an existing `Config/mailhawk.env` is still read when the new file is absent. Every `PACKETRAT_*` setting falls back to its former `MAILHAWK_*` name.
 - **Browser settings:** the saved preferences key `mailhawk-prefs` is copied to `packetrat-prefs` once; the old key is left in place.
-- **Lazarette (formerly ARC):** a folder counts as Lazarette when it contains `lib\Lazarette.ps1` or `lib\Arc.ps1` (ARC 5); `pm.ps1` is only a last-resort fallback for ARC 3/4. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. Vault item names (`genapi`, `advana-api`) are unchanged.
+- **Lazarette (formerly ARC):** a folder counts as Lazarette when it contains `lib\Lazarette.ps1` or `lib\Arc.ps1` (ARC 5); `pm.ps1` is only a last-resort fallback for ARC 3/4. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. The default vault item names are now `ai-endpoint-api` and `grok-api`; the former item names are still looked up when those are absent, so existing vaults keep working.
 - **Port:** unchanged (8766), so browser storage for the existing origin is kept.
 - **AI envelopes:** the model response markers are now `PACKETRAT_*_V1`. They are never saved and parsed again, so no old-name fallback is needed.

@@ -57,7 +57,7 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('Stop-PacketRatProcesses', stop)
 
     def test_contract_documented(self):
-        self.assertTrue((ROOT/'docs/NAUTILUS_LAUNCH_STANDARD.md').exists())
+        self.assertTrue((ROOT/'docs/WORKSTATION_LAUNCH_STANDARD.md').exists())
         self.assertTrue((ROOT/'AGENTS.md').exists())
 
 if __name__ == '__main__':
