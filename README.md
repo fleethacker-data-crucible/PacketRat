@@ -103,6 +103,8 @@ The default organization-domain rule requires a **verified direct recipient and 
 
 ## Choosing an AI token source
 
+> **Intelligence router:** the AI endpoint and its token will move behind the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), so PacketRat defaults to the router instead of a fixed endpoint. Until then the settings below stay as they are. See [TechStack](TechStack), "Intelligence router".
+
 Open **Configuration → Credentials & connections** in the GUI.
 
 1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (AI endpoint item `ai-endpoint-api` or Grok item `grok-api`; override names in `Config/packetrat.env` if needed. The former item names are still found when these are absent).
