@@ -2,6 +2,8 @@
 
 Before changing any Windows workstation launcher, read docs/WORKSTATION_LAUNCH_STANDARD.md, then check the current launchers in Lazarette and Halyard. Do not assume plain powershell.exe -File works on approved managed-workstation builds. Preserve PowerShell 5.1 and browser-only dependencies; verify path quoting, STA for COM, visible failures, and policy precedence. Use process-scoped execution-policy convention only when permitted, never attempt to circumvent central controls. Keep app changes on feature branches until verified on the target workstation.
 
+Never ship or load a prebuilt or custom DLL (`Add-Type -Path *.dll`, `Assembly.Load*`, a compiled DLL cached on disk): the workstation's application control blocks them. No third-party DLLs or NuGet packages; C# ships as source for `Add-Type` and uses framework assemblies only (see `TechStack`, Build rules).
+
 
 ## Stable launcher and AI credential contract
 
