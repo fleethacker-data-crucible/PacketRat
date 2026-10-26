@@ -126,7 +126,7 @@
    const bullet=line.match(/^(?:[-*•]\s+|\d+[.)]\s+)(.*)$/);
    if(bullet){if(!inList){html.push('<ul class="report-list">');inList=true}html.push('<li>'+inline(bullet[1],lookup)+'</li>');continue}
    closeList();
-   // Recovered tables from GenAI may use colon key-value lines.
+   // Recovered tables from the AI model may use colon key-value lines.
    if(/^\*\*[^*]{2,100}:\*\*/.test(line)){html.push('<p class="report-emphasis">'+inline(line,lookup)+'</p>');continue}
    html.push('<p>'+inline(line,lookup)+'</p>');
   }

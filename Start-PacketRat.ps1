@@ -5,8 +5,7 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [ValidateSet('Auto', 'Grok', 'GenAi')]
-    [string]$Profile = 'Auto',
+    [string]$Profile = 'Auto',   # Auto | Grok | AiEndpoint (validated once the modules load)
     [ValidateSet('COM', 'Graph')]
     [string]$Provider = 'COM',
     [switch]$ConsoleOnly,
@@ -69,6 +68,7 @@ if (Test-Path -LiteralPath $envFile) {
 # PACKETRAT_* settings win; former MAILHAWK_* names are copied in only when the new ones are unset.
 Initialize-PacketRatLegacyEnvironment
 if ($env:PACKETRAT_LLM_PROFILE -and $Profile -eq 'Auto') { $Profile = $env:PACKETRAT_LLM_PROFILE }
+$Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile   # maps deprecated profile names; throws on unknown
 if ($env:PACKETRAT_PROVIDER) { $Provider = $env:PACKETRAT_PROVIDER }
 
 Write-Host '[*] PacketRat modules loaded' -ForegroundColor DarkGray
@@ -214,7 +214,7 @@ $panelTop.Controls.Add($lblProf)
 $cmbProfile = New-Object System.Windows.Forms.ComboBox
 $cmbProfile.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
 [void]$cmbProfile.Items.Add('Auto')
-[void]$cmbProfile.Items.Add('GenAi')
+[void]$cmbProfile.Items.Add('AiEndpoint')
 [void]$cmbProfile.Items.Add('Grok')
 $cmbProfile.SelectedIndex = 0
 try {

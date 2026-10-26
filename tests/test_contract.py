@@ -1,4 +1,5 @@
 """Static development checks. Does not execute PowerShell or access Outlook."""
+import re
 from pathlib import Path
 from PIL import Image
 ROOT=Path(__file__).resolve().parents[1]
@@ -51,11 +52,19 @@ assert BRIDGE.index("'Get-LazaretteSecret', 'Get-ArcSecret'") < BRIDGE.index('Ge
 assert "'Lazarette.ps1', 'Arc.ps1'" in BRIDGE, 'Discovery by lib\\Lazarette.ps1 / lib\\Arc.ps1 (ARC 5)'
 assert BRIDGE.index("'Lazarette.ps1', 'Arc.ps1'") < BRIDGE.index("Join-Path $full 'pm.ps1'"), 'pm.ps1 only as the last resort'
 assert "'Unlock-LazaretteVaultInteractive', 'Unlock-ArcVaultInteractive'" in BRIDGE
-assert "'genapi'" in BRIDGE and "'advana-api'" in BRIDGE, 'Vault item names unchanged'
-for suffix in ('GenAi','Grok'):
-    item_order=[f"'PACKETRAT_LAZARETTE_ITEM_{suffix}'",f"'MAILHAWK_ARC_ITEM_{suffix}'",f"'HALYARD_LAZARETTE_ITEM_{suffix}'",f"'CASCADE_ARC_ITEM_{suffix}'"]
+assert "Name       = 'ai-endpoint-api'" in BRIDGE and "Name       = 'grok-api'" in BRIDGE, 'Canonical vault item names'
+assert BRIDGE.count('Legacy     = @(')==2, 'Former vault item names kept as legacy aliases in one map'
+# Item-name overrides: the current PacketRat name first, then the former PacketRat/MailHawk names, then Halyard's.
+LLMSRC=(ROOT/'Private/PacketRatLlm.ps1').read_text()
+legacy_profile=re.search(r"PacketRatLlmProfileAliases = @\{ '(\w+)'",LLMSRC).group(1)
+for current, legacy in (('AiEndpoint',legacy_profile),('Grok','Grok')):
+    item_order=[f"'PACKETRAT_LAZARETTE_ITEM_{current}'",f"'MAILHAWK_ARC_ITEM_{legacy}'",f"'HALYARD_LAZARETTE_ITEM_{legacy}'"]
     item_positions=[BRIDGE.index(x) for x in item_order]
-    assert item_positions==sorted(item_positions), 'Item overrides: PacketRat, MailHawk, then Halyard before its former Cascade names'
+    assert item_positions==sorted(item_positions), 'Item overrides: PacketRat, MailHawk, then Halyard'
+assert 'https://' not in LLMSRC, 'No organization endpoint is hard-coded'
+assert "AiEndpointUrl     = 'http://127.0.0.1:1234/v1/chat/completions'" in LLMSRC, 'AiEndpoint defaults to local phoenix-lai'
+assert set(re.findall(r"https?://([^/:'\"\s]+)",LLMSRC))=={'127.0.0.1'}, 'Only loopback is built in'
+assert LLMSRC.count('PacketRatLlmProfileAliases = @{')==1, 'Deprecated profile name mapped in one place'
 STORE=(ROOT/'Private/PacketRatStore.ps1').read_text()
 assert "'mailhawk-store.json'" in STORE and 'Copy-Item' in STORE and 'Remove-Item' not in STORE
 assert "'mailhawk-prefs','packetrat-prefs'" in CLIENT

@@ -11,25 +11,36 @@ jobs:
     runs-on: [self-hosted, Windows, X64]
     defaults:
       run:
-        shell: bash
+        shell: powershell
     env:
       PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
       - name: Check JavaScript syntax and rendering
         run: |
+          $ErrorActionPreference='Stop'
           node --check Web/app.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --check Web/report-experience.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_intelligence.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install development browser dependencies
         run: |
+          $ErrorActionPreference='Stop'
           python -m pip install --disable-pip-version-check pillow playwright
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m playwright install --with-deps chromium
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Static and browser smoke tests
         run: |
+          $ErrorActionPreference='Stop'
           python tests/test_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/test_frontend.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s tests -p 'test_launcher_contract.py'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   powershell-51:
     runs-on: [self-hosted, Windows, X64]

@@ -184,7 +184,7 @@ def run_lifecycle():
             body = request.post_data or ''
             calls.append({'path': path, 'method': request.method, 'headers': request.headers, 'body': json.loads(body) if body else None})
             if path == '/api/state':
-                payload = {'ok': True, 'store': {'Checklist': [], 'Dismissals': []}, 'credentials': {'source': 'Lazarette', 'manual': {'GenAi': False, 'Grok': False}, 'lazaretteDetected': False, 'lazaretteItems': {}}}
+                payload = {'ok': True, 'store': {'Checklist': [], 'Dismissals': []}, 'credentials': {'source': 'Lazarette', 'manual': {'AiEndpoint': False, 'Grok': False}, 'lazaretteDetected': False, 'lazaretteItems': {}}}
             else:
                 payload = {'ok': True}
             return route.fulfill(status=200, content_type='application/json', body=json.dumps(payload))
