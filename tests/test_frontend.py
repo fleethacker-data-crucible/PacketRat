@@ -87,7 +87,7 @@ def run():
                 page.wait_for_selector('#mOpen:text-is("3")')
                 assert page.locator('#mHigh').inner_text()=='2'
                 assert page.locator('#demoBanner').is_visible()
-                assert page.locator('.brand img').evaluate('(img) => img.naturalWidth') > 0
+                assert page.locator('.brand img.brand-emblem:visible').evaluate('(img) => img.naturalWidth') > 0, 'Sidebar shows the full emblem'
                 assert page.locator('.hero-art img.emblem-dark').evaluate('(img) => img.naturalWidth') > 0
                 assert page.locator('.hero-art img.emblem-light').evaluate('(img) => img.naturalWidth') > 0
                 assert page.locator('.sidebar [data-view="triage"] svg.fl-icon').count() == 1, 'Lucide nav icons rendered'
