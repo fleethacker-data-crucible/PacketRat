@@ -1,9 +1,38 @@
 #requires -Version 5.1
 # Editable, deterministic mail triage policy. No model-generated rules are executed.
+# Organization-domain rules use PACKETRAT_ORG_DOMAIN (Config\packetrat.env): one or more domains or
+# domain suffixes, comma-separated, e.g. example.org. When it is unset those rules never match.
+
+# Legacy aliases: rule match names saved before the organization domain became configurable.
+# They are read as the new names, and saved under the new names.
+$script:PacketRatRuleMatchAliases = @{ 'DirectMilRequest' = 'DirectOrgRequest'; 'MilSender' = 'OrgSender' }
+
+function ConvertTo-PacketRatRuleMatch {
+    param([string]$Match)
+    if ($script:PacketRatRuleMatchAliases.ContainsKey($Match)) { return $script:PacketRatRuleMatchAliases[$Match] }
+    return $Match
+}
+
+function Get-PacketRatOrgDomains {
+    $raw = [string]$env:PACKETRAT_ORG_DOMAIN
+    if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
+    return @($raw -split '[,;\s]+' | ForEach-Object { $_.Trim().TrimStart('@').TrimStart('.').ToLowerInvariant() } |
+        Where-Object { $_ -match '^[a-z0-9.-]+$' })
+}
+
+function Test-PacketRatOrgSender {
+    param([string]$Sender)
+    $address = ([string]$Sender).ToLowerInvariant()
+    foreach ($domain in @(Get-PacketRatOrgDomains)) {
+        if ($address.EndsWith('@' + $domain) -or ($address.Contains('@') -and $address.EndsWith('.' + $domain))) { return $true }
+    }
+    return $false
+}
+
 function Get-PacketRatDefaultRules {
     return @(
         [pscustomobject]@{Id='security';Name='Security / mandatory action';Enabled=$true;Match='SecurityAction';Value='';Effect='High'},
-        [pscustomobject]@{Id='directmil';Name='Direct .mil request';Enabled=$true;Match='DirectMilRequest';Value='';Effect='High'},
+        [pscustomobject]@{Id='directorg';Name='Direct request from your organization';Enabled=$true;Match='DirectOrgRequest';Value='';Effect='High'},
         [pscustomobject]@{Id='directask';Name='Direct request or question';Enabled=$true;Match='DirectRequest';Value='';Effect='Medium'},
         [pscustomobject]@{Id='replied';Name='Already replied, no new request';Enabled=$true;Match='AlreadyReplied';Value='';Effect='Skip'},
         [pscustomobject]@{Id='automated';Name='Routine automated digest';Enabled=$true;Match='AutomatedDigest';Value='';Effect='Skip'}
@@ -15,6 +44,9 @@ function Initialize-PacketRatRules {
     if($null -eq $Store.PSObject.Properties['Rules'] -or $null -eq $Store.Rules){
         $Store | Add-Member -NotePropertyName Rules -NotePropertyValue @(Get-PacketRatDefaultRules) -Force
     }
+    foreach($rule in @($Store.Rules)){
+        if($rule -and $rule.PSObject.Properties['Match']){$rule.Match=ConvertTo-PacketRatRuleMatch ([string]$rule.Match)}
+    }
     return $Store
 }
 
@@ -22,18 +54,18 @@ function Set-PacketRatRules {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][array]$Rules,[string]$Root)
     if($Rules.Count -gt 30){throw 'Maximum 30 triage rules'}
-    $allowed=@('SecurityAction','DirectMilRequest','DirectRequest','AlreadyReplied','AutomatedDigest','SenderDomain','SenderContains','SubjectContains','BodyContains','MilSender')
+    $allowed=@('SecurityAction','DirectOrgRequest','DirectRequest','AlreadyReplied','AutomatedDigest','SenderDomain','SenderContains','SubjectContains','BodyContains','OrgSender')
     $seen=@{};$validated=New-Object System.Collections.Generic.List[object]
     foreach($rule in $Rules){
         $id=[string]$rule.Id;$name=[string]$rule.Name
-        $match=[string]$rule.Match;$effect=[string]$rule.Effect;$value=[string]$rule.Value
+        $match=ConvertTo-PacketRatRuleMatch ([string]$rule.Match);$effect=[string]$rule.Effect;$value=[string]$rule.Value
         if($id -notmatch '^[a-zA-Z0-9_-]{1,48}$' -or $seen.ContainsKey($id)){throw 'Invalid or duplicate rule ID'}
         if([string]::IsNullOrWhiteSpace($name) -or $name.Length -gt 90){throw 'Rule name must have 1–90 characters'}
         if($allowed -cnotcontains $match){throw ('Unsupported rule match: '+$match)}
         if(@('High','Medium','Low','Skip') -cnotcontains $effect){throw 'Invalid rule outcome'}
         if($value.Length -gt 160){throw 'Rule value too long'}
         if($match -in @('SenderDomain','SenderContains','SubjectContains','BodyContains') -and [string]::IsNullOrWhiteSpace($value)){throw 'Custom matches require a value'}
-        if($match -eq 'SenderDomain' -and $value -notmatch '^[a-zA-Z0-9.-]+$'){throw 'Use a plain domain, such as navy.mil'}
+        if($match -eq 'SenderDomain' -and $value -notmatch '^[a-zA-Z0-9.-]+$'){throw 'Use a plain domain, such as example.org'}
         $seen[$id]=$true
         [void]$validated.Add([pscustomobject]@{
             Id=$id;Name=$name.Trim();Enabled=[bool]$rule.Enabled
@@ -53,9 +85,9 @@ function Test-PacketRatRule {
     $body=[string]$Mail.BodyPreview
     $direct=($Mail.PSObject.Properties['IsDirect'] -and [bool]$Mail.IsDirect)
     $hasAsk=("$subject $body" -match '(?i)(\?|action required|please\b|review\b|respond\b|approve\b|confirm\b|sign\b|submit\b|provide\b|request\b|by (monday|tuesday|wednesday|thursday|friday|tomorrow)|deadline\b|suspense\b)')
-    switch([string]$Rule.Match){
+    switch(ConvertTo-PacketRatRuleMatch ([string]$Rule.Match)){
         'SecurityAction' {return [bool]("$subject $body" -match '(?i)(dlp alert|security incident|policy violation|mandatory training|urgent action required|cybersecurity alert|saar.*(action|approve)|action required)')}
-        'DirectMilRequest' {return [bool]($direct -and $sender -match '(?i)@([a-z0-9-]+\.)*mil$' -and $hasAsk)}
+        'DirectOrgRequest' {return [bool]($direct -and (Test-PacketRatOrgSender $sender) -and $hasAsk)}
         'DirectRequest' {return [bool]($direct -and $hasAsk)}
         'AlreadyReplied' {return [bool]($Mail.AppearsReplied -and -not $hasAsk)}
         'AutomatedDigest' {
@@ -66,7 +98,7 @@ function Test-PacketRatRule {
             $domain=([string]$Rule.Value).TrimStart('.').ToLowerInvariant()
             return [bool]($sender.ToLowerInvariant().EndsWith('@'+$domain) -or $sender.ToLowerInvariant().EndsWith('.'+$domain))
         }
-        'MilSender' {return [bool]($sender -match '(?i)@([a-z0-9-]+\.)*mil$')}
+        'OrgSender' {return [bool](Test-PacketRatOrgSender $sender)}
         'SenderContains' {return ($sender.IndexOf([string]$Rule.Value,[StringComparison]::OrdinalIgnoreCase) -ge 0)}
         'SubjectContains' {return ($subject.IndexOf([string]$Rule.Value,[StringComparison]::OrdinalIgnoreCase) -ge 0)}
         'BodyContains' {return ($body.IndexOf([string]$Rule.Value,[StringComparison]::OrdinalIgnoreCase) -ge 0)}

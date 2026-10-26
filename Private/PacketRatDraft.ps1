@@ -4,7 +4,7 @@ function New-PacketRatDraftReply {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Email,
-        [ValidateSet('Auto','Grok','GenAi')][string]$Profile='Auto',
+        [string]$Profile='Auto',
         [string]$Model,
         [AllowEmptyString()][string]$ExtraInstruction='',
         [ValidateRange(20000,32768)][int]$MaxTokens=20000

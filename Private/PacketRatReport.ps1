@@ -175,9 +175,9 @@ function Invoke-PacketRatReportFollowup {
         [Parameter(Mandatory)]$Analysis,
         [ValidateSet('Brief','Actions','Risks','Explain')][string]$Mode='Actions',
         [string]$SectionId='all',
-        [ValidateSet('Auto','GenAi','Grok')][string]$Profile='Auto'
+        [string]$Profile='Auto'
     )
-    if($Analysis.ReportQuality -and $Analysis.ReportQuality.PartialOutput){throw 'GenAI report was truncated. Re-run inbox analysis before generating a derived report.'}
+    if($Analysis.ReportQuality -and $Analysis.ReportQuality.PartialOutput){throw 'AI report was truncated. Re-run inbox analysis before generating a derived report.'}
     $sections=@(Get-PacketRatReportSections -Report ([string]$Analysis.Report))
     $context=''
     $selectedTitle='Full intelligence report'

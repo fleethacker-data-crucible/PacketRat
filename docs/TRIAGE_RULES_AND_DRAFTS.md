@@ -9,12 +9,14 @@ A language model can misidentify direct questions, mandatory work, and automated
 | Order | Condition | Default effect |
 |---|---|---|
 | 1 | Recognized security alerts, mandatory action language, action required | High |
-| 2 | Verified direct recipient + .mil sender + request/question language | High |
+| 2 | Verified direct recipient + sender in your organization domain (`PACKETRAT_ORG_DOMAIN`) + request/question language | High |
 | 3 | Verified direct recipient + request/question language | Medium |
 | 4 | Already replied without a new request | Exclude from suggested queue |
 | 5 | Routine automated digest/newsletter with no clear action request | Exclude from suggested queue |
 
-A sender merely using **.mil** does *not* imply action is required. This is intentional: many official addresses distribute automated notices and FYIs. If you want every .mil sender reviewed, use a custom **Any .mil sender** rule with an appropriate outcome.
+A sender merely using **your organization domain** does *not* imply action is required. This is intentional: many official addresses distribute automated notices and FYIs. If you want every sender from your organization domain reviewed, use a custom **Any sender from your organization domain** rule with an appropriate outcome.
+
+**Organization domain:** set `PACKETRAT_ORG_DOMAIN` in `Config/packetrat.env` to your mail domain (or several, comma-separated; a domain suffix also works). Rules 2 and **Any sender from your organization domain** never match while it is unset. Rules saved under the former rule match names are read and saved under the new names.
 
 **Direct recipient detection:** In Outlook COM mode, the tool checks the To field against the current Outlook user identity (SMTP address or display name). You can specify `PACKETRAT_USER_EMAIL` if your organization uses an alias the resolver cannot identify. In Graph mode, the tool uses the authorized signed-in account or that explicitly configured email and checks `toRecipients`. If PacketRat cannot verify direct delivery, `IsDirect` is false; it should not guess and promote a message. CC-only and group traffic do not automatically count as direct.
 
