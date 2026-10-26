@@ -18,6 +18,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+SCRIPTS = ('shell.js', 'icons.js', 'report-experience.js', 'app.js')
+
+
+def add_scripts(page):
+    # Same order as index.html: the Fleet shell, Lucide icons, then the app.
+    for name in SCRIPTS:
+        page.add_script_tag(content=(WEB/name).read_text(encoding='utf-8'))
+
+
 def check_prefs_migration(browser, html):
     """Rename migration: 'mailhawk-prefs' is copied forward to 'packetrat-prefs' once; the old key stays."""
     page = browser.new_page(viewport={'width': 1450, 'height': 960})
@@ -32,8 +41,7 @@ def check_prefs_migration(browser, html):
         const s = {};
         Object.defineProperty(window, 'sessionStorage', {configurable:true, value:{getItem:k=>s[k]||null,setItem:(k,v)=>s[k]=v}});
     }""")
-    page.add_script_tag(content=(WEB/'report-experience.js').read_text())
-    page.add_script_tag(content=(WEB/'app.js').read_text())
+    add_scripts(page)
     page.wait_for_selector('#mOpen:text-is("3")')
     prefs = page.evaluate('() => window.__prefs')
     assert 'mailhawk-prefs' in prefs, 'old key must be left in place'
@@ -58,27 +66,32 @@ def run():
                 page.on('pageerror', lambda err:errors.append(str(err)))
                 # Browser navigation is prohibited in some test sandboxes; inline
                 # exactly the same shipped HTML/CSS/JS through Playwright.
-                html = (WEB/'index.html').read_text().replace('<html lang="en">','<html lang="en" data-demo="1">')
+                html = (WEB/'index.html').read_text().replace('<html lang="en" data-app="packetrat">','<html lang="en" data-app="packetrat" data-demo="1">')
+                html = html.replace('<link rel="stylesheet" href="vendor/fleet/fleet.css">','')
                 html = html.replace('<link rel="stylesheet" href="style.css">','')
-                html = html.replace('<script defer src="app.js"></script>','')
-                html = html.replace('<script defer src="report-experience.js"></script>','')
-                for name in ('packetrat-icon.png','packetrat-logo.png'):
+                html = html.replace('<script src="shell.js"></script>','')
+                for name in SCRIPTS[1:]:
+                    html = html.replace('<script defer src="'+name+'"></script>','')
+                for name, mime in (('brand/mark.svg','image/svg+xml'),('brand/emblem-dark.png','image/png'),('brand/emblem-light.png','image/png')):
                     encoded = base64.b64encode((WEB/name).read_bytes()).decode()
-                    html = html.replace('src="'+name+'"','src="data:image/png;base64,'+encoded+'"')
+                    html = html.replace('src="'+name+'"','src="data:'+mime+';base64,'+encoded+'"')
                 page.set_content(html)
-                page.add_style_tag(content=(WEB/'style.css').read_text())
+                page.add_style_tag(content=(WEB/'vendor/fleet/fleet.css').read_text(encoding='utf-8'))
+                page.add_style_tag(content=(WEB/'style.css').read_text(encoding='utf-8'))
                 page.evaluate("""() => {
                     const memory = {};
                     Object.defineProperty(window, 'sessionStorage', {configurable:true, value:{getItem:k=>memory[k]||null,setItem:(k,v)=>memory[k]=v}});
                     Object.defineProperty(window, 'localStorage', {configurable:true, value:{getItem:()=>null,setItem:()=>{}}});
                 }""")
-                page.add_script_tag(content=(WEB/'report-experience.js').read_text())
-                page.add_script_tag(content=(WEB/'app.js').read_text())
+                add_scripts(page)
                 page.wait_for_selector('#mOpen:text-is("3")')
                 assert page.locator('#mHigh').inner_text()=='2'
                 assert page.locator('#demoBanner').is_visible()
-                assert page.locator('.brand img').evaluate('(img) => img.naturalWidth') > 0
-                assert page.locator('.hero-art img').evaluate('(img) => img.naturalWidth') > 0
+                assert page.locator('.brand img.brand-emblem:visible').evaluate('(img) => img.naturalWidth') > 0, 'Sidebar shows the full emblem'
+                assert page.locator('.hero-art img.emblem-dark').evaluate('(img) => img.naturalWidth') > 0
+                assert page.locator('.hero-art img.emblem-light').evaluate('(img) => img.naturalWidth') > 0
+                assert page.locator('.sidebar [data-view="triage"] svg.fl-icon').count() == 1, 'Lucide nav icons rendered'
+                assert page.locator('#engineWord').inner_text() == 'Demo'
                 page.screenshot(path=str(Path(tempfile.gettempdir())/'packetrat-overview-smoke.png'),full_page=True)
                 page.locator('#priorityList .item-title').first.click()
                 page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode')")
@@ -163,7 +176,7 @@ def run_lifecycle():
     base = 'http://127.0.0.1:8766/'
     nonce = '0123456789abcdef0123456789abcdef'
     calls = []
-    mime = {'.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png'}
+    mime = {'.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml'}
 
     def handle(route, request):
         path = request.url[len(base) - 1:].split('?')[0]
