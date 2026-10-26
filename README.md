@@ -14,6 +14,12 @@ Formerly MailHawk.
 
 > **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/smart card, AI provider connectivity, and operational workstation execution need validation in the approved environment. Not accredited or production-ready.
 
+| Night watch (dark) |
+| --- |
+| ![PacketRat overview in the Night watch theme](docs/screenshots/overview-night-watch.png) |
+
+PacketRat has one theme, Night watch (dark); there is no Chart room (light) theme yet. The screenshot uses the offline demo's sample mail.
+
 ## Only two launchers
 
 - **`Launch-PacketRat.bat`** — opens the modern browser GUI, the default.
