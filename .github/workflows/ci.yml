@@ -64,3 +64,4 @@ jobs:
           .\tests\Test-PacketRatReport.ps1
           .\tests\Test-PacketRatProtocol.ps1
           .\tests\Test-PacketRatLifecycle.ps1
+          .\tests\Test-PacketRatCommands.ps1
