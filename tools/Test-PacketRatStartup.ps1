@@ -29,7 +29,8 @@ $required=@(
   'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1',
   'Private/PacketRatStore.ps1','Private/Get-OutlookMailSummary.ps1',
   'Private/PacketRatDraft.ps1','Private/PacketRatGraph.ps1',
-  'Private/PacketRatLogging.ps1','Public/Invoke-PacketRatInboxAnalysis.ps1'
+  'Private/PacketRatLogging.ps1','Private/PacketRatApi.ps1','Private/PacketRatCommands.ps1',
+  'Invoke-PacketRatCli.ps1','Public/Invoke-PacketRatInboxAnalysis.ps1'
 )
 foreach($relative in $required) {
   $path=Join-Path $root $relative
@@ -53,6 +54,12 @@ try {
 } catch {
   $failures.Add('Local loopback port bind failed: '+$_.Exception.Message)
 } finally { if($tcp){try{$tcp.Stop()}catch{}} }
+# Classic Outlook profile (registry only; Outlook is not started). A warning, not a failure: Graph and demo still work.
+try{
+  . (Join-Path $root 'Private/Get-OutlookMailSummary.ps1')
+  $outlookProblem=Get-PacketRatOutlookProfileProblem
+  if($outlookProblem){Write-Host ('Outlook (COM): '+$outlookProblem) -ForegroundColor Yellow}else{Write-Host 'Outlook (COM): profile looks usable (not opened).' -ForegroundColor Green}
+}catch{Write-Host ('Outlook (COM): could not check the profile: '+$_.Exception.Message) -ForegroundColor Yellow}
 if($failures.Count -gt 0){
   Write-Host 'Preflight failures:' -ForegroundColor Red
   foreach($entry in $failures){Write-Host (' - '+$entry) -ForegroundColor Red}
