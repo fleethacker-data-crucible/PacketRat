@@ -118,7 +118,8 @@ try {
 }
 
 # Server wiring (static): lifecycle routes and the token rules stay in place.
-$service=[IO.File]::ReadAllText((Join-Path $root 'Start-PacketRat-Web.ps1'))
+# The server plus the command core it shares with the CLI (Private/PacketRatApi.ps1).
+$service=[IO.File]::ReadAllText((Join-Path $root 'Start-PacketRat-Web.ps1'))+[IO.File]::ReadAllText((Join-Path $root 'Private/PacketRatApi.ps1'))
 foreach($needle in @("'/api/heartbeat'","'/api/session/stop'",'Write-PacketRatRuntimeFile','Remove-PacketRatRuntimeFile','Test-PacketRatBeaconToken','Test-PacketRatBrowserGone','Get-PacketRatProcesses')){
     Assert-Lifecycle ($service.Contains($needle)) ('service uses '+$needle)
 }

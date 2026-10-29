@@ -3,7 +3,8 @@ import re
 from pathlib import Path
 from PIL import Image
 ROOT=Path(__file__).resolve().parents[1]
-SERVICE=(ROOT/'Start-PacketRat-Web.ps1').read_text()
+# The browser server plus its command core (Private/PacketRatApi.ps1, shared with the CLI since CLI parity).
+SERVICE=(ROOT/'Start-PacketRat-Web.ps1').read_text()+(ROOT/'Private/PacketRatApi.ps1').read_text()
 CLIENT=(ROOT/'Web/app.js').read_text()
 HTML=(ROOT/'Web/index.html').read_text()
 assert '[Net.IPAddress]::Loopback' in SERVICE

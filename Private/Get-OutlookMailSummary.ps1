@@ -1,10 +1,37 @@
 # PacketRat - Safe mail summary for AI analysis (COM provider)
 #requires -Version 5.1
 
+function Get-PacketRatOutlookProfileProblem {
+    # Classic Outlook started with no usable mail profile shows a Choose Profile or setup dialog and never
+    # returns to COM, so PacketRat would wait forever. Read-only registry check; $null when it looks usable
+    # or cannot be told (then COM is tried as before).
+    [CmdletBinding()]
+    param()
+
+    $titles = @(Get-Process OUTLOOK -ErrorAction SilentlyContinue | ForEach-Object { $_.MainWindowTitle })
+    if ($titles -contains 'Choose Profile') { return 'Classic Outlook is waiting on its Choose Profile dialog. Pick a profile there (or close it), then try again.' }
+    if ($titles.Count -gt 0) { return $null }
+    foreach ($version in @('16.0', '15.0')) {
+        $key = "HKCU:\Software\Microsoft\Office\$version\Outlook"
+        if (-not (Test-Path $key)) { continue }
+        $profilesKey = Join-Path $key 'Profiles'
+        $profiles = @(Get-ChildItem $profilesKey -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName })
+        if ($profiles.Count -eq 0) { return 'Classic Outlook has no mail profile on this PC. Open classic Outlook once and add your mail account (the new Outlook app is not used by PacketRat), then try again.' }
+        $default = [string](Get-ItemProperty $key -ErrorAction SilentlyContinue).DefaultProfile
+        if (-not $default -or $profiles -notcontains $default) { return $null }
+        $accounts = @(Get-ChildItem (Join-Path $profilesKey "$default\9375CFF0413111d3B88A00104B2A6676") -ErrorAction SilentlyContinue)
+        if ($accounts.Count -eq 0) { return "Classic Outlook's profile '$default' has no mail account, so Outlook would stop on a setup dialog. Open classic Outlook once and add your mail account (the new Outlook app is not used by PacketRat), then try again." }
+        return $null
+    }
+    return $null
+}
+
 function Connect-PacketRatOutlook {
     [CmdletBinding()]
     param()
 
+    $problem = Get-PacketRatOutlookProfileProblem
+    if ($problem) { throw $problem }
     try {
         $outlook = New-Object -ComObject Outlook.Application
         $ns = $outlook.GetNamespace('MAPI')
