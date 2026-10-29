@@ -275,7 +275,7 @@ function renderRules(){
     '<label>Match value<input class="fl-input" data-rule-field="Value" maxlength="160" placeholder="For custom matches" value="'+value+'"></label>'+
     '<label>Then<select class="fl-input" data-rule-field="Effect">'+ruleSelect(effects,r.Effect)+'</select></label></div>'+
     '<p class="rule-hint">'+(r.Match==='DirectMilRequest'?'Requires confirmed recipient match and a request; .mil alone is not urgent.':
-     r.Match==='SenderDomain'?'Use a domain such as navy.mil without @.':
+     r.Match==='SenderDomain'?'Use a domain such as example.org without @.':
      r.Match==='SubjectContains'?'Case-insensitive literal phrase.':
      r.Match==='BodyContains'?'Uses only the limited message preview.':
      r.Match==='AutomatedDigest'?'Excludes routine digests, not known mandatory/security requests.':
