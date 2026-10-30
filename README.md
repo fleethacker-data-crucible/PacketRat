@@ -139,7 +139,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Manual credential configuration | Session-only implementation; network/API testing required |
 | Microsoft Graph | Requires organization-authorized Graph configuration |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
-| Streaming/cancellable agent operations | Not implemented |
+| Streaming and cancel of AI generations | Opt-in (`PACKETRAT_LLM_STREAM=1`, or `-Stream`): reads the endpoint's event stream and can be cancelled between chunks with `PacketRat-CLI.bat inbox cancel` from a second console. Off by default; OpenAI-style endpoints only (the Grok shape stays non-streaming). Tested against a fake endpoint; not tried on a live model. The browser has no cancel button, because the server handles one request at a time |
 | Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |
 | Polished report renderer and draft option parsing | Implemented; test coverage added |
 | Automatic sending | Not implemented and deliberately disabled |

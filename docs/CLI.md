@@ -21,6 +21,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `item status` | Set an action to open, in progress or done. | `--key` `--status` (both required) |
 | `item dismiss` | Dismiss an action (`item restore` brings it back). | `--key` (required), `--reason` |
 | `item restore` | Restore a dismissed action. | `--key` (required) |
+| `inbox cancel` | Cancel an AI generation that is streaming in a running PacketRat (needs `PACKETRAT_LLM_STREAM=1`). Run it from a second console. | none |
 | `item open` | Open the original message in classic Outlook. | `--key` (required) |
 | `priority set` | Override an action's priority. | `--key` `--urgency` (both required) |
 | `priority reset` | Return an action to its triaged priority. | `--key` (required) |

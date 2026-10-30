@@ -65,3 +65,4 @@ jobs:
           .\tests\Test-PacketRatProtocol.ps1
           .\tests\Test-PacketRatLifecycle.ps1
           .\tests\Test-PacketRatCommands.ps1
+          .\tests\Test-PacketRatStreaming.ps1

@@ -194,6 +194,11 @@ function Invoke-PacketRatApi {
           $null=New-PacketRatOutlookReplyDraft -EntryID ([string]$item.EntryID) -Body $body -SuggestedSubject $subject -ApplySuggestedSubject:$apply
           return @{ok=$true}
       }
+      '/api/cancel' {
+          # Stops a streaming AI generation that is running in this PacketRat process (the next chunk check sees the flag).
+          $null=Request-PacketRatCancel
+          return @{ok=$true;cancelRequested=$true}
+      }
       default {throw 'Unknown API route'}
     }
 }

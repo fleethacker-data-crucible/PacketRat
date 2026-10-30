@@ -28,6 +28,8 @@ $script:PacketRatCommands = @(
             (New-PacketRatInput 'provider' 'provider' 'string' $false 'Mail source: COM (classic Outlook) or Graph (default COM).' @('COM', 'Graph'))
             (New-PacketRatInput 'max-emails' 'maxEmails' 'int' $false 'Most messages to read, 1-150 (default 40).')
             (New-PacketRatInput 'days-back' 'daysBack' 'int' $false 'How many days back, 1-90 (default 14).')) }
+    [pscustomobject]@{ Name = 'packetrat inbox cancel'; Route = '/api/cancel'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Cancel an AI generation that is streaming in a running PacketRat (needs streaming on: PACKETRAT_LLM_STREAM=1). Run it from a second console.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat report generate'; Route = '/api/report/generate'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $true
         Summary = 'Ask the AI for a brief, actions, risks or an explanation of the current report.'
         Inputs = @(
