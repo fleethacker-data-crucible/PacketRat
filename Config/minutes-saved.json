@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "note": "ESTIMATE, not a measurement. Minutes a person would plausibly spend doing each action by hand. Edit freely; values are clamped to 0-240. Counts stay in the local store and are never sent anywhere.",
+  "minutesPerAction": {
+    "triaged": 0.5,
+    "drafts": 6,
+    "reports": 10,
+    "archived": 0.5,
+    "moved": 0.5,
+    "categorized": 0.3,
+    "markedRead": 0.2,
+    "dismissed": 0.3
+  }
+}

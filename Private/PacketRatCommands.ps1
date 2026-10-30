@@ -101,6 +101,12 @@ $script:PacketRatCommands = @(
         Inputs = @(
             (New-PacketRatInput 'key' 'key' 'string' $true 'The action key.')
             (New-PacketRatInput 'unread' 'unread' 'bool' $false 'Pass true to mark unread instead.')) }
+    [pscustomobject]@{ Name = 'packetrat stats show'; Route = '/api/stats'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Estimated minutes saved: counts of actions PacketRat performed or prepared times the minutes assumed in Config\minutes-saved.json. An estimate, not a measurement and not a score for anyone. "stats" alone does the same.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat stats export'; Route = '/api/stats/export'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'The raw action counts as JSON (schema packetrat.usage-counts/1) for another tool; add --out to write a file.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat stats reset'; Route = '/api/stats/reset'; Method = 'POST'; Destructive = $true; NeedsAnalysis = $false
+        Summary = 'Zero the minutes-saved counters and start a new count.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials status'; Route = '/api/credentials/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Which AI credential source is set (tokens are never shown).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials set'; Route = '/api/credentials'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false

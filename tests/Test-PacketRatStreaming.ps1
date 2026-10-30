@@ -3,7 +3,7 @@
 # no real model, no credentials, nothing leaves this PC.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatStore','PacketRatRules','PacketRatLlm','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatLlm','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 function Assert-Stream([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Streaming test failed: '+$Message)}}
