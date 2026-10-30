@@ -27,7 +27,8 @@ $script:PacketRatCommands = @(
             (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile: Auto, AiEndpoint or Grok (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))
             (New-PacketRatInput 'provider' 'provider' 'string' $false 'Mail source: COM (classic Outlook) or Graph (default COM).' @('COM', 'Graph'))
             (New-PacketRatInput 'max-emails' 'maxEmails' 'int' $false 'Most messages to read, 1-150 (default 40).')
-            (New-PacketRatInput 'days-back' 'daysBack' 'int' $false 'How many days back, 1-90 (default 14).')) }
+            (New-PacketRatInput 'days-back' 'daysBack' 'int' $false 'How many days back, 1-90 (default 14).')
+            (New-PacketRatInput 'classification' 'classification' 'string' $false 'Single (one report answer, default) or Batch (typed records per batch; PacketRat compiles the report). PACKETRAT_CLASSIFY=batch sets the default.' @('Single', 'Batch'))) }
     [pscustomobject]@{ Name = 'packetrat report generate'; Route = '/api/report/generate'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $true
         Summary = 'Ask the AI for a brief, actions, risks or an explanation of the current report.'
         Inputs = @(

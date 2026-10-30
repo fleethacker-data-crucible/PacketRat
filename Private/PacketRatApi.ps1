@@ -68,7 +68,9 @@ function Invoke-PacketRatApi {
           # Profile Auto is resolved to the actual endpoint before checking its token.
           # A local (loopback) endpoint needs no token; a remote one throws here when its token is missing.
           $null=Get-PacketRatLlmAuthToken -Config (Get-PacketRatLlmConfig -Profile $profile)
-          $script:LastResult=Invoke-PacketRatInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root
+          $extra=@{}
+          if(@('Single','Batch') -contains [string]$Data.classification){$extra.Classification=[string]$Data.classification}
+          $script:LastResult=Invoke-PacketRatInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root @extra
           $run=$script:LastResult
           return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportStructure=@($run.ReportStructure);responseProtocol=[string]$run.ResponseProtocol;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-PacketRatStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
       }

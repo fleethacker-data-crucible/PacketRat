@@ -138,6 +138,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
 | Microsoft Graph | Requires organization-authorized Graph configuration |
+| Schema-first batch classification (`PACKETRAT_CLASSIFY=batch`) | Opt-in, off by default; strict per-batch records and a compiled report; offline tests with a fake model, quality on a real model not measured |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
 | Streaming/cancellable agent operations | Not implemented |
 | Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |
