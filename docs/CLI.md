@@ -32,6 +32,9 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `rules set` | Replace the triage rules with the ones in a JSON file. **Needs `--yes`.** | `--file` (required) |
 | `draft create` | Draft a reply with the AI for review (nothing is sent). | `--key` (required), `--instruction`, `--profile` |
 | `draft open` | Open an Outlook reply with reviewed text above your signature (never sent). | `--key` `--body-file` (required), `--subject`, `--apply-subject` |
+| `stats show` (or just `stats`) | Estimated minutes saved: a total and a per-action breakdown. An estimate, not a measurement and not a score for anyone. | |
+| `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. | |
+| `stats reset` | Zero the counters and start a new count. | needs `--yes` |
 | `credentials status` | Which AI credential source is set (tokens are never shown). | |
 | `credentials set` | Choose Lazarette or a manual session token. | `--source` `--profile` (required), `--token-env` |
 | `credentials check` | Check locally that a credential resolves (no AI call, no mail read). | `--profile` |

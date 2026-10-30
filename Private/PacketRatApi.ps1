@@ -89,6 +89,7 @@ function Invoke-PacketRatApi {
           if(@('Single','Batch') -contains [string]$Data.classification){$extra.Classification=[string]$Data.classification}
           $script:LastResult=Invoke-PacketRatInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root @extra
           $run=$script:LastResult
+          if($run.Success){$null=Add-PacketRatUsage -Action triaged -Count ([int]$run.AnalyzedCount) -Root $Root;$null=Add-PacketRatUsage -Action reports -Root $Root}
           return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportStructure=@($run.ReportStructure);responseProtocol=[string]$run.ResponseProtocol;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-PacketRatStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
       }
       '/api/report/generate' {
@@ -100,6 +101,7 @@ function Invoke-PacketRatApi {
           if($sectionId -cne 'all' -and $sectionId -notmatch '^section-\d{1,3}$'){throw 'Invalid report section.'}
           $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
           $generated=Invoke-PacketRatReportFollowup -Analysis $script:LastResult -Mode $mode -SectionId $sectionId -Profile $profile
+          $null=Add-PacketRatUsage -Action reports -Root $Root
           return @{ok=$true;generated=$generated}
       }
       '/api/report/track' {
@@ -159,6 +161,7 @@ function Invoke-PacketRatApi {
           $null=Add-PacketRatDismissal -Store $store -Key $key -Subject $item.Subject -From $item.From -Reason $reason -Root $Root
           $store=Get-PacketRatStore -Root $Root
           $null=Set-PacketRatChecklistStatus -Store $store -Key $key -Status dismissed -Root $Root
+          $null=Add-PacketRatUsage -Action dismissed -Root $Root
           return @{ok=$true;store=(Get-PacketRatStore -Root $Root)}
       }
       '/api/restore' {
@@ -189,6 +192,7 @@ function Invoke-PacketRatApi {
           $instruction=[string]$Data.instruction
           if($instruction.Length -gt 2000){throw 'Draft instruction exceeds limit'}
           $draft=New-PacketRatDraftReply -Email $email -Profile $profile -ExtraInstruction $instruction
+          $null=Add-PacketRatUsage -Action drafts -Root $Root
           return @{ok=$true;draft=$draft}
       }
       '/api/open-draft' {
@@ -231,6 +235,7 @@ function Invoke-PacketRatApi {
               $store=Get-PacketRatStore -Root $Root
               $null=Set-PacketRatChecklistStatus -Store $store -Key $key -Status dismissed -Root $Root
           }
+          $null=Add-PacketRatUsage -Action archived -Root $Root
           return @{ok=$true;store=(Get-PacketRatStore -Root $Root)}
       }
       '/api/item/move' {
@@ -242,6 +247,7 @@ function Invoke-PacketRatApi {
           $folder=[string]$Data.folder
           if([string]::IsNullOrWhiteSpace($folder) -or $folder.Length -gt 256){throw 'A folder name of 1-256 characters is required.'}
           $null=Move-PacketRatMailToFolder -EntryID ([string]$item.EntryID) -FolderName $folder
+          $null=Add-PacketRatUsage -Action moved -Root $Root
           return @{ok=$true;store=$store}
       }
       '/api/item/categorize' {
@@ -253,6 +259,7 @@ function Invoke-PacketRatApi {
           $category=[string]$Data.category
           if([string]::IsNullOrWhiteSpace($category) -or $category.Length -gt 255 -or $category -match ';'){throw 'Category must be 1-255 characters with no semicolons.'}
           $null=Set-PacketRatMailCategory -EntryID ([string]$item.EntryID) -Category $category
+          $null=Add-PacketRatUsage -Action categorized -Root $Root
           return @{ok=$true;store=$store}
       }
       '/api/item/mark-read' {
@@ -263,8 +270,12 @@ function Invoke-PacketRatApi {
           if($script:LastResult -and $script:LastResult.Provider -in @('Graph','Files')){throw 'Inbox actions require classic Outlook (COM mode); mail read from files or Graph cannot be changed here.'}
           $unread=[bool]$Data.unread
           $null=Set-PacketRatMailRead -EntryID ([string]$item.EntryID) -Unread:$unread
+          $null=Add-PacketRatUsage -Action markedRead -Root $Root
           return @{ok=$true;store=$store}
       }
+      '/api/stats' { return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
+      '/api/stats/export' { return @{ok=$true;usage=(Get-PacketRatUsageExport -Root $Root)} }
+      '/api/stats/reset' { Reset-PacketRatUsage -Root $Root; return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
       default {throw 'Unknown API route'}
     }
 }
