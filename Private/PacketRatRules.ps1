@@ -3,16 +3,6 @@
 # Organization-domain rules use PACKETRAT_ORG_DOMAIN (Config\packetrat.env): one or more domains or
 # domain suffixes, comma-separated, e.g. example.org. When it is unset those rules never match.
 
-# Legacy aliases: rule match names saved before the organization domain became configurable.
-# They are read as the new names, and saved under the new names.
-$script:PacketRatRuleMatchAliases = @{ 'DirectMilRequest' = 'DirectOrgRequest'; 'MilSender' = 'OrgSender' }
-
-function ConvertTo-PacketRatRuleMatch {
-    param([string]$Match)
-    if ($script:PacketRatRuleMatchAliases.ContainsKey($Match)) { return $script:PacketRatRuleMatchAliases[$Match] }
-    return $Match
-}
-
 function Get-PacketRatOrgDomains {
     $raw = [string]$env:PACKETRAT_ORG_DOMAIN
     if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
@@ -45,7 +35,7 @@ function Initialize-PacketRatRules {
         $Store | Add-Member -NotePropertyName Rules -NotePropertyValue @(Get-PacketRatDefaultRules) -Force
     }
     foreach($rule in @($Store.Rules)){
-        if($rule -and $rule.PSObject.Properties['Match']){$rule.Match=ConvertTo-PacketRatRuleMatch ([string]$rule.Match)}
+        if($rule -and $rule.PSObject.Properties['Match']){$rule.Match=[string]$rule.Match}
     }
     return $Store
 }
@@ -58,7 +48,7 @@ function Set-PacketRatRules {
     $seen=@{};$validated=New-Object System.Collections.Generic.List[object]
     foreach($rule in $Rules){
         $id=[string]$rule.Id;$name=[string]$rule.Name
-        $match=ConvertTo-PacketRatRuleMatch ([string]$rule.Match);$effect=[string]$rule.Effect;$value=[string]$rule.Value
+        $match=[string]$rule.Match;$effect=[string]$rule.Effect;$value=[string]$rule.Value
         if($id -notmatch '^[a-zA-Z0-9_-]{1,48}$' -or $seen.ContainsKey($id)){throw 'Invalid or duplicate rule ID'}
         if([string]::IsNullOrWhiteSpace($name) -or $name.Length -gt 90){throw 'Rule name must have 1–90 characters'}
         if($allowed -cnotcontains $match){throw ('Unsupported rule match: '+$match)}
@@ -85,7 +75,7 @@ function Test-PacketRatRule {
     $body=[string]$Mail.BodyPreview
     $direct=($Mail.PSObject.Properties['IsDirect'] -and [bool]$Mail.IsDirect)
     $hasAsk=("$subject $body" -match '(?i)(\?|action required|please\b|review\b|respond\b|approve\b|confirm\b|sign\b|submit\b|provide\b|request\b|by (monday|tuesday|wednesday|thursday|friday|tomorrow)|deadline\b|suspense\b)')
-    switch(ConvertTo-PacketRatRuleMatch ([string]$Rule.Match)){
+    switch([string]$Rule.Match){
         'SecurityAction' {return [bool]("$subject $body" -match '(?i)(dlp alert|security incident|policy violation|mandatory training|urgent action required|cybersecurity alert|saar.*(action|approve)|action required)')}
         'DirectOrgRequest' {return [bool]($direct -and (Test-PacketRatOrgSender $sender) -and $hasAsk)}
         'DirectRequest' {return [bool]($direct -and $hasAsk)}
