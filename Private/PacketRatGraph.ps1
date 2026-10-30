@@ -37,7 +37,7 @@ function Get-PacketRatInboxSummaryGraph {
     $filter = "receivedDateTime ge $cutoff"
     $msgs = Get-MgUserMessage -UserId 'me' -Filter $filter -Top $MaxEmails `
         -OrderBy 'receivedDateTime desc' `
-        -Property 'id,subject,from,toRecipients,receivedDateTime,isRead,importance,bodyPreview,body,conversationId,inferenceClassification' `
+        -Property 'id,internetMessageId,subject,from,toRecipients,receivedDateTime,isRead,importance,bodyPreview,body,conversationId,inferenceClassification' `
         -ErrorAction Stop
 
     $results = New-Object System.Collections.Generic.List[object]
@@ -95,6 +95,7 @@ function Get-PacketRatInboxSummaryGraph {
         $obj = [pscustomobject]@{
             Index             = $i
             EntryID           = [string]$m.Id
+            InternetMessageId = [string]$m.InternetMessageId
             Fingerprint       = $fp
             Received          = $received
             FromName          = $fromName
