@@ -49,7 +49,6 @@ powershell.exe -NoProfile -NoLogo -STA -ExecutionPolicy Bypass -File "%ROOT%tool
 goto FINISH
 
 :STOP
-REM Also stops a server started by an older MailHawk build (Start-MailHawk-Web.ps1, Logs\mailhawk-server-*.json).
 echo [PacketRat] Stopping every running PacketRat browser service...
 powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass -File "%ROOT%Stop-PacketRat.ps1"
 goto FINISH

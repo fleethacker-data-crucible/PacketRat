@@ -27,33 +27,6 @@ def add_scripts(page):
         page.add_script_tag(content=(WEB/name).read_text(encoding='utf-8'))
 
 
-def check_prefs_migration(browser, html):
-    """Rename migration: 'mailhawk-prefs' is copied forward to 'packetrat-prefs' once; the old key stays."""
-    page = browser.new_page(viewport={'width': 1450, 'height': 960})
-    errors = []
-    page.on('pageerror', lambda err: errors.append(str(err)))
-    page.set_content(html)
-    page.evaluate("""() => {
-        const mem = {'mailhawk-prefs': JSON.stringify({profile:'Grok',provider:'COM',maxEmails:77,daysBack:9})};
-        const store = {getItem:k=>Object.prototype.hasOwnProperty.call(mem,k)?mem[k]:null,setItem:(k,v)=>{mem[k]=String(v)},removeItem:k=>{delete mem[k]}};
-        window.__prefs = mem;
-        Object.defineProperty(window, 'localStorage', {configurable:true, value:store});
-        const s = {};
-        Object.defineProperty(window, 'sessionStorage', {configurable:true, value:{getItem:k=>s[k]||null,setItem:(k,v)=>s[k]=v}});
-    }""")
-    add_scripts(page)
-    page.wait_for_selector('#mOpen:text-is("3")')
-    prefs = page.evaluate('() => window.__prefs')
-    assert 'mailhawk-prefs' in prefs, 'old key must be left in place'
-    assert prefs.get('packetrat-prefs') == prefs['mailhawk-prefs'], 'old prefs copied forward'
-    assert page.locator('#maxEmails').input_value() == '77'
-    # Idempotent: an existing new key is never overwritten by the old one.
-    page.evaluate("""() => { window.__prefs['packetrat-prefs'] = JSON.stringify({maxEmails:12}); migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs'); }""")
-    assert page.evaluate("() => JSON.parse(window.__prefs['packetrat-prefs']).maxEmails") == 12
-    assert not errors, f'Browser errors: {errors}'
-    page.close()
-
-
 def run():
     with socketserver.TCPServer(('127.0.0.1', 0), Handler) as server:
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -184,7 +157,6 @@ def run():
                 assert page.locator('#draftDialog').is_visible()
                 page.locator('#closeDialog').click()
                 assert not errors, f'Browser errors: {errors}'
-                check_prefs_migration(browser, html)
                 browser.close()
         finally:
             server.shutdown()

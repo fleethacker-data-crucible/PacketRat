@@ -276,7 +276,7 @@ function renderRules(){
     '<label>When<select class="fl-input" data-rule-field="Match">'+ruleSelect(ruleConditions,r.Match)+'</select></label>'+
     '<label>Match value<input class="fl-input" data-rule-field="Value" maxlength="160" placeholder="For custom matches" value="'+value+'"></label>'+
     '<label>Then<select class="fl-input" data-rule-field="Effect">'+ruleSelect(effects,r.Effect)+'</select></label></div>'+
-    '<p class="rule-hint">'+(r.Match==='DirectMilRequest'?'Requires confirmed recipient match and a request; .mil alone is not urgent.':
+    '<p class="rule-hint">'+(r.Match==='DirectOrgRequest'?'Requires confirmed recipient match and a request; an organization sender alone is not urgent.':
      r.Match==='SenderDomain'?'Use a domain such as example.org without @.':
      r.Match==='SubjectContains'?'Case-insensitive literal phrase.':
      r.Match==='BodyContains'?'Uses only the limited message preview.':
@@ -313,11 +313,9 @@ async function saveTriageRules(){
   notify('Rules saved. Existing manual priorities are preserved.');
  }catch(error){notify(error.message,true)}
 }
-// Rename migration (MailHawk -> PacketRat): copy a former storage key forward once and leave the old key in place.
-function migrateStorageKey(storage,oldKey,newKey){try{if(storage.getItem(newKey)===null){const old=storage.getItem(oldKey);if(old!==null)storage.setItem(newKey,old)}}catch{}}
 function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,folder:$('mailFolder').value.trim(),maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
-function loadSettings(){migrateStorageKey(localStorage,'mailhawk-prefs','packetrat-prefs');try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','mailFolder','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{GenAi:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();setEngine(demo?'demo':'running');}catch(error){notify(error.message,true);render()}}
+function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','mailFolder','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{AiEndpoint:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();setEngine(demo?'demo':'running');}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));

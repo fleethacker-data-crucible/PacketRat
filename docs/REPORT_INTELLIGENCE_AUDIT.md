@@ -1,11 +1,11 @@
 # PacketRat Full Intelligence Report — Engineering Audit
-**Audit scope:** MailHawk (now PacketRat) `main` report pipeline as inspected October 22, 2026, and the proposed fixes in `feat/report-actionability-and-cleanup`.
+**Audit scope:** PacketRat `main` report pipeline as inspected October 22, 2026, and the proposed fixes in `feat/report-actionability-and-cleanup`.
 
 **Evidence limitation:** An actual raw AI model report from the user's workstation was **not** supplied. This audit examines the full implementation path and uses synthetic reproductions of typical formatting problems. It does not assert that every reported artifact is reproducible from the user's exact provider response.
 
 ## Executive finding
 
-MailHawk (now PacketRat) historically treated two separate AI model outputs — a structured `must_reply` object and a long human-readable Markdown narrative — as loosely coupled. Most report prose was not associated with validated Outlook records. Character conversion was inconsistent, and a fallback parser could infer must-reply items from table rows outside the appropriate section. This combination made the interface hard to trust or act on.
+PacketRat historically treated two separate AI model outputs — a structured `must_reply` object and a long human-readable Markdown narrative — as loosely coupled. Most report prose was not associated with validated Outlook records. Character conversion was inconsistent, and a fallback parser could infer must-reply items from table rows outside the appropriate section. This combination made the interface hard to trust or act on.
 
 The new design uses **three distinct layers**: the provider's raw textual suggestion, a local evidence-and-rule reconciliation step, and a safe interactive presentation. No generated text is permitted to provide its own actionable Outlook EntryID.
 

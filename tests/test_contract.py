@@ -15,7 +15,7 @@ assert "'report-experience.js'" in SERVICE
 assert (ROOT/'Private/PacketRatReport.ps1').is_file()
 assert (ROOT/'Web/report-experience.js').is_file()
 assert "'/api/credentials'" in SERVICE and "'/api/credentials/check'" in SERVICE
-# Fleet UI assets are on the served allow-list; the former MailHawk hawk art is gone.
+# Fleet UI assets are on the served allow-list.
 for asset in ('shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png'):
     assert "'"+asset+"'" in SERVICE, asset
     assert (ROOT/'Web'/asset).is_file(), asset
@@ -38,37 +38,24 @@ assert "credentialSource" in CLIENT and "credentials/clear" in CLIENT
 assert Image.open(ROOT/'Web/brand/emblem-dark.png').size==Image.open(ROOT/'Web/brand/emblem-light.png').size
 assert (ROOT/'Web/brand/mark.svg').read_bytes()==(ROOT/'assets/brand/mark.svg').read_bytes(), 'Served mark matches assets/brand'
 assert 'data-app="packetrat"' in HTML and HTML.index('vendor/fleet/fleet.css')<HTML.index('href="style.css"')
-assert 'MH<' not in HTML, 'No former MailHawk initials'
 assert not (ROOT/'Logs').exists(), 'Local user email records must not ship.'
 LLM=(ROOT/'Private/PacketRatLlm.ps1').read_text()
 assert 'PacketRatManualTokens' in LLM and "PacketRatCredentialSource" in LLM
 assert 'Write-PacketRatLog' not in LLM, 'No credential logging in LLM bridge'
 assert (ROOT/'Launch-PacketRat.bat').exists() and (ROOT/'PacketRat-CLI.bat').exists()
 BRIDGE=(ROOT/'Private/LazaretteBridge.ps1').read_text()
-# Lazarette (formerly ARC) consumer contract: new names first, former names as fallbacks.
-order=['$env:LAZARETTE_PATH','$env:ARC_PATH',"'LAZARETTE_PATH', 'ARC_PATH'","'Lazarette')","'ARC')"]
+# Lazarette consumer contract: discovery order, engine entry files, canonical vault item names.
+order=['$env:LAZARETTE_PATH',"'Config\\packetrat.env'","'Lazarette')"]
 positions=[BRIDGE.index(x) for x in order]
-assert positions==sorted(positions), 'Lazarette must be resolved before ARC'
-assert BRIDGE.index("'Get-LazaretteSecret', 'Get-ArcSecret'") < BRIDGE.index('Get-PmStarkApiKey -ServiceName')
-assert "'Lazarette.ps1', 'Arc.ps1'" in BRIDGE, 'Discovery by lib\\Lazarette.ps1 / lib\\Arc.ps1 (ARC 5)'
-assert BRIDGE.index("'Lazarette.ps1', 'Arc.ps1'") < BRIDGE.index("Join-Path $full 'pm.ps1'"), 'pm.ps1 only as the last resort'
+assert positions==sorted(positions), 'Lazarette env override, then packetrat.env, then install folders'
+assert "'Get-LazaretteSecret', 'Get-ArcSecret'" in BRIDGE
+assert "'Lazarette.ps1', 'Arc.ps1'" in BRIDGE, 'Discovery by lib\\Lazarette.ps1 / lib\\Arc.ps1'
 assert "'Unlock-LazaretteVaultInteractive', 'Unlock-ArcVaultInteractive'" in BRIDGE
-assert "Name       = 'ai-endpoint-api'" in BRIDGE and "Name       = 'grok-api'" in BRIDGE, 'Canonical vault item names'
-assert BRIDGE.count('Legacy     = @(')==2, 'Former vault item names kept as legacy aliases in one map'
-# Item-name overrides: the current PacketRat name first, then the former PacketRat/MailHawk names, then Halyard's.
+assert "Name    = 'ai-endpoint-api'" in BRIDGE and "Name    = 'grok-api'" in BRIDGE, 'Canonical vault item names'
 LLMSRC=(ROOT/'Private/PacketRatLlm.ps1').read_text()
-legacy_profile=re.search(r"PacketRatLlmProfileAliases = @\{ '(\w+)'",LLMSRC).group(1)
-for current, legacy in (('AiEndpoint',legacy_profile),('Grok','Grok')):
-    item_order=[f"'PACKETRAT_LAZARETTE_ITEM_{current}'",f"'MAILHAWK_ARC_ITEM_{legacy}'",f"'HALYARD_LAZARETTE_ITEM_{legacy}'"]
-    item_positions=[BRIDGE.index(x) for x in item_order]
-    assert item_positions==sorted(item_positions), 'Item overrides: PacketRat, MailHawk, then Halyard'
 assert 'https://' not in LLMSRC, 'No organization endpoint is hard-coded'
 assert "AiEndpointUrl     = 'http://127.0.0.1:1234/v1/chat/completions'" in LLMSRC, 'AiEndpoint defaults to local phoenix-lai'
 assert set(re.findall(r"https?://([^/:'\"\s]+)",LLMSRC))=={'127.0.0.1'}, 'Only loopback is built in'
-assert LLMSRC.count('PacketRatLlmProfileAliases = @{')==1, 'Deprecated profile name mapped in one place'
-STORE=(ROOT/'Private/PacketRatStore.ps1').read_text()
-assert "'mailhawk-store.json'" in STORE and 'Copy-Item' in STORE and 'Remove-Item' not in STORE
-assert "'mailhawk-prefs','packetrat-prefs'" in CLIENT
 LIFE=(ROOT/'Private/PacketRatLifecycle.ps1').read_text()
 assert "'/api/heartbeat'" in SERVICE and "'/api/session/stop'" in SERVICE
 assert 'PacketRatLifecycle' in SERVICE and 'Write-PacketRatRuntimeFile' in SERVICE and 'Remove-PacketRatRuntimeFile' in SERVICE
