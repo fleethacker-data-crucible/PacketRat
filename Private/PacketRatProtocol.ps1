@@ -209,3 +209,152 @@ function ConvertTo-PacketRatInsightMarkdownV1 {
     }
     return (($lines -join "`n").Trim())
 }
+
+# --- Schema-first batch classification (PACKETRAT_CLASSIFY_V1) --------------------------------------------------
+# Opt-in alternative to the one-shot report: the model only fills one typed record per message, a batch at a time
+# (small outputs, so nothing is truncated), and PacketRat compiles the report from the reconciled records with no
+# further model call. See docs/AI_WIRE_PROTOCOL_V1.md.
+$script:PacketRatClassifyCategories = @('must_reply', 'already_replied', 'no_action', 'caution')
+
+function Get-PacketRatClassifyWirePrompt {
+    return @'
+PACKETRAT CLASSIFY V1. Return EXACTLY ONE JSON object wrapped in these ASCII markers:
+<<<PACKETRAT_CLASSIFY_V1>>>
+{"version":"PACKETRAT_CLASSIFY_V1","records":[{"index":1,"category":"must_reply","urgency":"High","reason":"Why","requested_action":"What is asked of the user","deadline":"2026-11-05","evidence":"Short phrase copied from the message","confidence":"medium"}]}
+<<<END_PACKETRAT_CLASSIFY_V1>>>
+The contents above demonstrate SHAPE only. Write actual findings, not placeholders.
+One record per message you can classify, using only the Index numbers in the supplied batch; never invent IDs.
+category is one of: must_reply (the user must act or reply), already_replied (the thread shows a reply), no_action (information only), caution (suspicious, unclear or needs care).
+urgency is High, Medium or Low. confidence is low, medium or high: say low when the preview is thin.
+deadline is "" unless the message states a date; then write it as YYYY-MM-DD. Never guess a deadline.
+evidence is a short phrase quoted from the message preview that supports the category, or "".
+All fields are plain text: no Markdown, HTML, tables or code fences, and no text outside the markers.
+'@
+}
+
+function ConvertFrom-PacketRatClassifyV1 {
+    <#
+    .SYNOPSIS
+      Strict parser for one batch. Throws on anything malformed (a truncated or invented answer is rejected, never
+      guessed at). AllowedIndexes is the set of Index numbers that were in the batch.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text, [Parameter(Mandatory)][int[]]$AllowedIndexes)
+    if ([string]::IsNullOrWhiteSpace($Text)) { throw 'Classify protocol: empty response.' }
+    if ($Text.Length -gt 200000) { throw 'Classify protocol: oversized response.' }
+    $clean = $Text.Replace([string][char]0xFEFF, '') -replace "`r`n?", "`n"
+    $m = [regex]::Match($clean, '(?s)\A\s*<<<PACKETRAT_CLASSIFY_V1>>>\n(?<payload>\{.*\})\n<<<END_PACKETRAT_CLASSIFY_V1>>>\s*\z')
+    if (-not $m.Success) { throw 'Classify protocol: expected exactly one CLASSIFY_V1 JSON envelope.' }
+    try { $data = ConvertFrom-Json -InputObject $m.Groups['payload'].Value -ErrorAction Stop }
+    catch { throw ('Classify protocol: invalid JSON: ' + $_.Exception.Message) }
+    if ([string]$data.version -cne 'PACKETRAT_CLASSIFY_V1') { throw 'Classify protocol: unsupported version.' }
+    if ($null -eq $data.records) { throw 'Classify protocol: records missing.' }
+    $records = @($data.records)
+    if ($records.Count -gt 200) { throw 'Classify protocol: too many records.' }
+    $allowed = @{}; foreach ($i in $AllowedIndexes) { $allowed[[int]$i] = $true }
+    $seen = @{}
+    $out = New-Object System.Collections.Generic.List[object]
+    foreach ($r in $records) {
+        $idx = 0
+        if (-not [int]::TryParse([string]$r.index, [ref]$idx) -or -not $allowed.ContainsKey($idx)) { throw 'Classify protocol: invalid or out-of-range email reference.' }
+        if ($seen.ContainsKey($idx)) { throw "Classify protocol: duplicate record for email $idx." }
+        $seen[$idx] = $true
+        $category = [string]$r.category
+        if ($script:PacketRatClassifyCategories -cnotcontains $category) { throw "Classify protocol: unknown category for email $idx." }
+        $urgency = [string]$r.urgency
+        if (@('High', 'Medium', 'Low') -cnotcontains $urgency) { throw "Classify protocol: unknown urgency for email $idx." }
+        $confidence = [string]$r.confidence
+        if (@('low', 'medium', 'high') -cnotcontains $confidence) { throw "Classify protocol: unknown confidence for email $idx." }
+        $reason = [string]$r.reason; $action = [string]$r.requested_action; $evidence = [string]$r.evidence
+        if ([string]::IsNullOrWhiteSpace($reason) -or $reason.Length -gt 400) { throw "Classify protocol: invalid reason for email $idx." }
+        if ($action.Length -gt 260 -or $evidence.Length -gt 240) { throw "Classify protocol: field too long for email $idx." }
+        $deadline = [string]$r.deadline
+        if ($deadline) {
+            $parsed = [datetime]::MinValue
+            if ($deadline -notmatch '^\d{4}-\d{2}-\d{2}$' -or -not [datetime]::TryParseExact($deadline, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+                throw "Classify protocol: deadline for email $idx is not YYYY-MM-DD."
+            }
+        }
+        [void]$out.Add([pscustomobject]@{
+            Index = $idx; Category = $category; Urgency = $urgency; Confidence = $confidence
+            Reason = (ConvertTo-PacketRatProtocolPlainText $reason); RequestedAction = (ConvertTo-PacketRatProtocolPlainText $action)
+            Deadline = $deadline; Evidence = (ConvertTo-PacketRatProtocolPlainText $evidence); ClassificationSource = 'batch-ai'
+        })
+    }
+    return , @($out.ToArray())
+}
+
+function ConvertTo-PacketRatReportEnvelopeFromClassification {
+    <#
+    .SYNOPSIS
+      Deterministic report compiler: reconciled classification records -> the same envelope object that
+      ConvertFrom-PacketRatReportV1 returns, so everything downstream (rules, verification, markdown, UI) is unchanged.
+      Emails the model did not classify are listed under Skipped / Caution as "not classified", never guessed.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][array]$Records,
+        [Parameter(Mandatory)][array]$Emails,
+        [AllowEmptyCollection()][int[]]$UnclassifiedIndexes = @(),
+        [AllowEmptyCollection()][string[]]$Warnings = @()
+    )
+    $rank = @{ High = 0; Medium = 1; Low = 2 }
+    $byIndex = @{}; foreach ($e in @($Emails)) { $byIndex[[int]$e.Index] = $e }
+    $sorted = @($Records | Sort-Object @{ Expression = { $rank[[string]$_.Urgency] } }, Index)
+    $sectionOf = @{ must_reply = 'Must Reply'; already_replied = 'Already Replied'; no_action = 'No Action Needed'; caution = 'Skipped / Caution' }
+
+    $mustReply = @($sorted | Where-Object Category -ceq 'must_reply' | ForEach-Object { [pscustomobject]@{ index = $_.Index; urgency = $_.Urgency; why = $_.Reason } })
+    $items = @($sorted | ForEach-Object {
+        [pscustomobject]@{
+            index = $_.Index; section = $sectionOf[$_.Category]; reason = $_.Reason; recommended_action = $_.RequestedAction; urgency = $_.Urgency
+            deadline = $_.Deadline; evidence = $_.Evidence; confidence = $_.Confidence; classification_source = $_.ClassificationSource
+        }
+    })
+
+    function New-Entry([int]$Index, [string]$Text) {
+        $t = $Text.Trim(); if ($t.Length -gt 1100) { $t = $t.Substring(0, 1100) }
+        [pscustomobject]@{ EmailIndex = $Index; Text = $t }
+    }
+    function Get-Subject([int]$Index) { if ($byIndex.ContainsKey($Index)) { return (ConvertTo-PacketRatProtocolPlainText ([string]$byIndex[$Index].Subject)) } return "Email $Index" }
+    function Get-Line($r) {
+        $parts = New-Object System.Collections.Generic.List[string]
+        [void]$parts.Add((Get-Subject $r.Index) + ': ' + $r.Reason)
+        if ($r.RequestedAction) { [void]$parts.Add('Action: ' + $r.RequestedAction) }
+        if ($r.Deadline) { [void]$parts.Add('Deadline stated: ' + $r.Deadline) }
+        [void]$parts.Add('Urgency ' + $r.Urgency + ', confidence ' + $r.Confidence)
+        return ($parts -join '. ')
+    }
+
+    $count = @{}; foreach ($c in $script:PacketRatClassifyCategories) { $count[$c] = @($Records | Where-Object Category -ceq $c).Count }
+    $label = @{ must_reply = 'Must reply'; already_replied = 'Already replied'; no_action = 'No action needed'; caution = 'Caution' }
+    $catItems = @($script:PacketRatClassifyCategories | Where-Object { $count[$_] -gt 0 } | ForEach-Object { New-Entry 0 ("{0}: {1}" -f $label[$_], $count[$_]) })
+
+    $groupItems = New-Object System.Collections.Generic.List[object]
+    $groups = @($Records | Where-Object { $byIndex.ContainsKey([int]$_.Index) } | Group-Object { [string]$byIndex[[int]$_.Index].FromEmail } | Where-Object { $_.Name -and $_.Count -ge 2 } | Sort-Object Count -Descending | Select-Object -First 10)
+    foreach ($g in $groups) {
+        $ids = (@($g.Group | Sort-Object Index | ForEach-Object { '#' + $_.Index }) -join ', ')
+        [void]$groupItems.Add((New-Entry 0 ("{0}: {1} messages ({2})" -f (ConvertTo-PacketRatProtocolPlainText $g.Name), $g.Count, $ids)))
+    }
+
+    $mustItems = @($sorted | Where-Object Category -ceq 'must_reply' | ForEach-Object { New-Entry $_.Index (Get-Line $_) })
+    $doneItems = @($sorted | Where-Object { $_.Category -ceq 'already_replied' -or $_.Category -ceq 'no_action' } | ForEach-Object { New-Entry $_.Index (Get-Line $_) })
+    $cautionItems = New-Object System.Collections.Generic.List[object]
+    foreach ($r in @($sorted | Where-Object Category -ceq 'caution')) { [void]$cautionItems.Add((New-Entry $r.Index (Get-Line $r))) }
+    foreach ($i in @($UnclassifiedIndexes | Sort-Object)) { [void]$cautionItems.Add((New-Entry $i ((Get-Subject $i) + ': not classified (the AI did not return a usable record for this message). Review it yourself.'))) }
+
+    $deadlines = @($sorted | Where-Object { $_.Deadline } | Sort-Object Deadline | Select-Object -First 5)
+    $quick = New-Object System.Collections.Generic.List[object]
+    foreach ($r in $deadlines) { [void]$quick.Add((New-Entry $r.Index ("Deadline stated {0}: {1}" -f $r.Deadline, (Get-Subject $r.Index)))) }
+    foreach ($w in @($Warnings)) { [void]$quick.Add((New-Entry 0 ('Note: ' + (ConvertTo-PacketRatProtocolPlainText $w)))) }
+
+    $summary = ('{0} messages classified by record, {1} need a reply, {2} not classified.' -f @($Records).Count, $count['must_reply'], @($UnclassifiedIndexes).Count)
+    $sections = @(
+        [pscustomobject]@{ Id = 'categories'; Title = 'Categories'; Summary = $summary; Items = @($catItems) }
+        [pscustomobject]@{ Id = 'groups'; Title = 'Groups'; Summary = ''; Items = @($groupItems.ToArray()) }
+        [pscustomobject]@{ Id = 'must_reply'; Title = 'Must Reply'; Summary = ''; Items = @($mustItems) }
+        [pscustomobject]@{ Id = 'already_replied'; Title = 'Already Replied / No Action Needed'; Summary = ''; Items = @($doneItems) }
+        [pscustomobject]@{ Id = 'skipped'; Title = 'Skipped / Caution'; Summary = ''; Items = @($cautionItems.ToArray()) }
+        [pscustomobject]@{ Id = 'quick_summary'; Title = 'Quick Summary'; Summary = ('{0} to reply to. Compiled from typed records; no narrative was written by the AI.' -f $count['must_reply']); Items = @($quick.ToArray()) }
+    )
+    return [pscustomobject]@{ Version = 'PACKETRAT_REPORT_V1'; MustReply = @($mustReply); ReportItems = @($items); Sections = @($sections) }
+}

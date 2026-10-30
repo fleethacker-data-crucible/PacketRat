@@ -15,7 +15,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 |---|---|---|
 | `app health` | Check that PacketRat answers. | |
 | `queue show` | The action queue, dismissals, rules, credential status and the last report. | |
-| `inbox analyze` | Read recent Outlook mail and build the report and action queue (no mail is changed or sent). | `--profile` `--provider` `--max-emails` `--days-back` |
+| `inbox analyze` | Read recent Outlook mail and build the report and action queue (no mail is changed or sent). | `--profile` `--provider` `--max-emails` `--days-back`, `--classification` (Single or Batch) |
 | `report generate` | Ask the AI for a brief, actions, risks or an explanation of the current report. | `--mode` (required), `--section-id`, `--profile` |
 | `report track` | Turn a verified report source message into an open action. | `--key` (required), `--urgency` |
 | `item status` | Set an action to open, in progress or done. | `--key` `--status` (both required) |
