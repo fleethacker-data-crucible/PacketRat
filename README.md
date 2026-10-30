@@ -148,6 +148,10 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 
 The HTTP service binds to local loopback only. POST requests require same-origin checks and a per-process request nonce. The in-app logo ships as an actual PNG, not a remote reference. User email state and logs belong under the ignored `Logs/` directory. Generated drafts require human review; PacketRat never sends messages automatically.
 
+## Privacy and data
+
+PacketRat reads mail through Outlook on this PC; the action queue, rules and logs stay in `Logs/`. When an AI endpoint is configured, the sender, subject and message text of the mail being triaged or drafted from are sent to it. Use only an endpoint your organization has approved for email content; that provider's terms apply. Demo mode sends nothing. PacketRat sends no usage data anywhere.
+
 ## Project layout
 
 - `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers (`MailHawk.bat` / `MailHawk-CLI.bat` just forward to them).
