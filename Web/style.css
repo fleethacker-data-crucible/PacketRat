@@ -298,3 +298,4 @@ kbd{display:inline-block;min-width:24px;padding:0 4px;border:1px solid var(--fl-
 @media (max-width:1100px){.two-col,.report-layout{grid-template-columns:minmax(0,1fr)}.hero{grid-template-columns:minmax(0,1fr) auto;padding:24px}.emblem{width:160px;height:160px}}
 @media (max-width:860px){.content{padding:24px 16px}.topbar{padding:0 16px}.clock{display:none}.item{align-items:flex-start;flex-wrap:wrap}.item-actions{width:100%;justify-content:flex-start}.hero{grid-template-columns:minmax(0,1fr)}.hero-art{display:none}}
 @media (max-width:650px){.queue-toolbar{flex-direction:column}.settings-grid,.rule-fields{grid-template-columns:minmax(0,1fr)}.page-header{align-items:flex-start;flex-direction:column}.dialog-footer{align-items:flex-start;flex-direction:column}.content-footer span:last-child{display:none}.statusbar .message,.statusbar .session{display:none}}
+.inbox-actions{display:contents}
