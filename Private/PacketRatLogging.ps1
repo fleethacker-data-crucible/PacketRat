@@ -88,21 +88,3 @@ $stack
     }
 }
 
-function Initialize-PacketRatLegacyEnvironment {
-    <#
-    .SYNOPSIS
-      Rename compatibility (MailHawk -> PacketRat). For each setting, PACKETRAT_* is read first;
-      when it is unset and the former MAILHAWK_* name is set, the old value is copied into the
-      new name for this process only. The old variables are never removed or changed.
-    #>
-    [CmdletBinding()]
-    param()
-    foreach ($suffix in @('LLM_PROFILE', 'PROVIDER', 'USER_EMAIL', 'SAVE_RAW_AI', 'MAX_EMAILS', 'BODY_PREVIEW_CHARS', 'AUTO_STOP')) {
-        $new = [Environment]::GetEnvironmentVariable('PACKETRAT_' + $suffix)
-        if (-not [string]::IsNullOrWhiteSpace($new)) { continue }
-        $old = [Environment]::GetEnvironmentVariable('MAILHAWK_' + $suffix)
-        if (-not [string]::IsNullOrWhiteSpace($old)) {
-            [Environment]::SetEnvironmentVariable('PACKETRAT_' + $suffix, $old, 'Process')
-        }
-    }
-}

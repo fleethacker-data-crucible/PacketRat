@@ -7,12 +7,9 @@
 # PacketRat tab is alive and no request (scan, report, draft, store write) is running.
 # Requests are served one at a time, so a running request already blocks the presence tick;
 # afterwards the time spent busy is not counted as tab silence (see -BusyUntil).
-# PACKETRAT_AUTO_STOP=0 (environment or Config\packetrat.env) or -Stay turns this off; the former
-# MAILHAWK_AUTO_STOP name is still read when the new one is unset.
+# PACKETRAT_AUTO_STOP=0 (environment or Config\packetrat.env) or -Stay turns this off.
 #
 # Runtime files: Logs\packetrat-server-<pid>.json holds pid, port, url and startedAt only.
-# Rename compatibility: a server started by an older MailHawk build wrote Logs\mailhawk-server-<pid>.json
-# and runs Start-MailHawk-Web.ps1; discovery and Stop-PacketRat.ps1 still find and stop it.
 # The session nonce is never written to disk.
 
 function Test-PacketRatAutoStopEnabled {
@@ -20,7 +17,6 @@ function Test-PacketRatAutoStopEnabled {
     param([switch]$Stay)
     if ($Stay) { return $false }
     $value = [Environment]::GetEnvironmentVariable('PACKETRAT_AUTO_STOP', 'Process')
-    if ($null -eq $value) { $value = [Environment]::GetEnvironmentVariable('MAILHAWK_AUTO_STOP', 'Process') }
     if ($null -eq $value) { return $true }
     return -not ($value.Trim() -match '^(0|false|no|off)$')
 }
@@ -190,16 +186,14 @@ function Test-PacketRatServerProcess {
 function Get-PacketRatRuntimeEntries {
     <#
      .SYNOPSIS
-      Live servers from Logs\packetrat-server-*.json (and legacy mailhawk-server-*.json written by an
-      older MailHawk build). Files whose process is gone are deleted.
+      Live servers from Logs\packetrat-server-*.json. Files whose process is gone are deleted.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Root)
     $entries = @()
     $dir = Get-PacketRatRuntimeDirectory -Root $Root
     if (-not (Test-Path -LiteralPath $dir)) { return $entries }
-    $files = @(Get-ChildItem -LiteralPath $dir -Filter 'packetrat-server-*.json' -File -ErrorAction SilentlyContinue) +
-             @(Get-ChildItem -LiteralPath $dir -Filter 'mailhawk-server-*.json' -File -ErrorAction SilentlyContinue)
+    $files = @(Get-ChildItem -LiteralPath $dir -Filter 'packetrat-server-*.json' -File -ErrorAction SilentlyContinue)
     foreach ($file in $files) {
         $live = $false
         $info = $null
@@ -223,7 +217,7 @@ function Get-PacketRatProcesses {
     <#
      .SYNOPSIS
       Running PacketRat browser servers other than this process: runtime files first, then any
-      PowerShell whose command line runs Start-PacketRat-Web.ps1 (or the former Start-MailHawk-Web.ps1).
+      PowerShell whose command line runs Start-PacketRat-Web.ps1.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Root)
@@ -236,7 +230,7 @@ function Get-PacketRatProcesses {
         foreach ($candidate in $candidates) {
             $id = [int]$candidate.ProcessId
             if ($id -eq $PID -or $found.ContainsKey($id)) { continue }
-            if ($candidate.CommandLine -and $candidate.CommandLine -match 'Start-(PacketRat|MailHawk)-Web\.ps1') {
+            if ($candidate.CommandLine -and $candidate.CommandLine -match 'Start-PacketRat-Web\.ps1') {
                 $found[$id] = [pscustomobject]@{
                     Pid = $id; Port = $null; Url = ''; StartedAt = [string]$candidate.CreationDate
                     File = ''; Source = 'process scan'

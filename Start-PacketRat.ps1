@@ -35,11 +35,6 @@ if (-not $ConsoleOnly) {
 
 # --- env ---
 $envFile = Join-Path $Root 'Config\packetrat.env'
-# Former name: an installed copy's Config\mailhawk.env is still read when the new file is absent.
-if (-not (Test-Path -LiteralPath $envFile)) {
-    $legacyEnv = Join-Path $Root 'Config\mailhawk.env'
-    if (Test-Path -LiteralPath $legacyEnv) { $envFile = $legacyEnv }
-}
 if (Test-Path -LiteralPath $envFile) {
     Get-Content -LiteralPath $envFile | ForEach-Object {
         $line = $_.Trim()
@@ -65,10 +60,8 @@ if (Test-Path -LiteralPath $envFile) {
 . (Join-Path $Root 'Private\PacketRatDraft.ps1')
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
 
-# PACKETRAT_* settings win; former MAILHAWK_* names are copied in only when the new ones are unset.
-Initialize-PacketRatLegacyEnvironment
 if ($env:PACKETRAT_LLM_PROFILE -and $Profile -eq 'Auto') { $Profile = $env:PACKETRAT_LLM_PROFILE }
-$Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile   # maps deprecated profile names; throws on unknown
+$Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile   # throws on an unknown name
 if ($env:PACKETRAT_PROVIDER) { $Provider = $env:PACKETRAT_PROVIDER }
 
 Write-Host '[*] PacketRat modules loaded' -ForegroundColor DarkGray

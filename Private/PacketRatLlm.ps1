@@ -26,17 +26,14 @@ $script:PacketRatFairleadDefaults = @{
 
 # Profile token environment variables, in lookup order.
 $script:PacketRatLlmTokenEnv = @{
-    AiEndpoint = @('AI_ENDPOINT_TOKEN', 'GENAI_TOKEN')   # second entry: legacy alias (deprecated), still read
+    AiEndpoint = @('AI_ENDPOINT_TOKEN')
     Grok       = @('DATABRICKS_TOKEN')
 }
-
-# Legacy alias: the former AI-endpoint profile name is still accepted and mapped to AiEndpoint.
-$script:PacketRatLlmProfileAliases = @{ 'GenAi' = 'AiEndpoint' }
 
 function ConvertTo-PacketRatLlmProfile {
     <#
     .SYNOPSIS
-      Normalize a -Profile value to Auto | Grok | AiEndpoint. Deprecated names are mapped; anything else throws.
+      Normalize a -Profile value to Auto | Grok | AiEndpoint. Anything else throws.
     #>
     [CmdletBinding()]
     param([AllowEmptyString()][string]$Profile = 'Auto')
@@ -44,9 +41,6 @@ function ConvertTo-PacketRatLlmProfile {
     $p = $Profile.Trim()
     foreach ($known in @('Auto', 'Grok', 'AiEndpoint')) {
         if ($p -eq $known) { return $known }
-    }
-    foreach ($alias in $script:PacketRatLlmProfileAliases.Keys) {
-        if ($p -eq $alias) { return $script:PacketRatLlmProfileAliases[$alias] }
     }
     throw ("Unknown AI profile '{0}'. Use Auto, Grok or AiEndpoint." -f $p)
 }
@@ -268,7 +262,7 @@ function Get-PacketRatLlmToken {
         return $manual
     }
 
-    # 1) Profile-specific env token (current name first, then its legacy alias)
+    # 1) Profile-specific env token
     $existing = Get-PacketRatLlmEnvToken -Profile $ForProfile
     if (-not [string]::IsNullOrWhiteSpace($existing)) {
         return $existing

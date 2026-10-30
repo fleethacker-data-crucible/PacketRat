@@ -5,17 +5,11 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 class LauncherTests(unittest.TestCase):
-    def test_exactly_two_user_facing_launchers(self):
+    def test_user_facing_launchers(self):
         launchers = sorted(p.name for p in ROOT.glob('*.bat'))
-        self.assertEqual(launchers, ['Launch-LocalDev.bat', 'Launch-PacketRat.bat', 'MailHawk-CLI.bat', 'MailHawk.bat', 'PacketRat-CLI.bat'])
+        self.assertEqual(launchers, ['Launch-LocalDev.bat', 'Launch-PacketRat.bat', 'PacketRat-CLI.bat'])
 
-    def test_former_mailhawk_names_forward(self):
-        # Rename compatibility: old shortcuts to MailHawk.bat / MailHawk-CLI.bat keep working.
-        for old, new in (('MailHawk.bat', 'Launch-PacketRat.bat'), ('MailHawk-CLI.bat', 'PacketRat-CLI.bat')):
-            text = (ROOT/old).read_text()
-            self.assertIn('call "%~dp0' + new + '" %*', text)
-            self.assertLessEqual(len([l for l in text.splitlines() if l.strip()]), 3)
-            self.assertNotIn('powershell', text.lower())
+    def test_local_dev_launcher_is_demo_only(self):
         local = (ROOT/'Launch-LocalDev.bat').read_text()
         self.assertIn('Start-PacketRat-Web.ps1', local)
         self.assertIn('-Demo', local)
