@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 # PacketRat command registry (Fleet CLI parity): every action a person can take in the browser UI has a named command
 # "packetrat <noun> <verb>" that runs the same route of Invoke-PacketRatApi (Private\PacketRatApi.ps1). The browser,
 # Invoke-PacketRatCli.ps1 (PacketRat-CLI.bat <noun> <verb>) and GET /api/commands all read this one list.
@@ -79,6 +79,24 @@ $script:PacketRatCommands = @(
             (New-PacketRatInput 'body-file' 'body' 'text-file' $true 'Text file with the reviewed reply.')
             (New-PacketRatInput 'subject' 'subject' 'string' $false 'Suggested subject (used only with --apply-subject).')
             (New-PacketRatInput 'apply-subject' 'applySubject' 'bool' $false 'Replace the reply subject with --subject.')) }
+    [pscustomobject]@{ Name = 'packetrat item archive'; Route = '/api/item/archive'; Method = 'POST'; Destructive = $true; NeedsAnalysis = $false
+        Summary = 'Move the original email to the Outlook archive folder and dismiss it from the queue (reversible in Outlook).'
+        Inputs = @((New-PacketRatInput 'key' 'key' 'string' $true 'The action key.')) }
+    [pscustomobject]@{ Name = 'packetrat item move'; Route = '/api/item/move'; Method = 'POST'; Destructive = $true; NeedsAnalysis = $false
+        Summary = 'Move the original email to a named Outlook folder (must exist; reversible in Outlook).'
+        Inputs = @(
+            (New-PacketRatInput 'key' 'key' 'string' $true 'The action key.')
+            (New-PacketRatInput 'folder' 'folder' 'string' $true 'Target Outlook folder name (inbox subfolder or sibling), up to 256 characters.')) }
+    [pscustomobject]@{ Name = 'packetrat item categorize'; Route = '/api/item/categorize'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Apply an Outlook category tag to the original email (adds to existing categories; reversible in Outlook).'
+        Inputs = @(
+            (New-PacketRatInput 'key' 'key' 'string' $true 'The action key.')
+            (New-PacketRatInput 'category' 'category' 'string' $true 'Outlook category name, up to 255 characters (no semicolons).')) }
+    [pscustomobject]@{ Name = 'packetrat item mark-read'; Route = '/api/item/mark-read'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Mark the original email as read (or unread with --unread) in Outlook.'
+        Inputs = @(
+            (New-PacketRatInput 'key' 'key' 'string' $true 'The action key.')
+            (New-PacketRatInput 'unread' 'unread' 'bool' $false 'Pass true to mark unread instead.')) }
     [pscustomobject]@{ Name = 'packetrat credentials status'; Route = '/api/credentials/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Which AI credential source is set (tokens are never shown).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials set'; Route = '/api/credentials'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false

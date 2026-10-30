@@ -1,4 +1,4 @@
-# PacketRat command core: every action the browser UI takes goes through Invoke-PacketRatApi by route.
+﻿# PacketRat command core: every action the browser UI takes goes through Invoke-PacketRatApi by route.
 # Dot-sourced by Start-PacketRat-Web.ps1 (the browser server) and Invoke-PacketRatCli.ps1 (the command line), so the GUI,
 # the CLI and the HTTP API run the same code (Fleet CLI parity). Expects $Root, $script:Presence, $script:StopReason and
 # $script:LastResult in the caller's script scope.
@@ -208,6 +208,53 @@ function Invoke-PacketRatApi {
           # append the reviewed text before it; never invent a new signature.
           $null=New-PacketRatOutlookReplyDraft -EntryID $entryId -Body $body -SuggestedSubject $subject -ApplySuggestedSubject:$apply
           return @{ok=$true}
+      }
+      '/api/item/archive' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $null=Move-PacketRatMailToArchive -EntryID ([string]$item.EntryID)
+          if((Find-PacketRatItem $store $key) -and -not (Test-PacketRatDismissed -Store $store -Key $key)){
+              $fromVal=if($item.PSObject.Properties['From']){[string]$item.From}else{[string]$item.FromName}
+              $null=Add-PacketRatDismissal -Store $store -Key $key -Subject ([string]$item.Subject) -From $fromVal -Reason 'Archived' -Root $Root
+              $store=Get-PacketRatStore -Root $Root
+              $null=Set-PacketRatChecklistStatus -Store $store -Key $key -Status dismissed -Root $Root
+          }
+          return @{ok=$true;store=(Get-PacketRatStore -Root $Root)}
+      }
+      '/api/item/move' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $folder=[string]$Data.folder
+          if([string]::IsNullOrWhiteSpace($folder) -or $folder.Length -gt 256){throw 'A folder name of 1-256 characters is required.'}
+          $null=Move-PacketRatMailToFolder -EntryID ([string]$item.EntryID) -FolderName $folder
+          return @{ok=$true;store=$store}
+      }
+      '/api/item/categorize' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $category=[string]$Data.category
+          if([string]::IsNullOrWhiteSpace($category) -or $category.Length -gt 255 -or $category -match ';'){throw 'Category must be 1-255 characters with no semicolons.'}
+          $null=Set-PacketRatMailCategory -EntryID ([string]$item.EntryID) -Category $category
+          return @{ok=$true;store=$store}
+      }
+      '/api/item/mark-read' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $unread=[bool]$Data.unread
+          $null=Set-PacketRatMailRead -EntryID ([string]$item.EntryID) -Unread:$unread
+          return @{ok=$true;store=$store}
       }
       default {throw 'Unknown API route'}
     }

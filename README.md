@@ -134,6 +134,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 |---|---|
 | Browser dashboard, inbox action queue, dismissal memory, draft review | Implemented |
 | Offline demonstration (`Launch-PacketRat.bat demo`) | No Outlook or LLM connection |
+| Inbox actions on the original message: archive, move to a folder, categorize, mark read (queue buttons and `item archive/move/categorize/mark-read`) | Code, UI and offline tests with a fake Outlook; a live check in classic Outlook is still pending. Classic Outlook (COM) only |
 | Outlook COM analysis, draft-opening and reply detection | Implementation present; target Windows validation required |
 | Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
