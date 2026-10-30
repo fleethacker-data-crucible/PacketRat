@@ -1,7 +1,8 @@
 # PacketRat - Lazarette bridge (integrator contract)
 # - Discover Lazarette: LAZARETTE_PATH/ROOT/HOME, then LAZARETTE_PATH= in Config\packetrat.env, then
 #   %LOCALAPPDATA%\Lazarette, then a sibling or %USERPROFILE%\Projects\Lazarette clone
-# - A Lazarette folder is one that contains lib\Lazarette.ps1 or lib\Arc.ps1 (the engine entry file)
+# - A Lazarette folder is one that contains the engine entry file under lib\: Lazarette.ps1, or the file
+#   Lazarette ships under its previous name
 # - Load the engine once per process (dot-sourced into a global dynamic module), unlock with
 #   Unlock-LazaretteVaultInteractive if defined, else Unlock-ArcVaultInteractive, and read with
 #   Get-LazaretteSecret if defined, else Get-ArcSecret (the engine's own function names)
@@ -80,7 +81,7 @@ function Find-PacketRatLazaretteEntry {
     <#
     .SYNOPSIS
       Finds the Lazarette engine to load. Returns Root, Entry (file to dot-source) and Kind, or $null.
-      Looks in every candidate folder for lib\Lazarette.ps1, then lib\Arc.ps1.
+      Looks in every candidate folder for the engine entry file under lib\ (Lazarette.ps1 first).
     #>
     [CmdletBinding()]
     param()
@@ -125,7 +126,7 @@ function Test-PacketRatLazaretteHelpersAvailable {
 function Import-PacketRatLazaretteSession {
     <#
     .SYNOPSIS
-      Load the Lazarette engine once (lib\Lazarette.ps1 or lib\Arc.ps1).
+      Load the Lazarette engine once (its entry file under lib\).
       Safe to call repeatedly; never re-dot-sources after the first attempt. Does not unlock.
     #>
     [CmdletBinding()]

@@ -1,0 +1,4 @@
+# fleet-gate allowlist for PacketRat (format: see the org default allowlist in the comms repo).
+# WHY: the Lazarette repo still ships its engine entry file under its previous name, and the bridge has to
+# look for that file name. Only lines quoting that file name in code are listed. Needs the repo owner's approval in review.
+line:'Arc\.ps1'

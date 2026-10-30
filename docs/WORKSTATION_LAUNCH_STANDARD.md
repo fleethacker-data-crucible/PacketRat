@@ -16,7 +16,7 @@ Purpose: keep PowerShell/browser apps consistent with proven Lazarette and Halya
 ## Current comparison (2026-10-22)
 
 - Halyard (previous name) launcher: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...
-- Lazarette: integrators dot-source `lib\Arc.ps1` (`lib\Lazarette.ps1` when present) and call `Unlock-ArcVaultInteractive` / `Get-ArcSecret` (see Lazarette `docs/INTEGRATION.md`).
+- Lazarette: integrators dot-source Lazarette's engine entry file under `lib\` and call `Unlock-ArcVaultInteractive` / `Get-ArcSecret` (see Lazarette `docs/INTEGRATION.md`).
 - PacketRat's original Windows Forms launcher (retired): explicitly used -ExecutionPolicy Bypass -STA.
 - PacketRat's early web/demo batch scripts omitted the execution-policy argument. The current launchers match Halyard and retain STA.
 
