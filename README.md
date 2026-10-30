@@ -137,7 +137,8 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Outlook COM analysis, draft-opening and reply detection | Implementation present; target Windows validation required |
 | Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
-| Microsoft Graph | Requires organization-authorized Graph configuration |
+| Microsoft Graph | Requires organization-authorized Graph configuration. Offline tests cover the mapping, sensitivity skip and dismissals against a fake Graph; no live sign-in has been tried |
+| Open or reply to a Graph-read message in classic Outlook | Looks the message up in classic Outlook by its Internet message id (read-only) and opens that copy; offline tests with a fake Outlook, live check pending. Fails with a clear message if classic Outlook does not hold the message |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
 | Streaming/cancellable agent operations | Not implemented |
 | Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |
