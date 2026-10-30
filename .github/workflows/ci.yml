@@ -66,3 +66,6 @@ jobs:
           .\tests\Test-PacketRatLifecycle.ps1
           .\tests\Test-PacketRatCommands.ps1
           .\tests\Test-PacketRatFairlead.ps1
+          .\tests\Test-PacketRatStreaming.ps1
+          .\tests\Test-PacketRatGraph.ps1
+          .\tests\Test-PacketRatInboxActions.ps1

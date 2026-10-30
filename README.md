@@ -134,13 +134,15 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 |---|---|
 | Browser dashboard, inbox action queue, dismissal memory, draft review | Implemented |
 | Offline demonstration (`Launch-PacketRat.bat demo`) | No Outlook or LLM connection |
+| Inbox actions on the original message: archive, move to a folder, categorize, mark read (queue buttons and `item archive/move/categorize/mark-read`) | Code, UI and offline tests with a fake Outlook; a live check in classic Outlook is still pending. Classic Outlook (COM) only |
 | Outlook COM analysis, draft-opening and reply detection | Implementation present; target Windows validation required |
 | Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
-| Microsoft Graph | Requires organization-authorized Graph configuration |
+| Microsoft Graph | Requires organization-authorized Graph configuration. Offline tests cover the mapping, sensitivity skip and dismissals against a fake Graph; no live sign-in has been tried |
+| Open or reply to a Graph-read message in classic Outlook | Looks the message up in classic Outlook by its Internet message id (read-only) and opens that copy; offline tests with a fake Outlook, live check pending. Fails with a clear message if classic Outlook does not hold the message |
 | Fairlead router (`PACKETRAT_ROUTER=fairlead`) | Opt-in, off by default; offline tests against a stub. Not tried against a running Fairlead |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
-| Streaming/cancellable agent operations | Not implemented |
+| Streaming and cancel of AI generations | Opt-in (`PACKETRAT_LLM_STREAM=1`, or `-Stream`): reads the endpoint's event stream and can be cancelled between chunks with `PacketRat-CLI.bat inbox cancel` from a second console. Off by default; OpenAI-style endpoints only (the Grok shape stays non-streaming). Tested against a fake endpoint; not tried on a live model. The browser has no cancel button, because the server handles one request at a time |
 | Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |
 | Polished report renderer and draft option parsing | Implemented; test coverage added |
 | Automatic sending | Not implemented and deliberately disabled |
