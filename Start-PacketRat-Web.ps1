@@ -33,7 +33,7 @@ foreach($option in @($Rest)){
         default {if($option){Write-Warning "Ignoring unknown option $option"}}
     }
 }
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -165,7 +165,7 @@ try {
           Send-PacketRatText $stream 403 '{"ok":false,"error":"Invalid host"}';continue
       }
       if($path -match '^/api/'){
-          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands')){
+          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/stats','/api/stats/export')){
               Send-PacketRatText $stream 405 '{"ok":false,"error":"POST required"}';continue
           }
           if($method -eq 'POST'){

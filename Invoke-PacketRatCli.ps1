@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
 $cliArgs = @($args | ForEach-Object { [string]$_ })
 
-foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm', 'PacketRatStore', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph', 'PacketRatDraft', 'PacketRatApi', 'PacketRatCommands')) {
+foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm', 'PacketRatStore','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph', 'PacketRatDraft', 'PacketRatApi', 'PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -54,6 +54,7 @@ function Exit-PacketRatUsage([string]$Message) {
     exit 2
 }
 
+if ($words.Count -eq 1 -and $words[0] -eq 'stats') { $words.Add('show') }   # bare 'stats' is 'stats show'
 $commandName = 'packetrat ' + ($words -join ' ')
 $command = if ($words.Count -gt 0 -and $words[0] -ne 'commands' -and $words[0] -ne 'help') { Find-PacketRatCommand ($words -join ' ') } else { $null }
 $boolFlags = @('json', 'yes', 'dry-run', 'analyze', 'help')
