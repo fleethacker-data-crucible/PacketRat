@@ -105,7 +105,7 @@ The default organization-domain rule requires a **verified direct recipient and 
 
 ## Choosing an AI token source
 
-> **Intelligence router:** the AI endpoint and its token will move behind the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), so PacketRat defaults to the router instead of a fixed endpoint. Until then the settings below stay as they are. See [TechStack](TechStack), "Intelligence router".
+> **Intelligence router:** the AI endpoint and its token will move behind the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), so PacketRat defaults to the router instead of a fixed endpoint. Routing through Fairlead is available now as an opt-in (off by default): set `PACKETRAT_ROUTER=fairlead` in `Config/packetrat.env`. Until Fairlead is the default, the settings below stay as they are. See [TechStack](TechStack), "Intelligence router".
 
 Open **Configuration → Credentials & connections** in the GUI.
 
@@ -138,6 +138,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
 | Microsoft Graph | Requires organization-authorized Graph configuration |
+| Fairlead router (`PACKETRAT_ROUTER=fairlead`) | Opt-in, off by default; offline tests against a stub. Not tried against a running Fairlead |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
 | Streaming/cancellable agent operations | Not implemented |
 | Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |

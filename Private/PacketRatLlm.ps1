@@ -14,6 +14,16 @@ $script:PacketRatLlmDefaults = @{
     LocalDefaultModel = 'phoenixlai'   # phoenix-lai's name for "the model it has loaded"
 }
 
+# Fleet intelligence router (Fairlead): opt-in and OFF by default. With PACKETRAT_ROUTER=fairlead every AI call goes to
+# Fairlead's OpenAI-compatible address instead of the profile endpoints; Fairlead then owns endpoint choice and
+# credentials. PACKETRAT_FAIRLEAD_URL overrides the address, PACKETRAT_FAIRLEAD_MODEL the route name (default 'auto'),
+# FAIRLEAD_TOKEN is an optional key for Fairlead itself (needed only for a Fairlead that is not on this PC), and
+# PACKETRAT_FAIRLEAD_PRIVACY=local adds Fairlead's X-Fairlead-Privacy header so prompts stay on local models.
+$script:PacketRatFairleadDefaults = @{
+    Url   = 'http://127.0.0.1:8776/v1/chat/completions'
+    Model = 'auto'
+}
+
 # Profile token environment variables, in lookup order.
 $script:PacketRatLlmTokenEnv = @{
     AiEndpoint = @('AI_ENDPOINT_TOKEN', 'GENAI_TOKEN')   # second entry: legacy alias (deprecated), still read
@@ -69,6 +79,7 @@ function Get-PacketRatCredentialStatus {
             AiEndpoint = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.AiEndpoint)
             Grok = -not [string]::IsNullOrWhiteSpace([string]$script:PacketRatManualTokens.Grok)
         }
+        router = $(if (Test-PacketRatFairleadEnabled) { 'Fairlead' } else { 'Direct' })
         lazaretteDetected = $lazaretteFound
         lazaretteItems = @{
             AiEndpoint = Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint
@@ -108,6 +119,10 @@ function Clear-PacketRatManualTokens {
     $script:PacketRatManualTokens.AiEndpoint = $null
     $script:PacketRatManualTokens.Grok = $null
     return Get-PacketRatCredentialStatus
+}
+
+function Test-PacketRatFairleadEnabled {
+    return ([string][Environment]::GetEnvironmentVariable('PACKETRAT_ROUTER')).Trim() -ieq 'fairlead'
 }
 
 function Get-PacketRatLlmConfig {
@@ -151,11 +166,26 @@ function Get-PacketRatLlmConfig {
         else { $model = $script:PacketRatLlmDefaults.GrokModel }
     }
 
+    $router = ''
+    if ((Test-PacketRatFairleadEnabled) -and [string]::IsNullOrWhiteSpace($env:LLM_URL)) {
+        # Opt-in router. The shared LLM_URL override still wins (it names an exact endpoint on purpose).
+        $router = 'Fairlead'
+        $resolved = 'AiEndpoint'
+        $isDefault = $false
+        $url = [Environment]::GetEnvironmentVariable('PACKETRAT_FAIRLEAD_URL')
+        if ([string]::IsNullOrWhiteSpace($url)) { $url = $script:PacketRatFairleadDefaults.Url }
+        if ([string]::IsNullOrWhiteSpace($env:LLM_MODEL)) {
+            $model = [Environment]::GetEnvironmentVariable('PACKETRAT_FAIRLEAD_MODEL')
+            if ([string]::IsNullOrWhiteSpace($model)) { $model = $script:PacketRatFairleadDefaults.Model }
+        }
+    }
+
     return [pscustomobject]@{
         Profile    = $resolved
         Url        = ([string]$url).Trim().TrimEnd('/')
         Model      = $model
         DefaultUrl = $isDefault
+        Router     = $router
     }
 }
 
@@ -181,6 +211,16 @@ function Get-PacketRatLlmAuthToken {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Config)
+    if ($Config.PSObject.Properties['Router'] -and $Config.Router -eq 'Fairlead') {
+        # Fairlead holds the provider credentials. PacketRat sends only an optional key for Fairlead itself, and never
+        # opens the vault or reuses a provider token for it.
+        $key = [string][Environment]::GetEnvironmentVariable('FAIRLEAD_TOKEN')
+        if (-not [string]::IsNullOrWhiteSpace($key)) { return $key.Trim() }
+        if (-not (Test-PacketRatLoopbackUrl -Url ([string]$Config.Url))) {
+            throw 'Fairlead is not on this PC, so it needs its own key: set FAIRLEAD_TOKEN (never a provider token).'
+        }
+        return $null
+    }
     if (-not (Test-PacketRatLoopbackUrl -Url ([string]$Config.Url))) {
         return Get-PacketRatLlmToken -ForProfile $Config.Profile
     }
@@ -324,7 +364,7 @@ function Invoke-PacketRatChat {
         throw ("No endpoint URL configured for profile {0}. Set {1} (or LLM_URL) in Config\packetrat.env." -f $cfg.Profile, $urlEnv)
     }
     if ($Model) {
-        $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model; DefaultUrl = $cfg.DefaultUrl }
+        $cfg = [pscustomobject]@{ Profile = $cfg.Profile; Url = $cfg.Url; Model = $Model; DefaultUrl = $cfg.DefaultUrl; Router = $cfg.Router }
     }
 
     $local = Test-PacketRatLoopbackUrl -Url $cfg.Url
@@ -366,7 +406,7 @@ function Invoke-PacketRatChat {
     $json  = $payload | ConvertTo-Json -Depth 8
     $bytes = [Text.Encoding]::UTF8.GetBytes($json)
 
-    Write-Host ("[*] PacketRat LLM  profile={0}  model={1}" -f $cfg.Profile, $cfg.Model) -ForegroundColor DarkCyan
+    Write-Host ("[*] PacketRat LLM  profile={0}  model={1}{2}" -f $cfg.Profile, $cfg.Model, $(if ($cfg.Router) { '  router=' + $cfg.Router } else { '' })) -ForegroundColor DarkCyan
     Write-Host ("    {0}" -f $cfg.Url) -ForegroundColor DarkGray
 
     try {
@@ -376,6 +416,10 @@ function Invoke-PacketRatChat {
     # No Authorization header at all when a local endpoint has no token (never an empty "Bearer ").
     $headers = @{ Accept = 'application/json' }
     if (-not [string]::IsNullOrWhiteSpace($token)) { $headers['Authorization'] = 'Bearer ' + $token }
+    if ($cfg.Router -eq 'Fairlead') {
+        $privacy = ([string][Environment]::GetEnvironmentVariable('PACKETRAT_FAIRLEAD_PRIVACY')).Trim()
+        if ($privacy -ieq 'local') { $headers['X-Fairlead-Privacy'] = 'local' }
+    }
 
     $resp = Invoke-RestMethod -Uri $cfg.Url -Method Post `
         -Headers $headers `
