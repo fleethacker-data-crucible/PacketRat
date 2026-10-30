@@ -5,7 +5,6 @@ Logs/
 *.bak
 # Tokens / credentials / private configuration
 Config/packetrat.env
-Config/mailhawk.env
 Config/*.local
 .env
 .env.*

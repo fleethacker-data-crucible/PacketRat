@@ -1,39 +1,29 @@
-# PacketRat - Lazarette bridge (integrator contract; Lazarette was formerly ARC)
-# - Discover Lazarette: LAZARETTE_PATH/ROOT/HOME, then ARC_PATH/ROOT/HOME, then config, then
-#   %LOCALAPPDATA%\Lazarette, %LOCALAPPDATA%\ARC, then sibling/Projects folders (lazarette before arc)
-# - A Lazarette folder is one that contains lib\Lazarette.ps1 or lib\Arc.ps1 (Lazarette / ARC 5).
-#   pm.ps1 is only a last-resort ARC 3/4 fallback: in ARC 5 it is a stub that throws.
+# PacketRat - Lazarette bridge (integrator contract)
+# - Discover Lazarette: LAZARETTE_PATH/ROOT/HOME, then LAZARETTE_PATH= in Config\packetrat.env, then
+#   %LOCALAPPDATA%\Lazarette, then a sibling or %USERPROFILE%\Projects\Lazarette clone
+# - A Lazarette folder is one that contains the engine entry file under lib\: Lazarette.ps1, or the file
+#   Lazarette ships under its previous name
 # - Load the engine once per process (dot-sourced into a global dynamic module), unlock with
 #   Unlock-LazaretteVaultInteractive if defined, else Unlock-ArcVaultInteractive, and read with
-#   Get-LazaretteSecret if defined, else Get-ArcSecret. ARC 3/4 pm.ps1 helpers stay as a fallback.
-# - Canonical LLM vault item names: ai-endpoint-api, grok-api (deprecated names still read; see below)
+#   Get-LazaretteSecret if defined, else Get-ArcSecret (the engine's own function names)
+# - Canonical LLM vault item names: ai-endpoint-api, grok-api
 # - Do not use pm.bat / launch-arc.bat
 #requires -Version 5.1
 
 # LLM vault items per profile. One place for every name PacketRat looks up:
-#   Name     - canonical item name (emitted and documented)
-#   Legacy   - legacy aliases (deprecated item names), tried when the canonical item is absent
-#   LegacyLike / Match - extra vault-row matchers for older vaults (matchers only, never a primary name)
-#   EnvKeys  - item-name overrides, in order: PacketRat, then legacy aliases (former PacketRat/MailHawk
-#              names, then Halyard's shared names and its former names, which Halyard still reads)
+#   Name    - canonical item name (emitted and documented)
+#   Match   - extra vault-row names accepted when the canonical item is absent
+#   EnvKeys - item-name overrides (the first one set wins)
 $script:PacketRatLlmVaultItems = @{
     AiEndpoint = @{
-        Name       = 'ai-endpoint-api'
-        Legacy     = @('genapi')
-        LegacyLike = @()
-        Match      = @()
-        EnvKeys    = @('PACKETRAT_LAZARETTE_ITEM_AiEndpoint',
-                       'PACKETRAT_LAZARETTE_ITEM_GenAi', 'MAILHAWK_ARC_ITEM_GenAi',
-                       'HALYARD_LAZARETTE_ITEM_GenAi', 'HALYARD_LAZARETTE_ITEM_Llm',
-                       'CASCADE_ARC_ITEM_GenAi', 'CASCADE_ARC_ITEM_Llm')
+        Name    = 'ai-endpoint-api'
+        Match   = @()
+        EnvKeys = @('PACKETRAT_LAZARETTE_ITEM_AiEndpoint')
     }
     Grok = @{
-        Name       = 'grok-api'
-        Legacy     = @('advana-api', 'advana')
-        LegacyLike = @('*advana*')
-        Match      = @('databricks')
-        EnvKeys    = @('PACKETRAT_LAZARETTE_ITEM_Grok', 'MAILHAWK_ARC_ITEM_Grok',
-                       'HALYARD_LAZARETTE_ITEM_Grok', 'CASCADE_ARC_ITEM_Grok')
+        Name    = 'grok-api'
+        Match   = @('databricks')
+        EnvKeys = @('PACKETRAT_LAZARETTE_ITEM_Grok')
     }
 }
 
@@ -49,46 +39,39 @@ function Get-PacketRatLazaretteCandidates {
     param()
     $candidates = New-Object System.Collections.Generic.List[string]
 
-    # 1) Env overrides: LAZARETTE_* first, then the former ARC_* names
-    foreach ($e in @($env:LAZARETTE_PATH, $env:LAZARETTE_ROOT, $env:LAZARETTE_HOME,
-                     $env:ARC_PATH, $env:ARC_ROOT, $env:ARC_HOME)) {
+    # 1) Env overrides
+    foreach ($e in @($env:LAZARETTE_PATH, $env:LAZARETTE_ROOT, $env:LAZARETTE_HOME)) {
         if ($e) { [void]$candidates.Add($e.Trim().Trim('"').Trim("'")) }
     }
 
-    # 2) Config\packetrat.env (or legacy Config\mailhawk.env): LAZARETTE_PATH= first, then ARC_PATH=
+    # 2) Config\packetrat.env: LAZARETTE_PATH=
     $repo = $null
     try { $repo = $PSScriptRoot } catch {}
     $root = $null
     if ($repo) {
         $root = Split-Path $repo -Parent   # PacketRat\
-        foreach ($envName in @('packetrat.env', 'mailhawk.env')) {
-            $envFile = Join-Path $root ('Config\' + $envName)
-            if (-not (Test-Path -LiteralPath $envFile)) { continue }
-            $lines = @(Get-Content -LiteralPath $envFile -ErrorAction SilentlyContinue)
-            foreach ($key in @('LAZARETTE_PATH', 'ARC_PATH')) {
-                foreach ($line in $lines) {
-                    if ($line -match ('^\s*' + $key + '\s*=\s*(.+)$')) {
-                        [void]$candidates.Add($Matches[1].Trim().Trim('"').Trim("'"))
-                    }
+        $envFile = Join-Path $root 'Config\packetrat.env'
+        if (Test-Path -LiteralPath $envFile) {
+            foreach ($line in @(Get-Content -LiteralPath $envFile -ErrorAction SilentlyContinue)) {
+                if ($line -match '^\s*LAZARETTE_PATH\s*=\s*(.+)$') {
+                    [void]$candidates.Add($Matches[1].Trim().Trim('"').Trim("'"))
                 }
             }
-            break   # packetrat.env wins when present
         }
     }
 
-    # 3) Per-user install folders: Lazarette first, then the former ARC folder
+    # 3) Per-user install folder
     if ($env:LOCALAPPDATA) {
         [void]$candidates.Add((Join-Path $env:LOCALAPPDATA 'Lazarette'))
-        [void]$candidates.Add((Join-Path $env:LOCALAPPDATA 'ARC'))
     }
 
-    # 4) Sibling clone next to this repo, then %USERPROFILE%\Projects (lazarette before arc)
+    # 4) Sibling clone next to this repo, then %USERPROFILE%\Projects
     if ($root) {
         $parent = Split-Path $root -Parent
-        foreach ($n in @('Lazarette', 'lazarette', 'arc')) { [void]$candidates.Add((Join-Path $parent $n)) }
+        foreach ($n in @('Lazarette', 'lazarette')) { [void]$candidates.Add((Join-Path $parent $n)) }
     }
     if ($env:USERPROFILE) {
-        foreach ($n in @('Lazarette', 'lazarette', 'arc')) { [void]$candidates.Add((Join-Path $env:USERPROFILE ('Projects\' + $n))) }
+        foreach ($n in @('Lazarette', 'lazarette')) { [void]$candidates.Add((Join-Path $env:USERPROFILE ('Projects\' + $n))) }
     }
 
     return $candidates.ToArray()
@@ -98,8 +81,7 @@ function Find-PacketRatLazaretteEntry {
     <#
     .SYNOPSIS
       Finds the Lazarette engine to load. Returns Root, Entry (file to dot-source) and Kind, or $null.
-      Pass 1 (every candidate): lib\Lazarette.ps1, then lib\Arc.ps1 (Lazarette / ARC 5).
-      Pass 2 (last resort, ARC 3/4 only): pm.ps1.
+      Looks in every candidate folder for the engine entry file under lib\ (Lazarette.ps1 first).
     #>
     [CmdletBinding()]
     param()
@@ -115,13 +97,6 @@ function Find-PacketRatLazaretteEntry {
             if (Test-Path -LiteralPath $entry -PathType Leaf) {
                 return [pscustomobject]@{ Root = $full; Entry = $entry; Kind = 'engine' }
             }
-        }
-    }
-    foreach ($full in $folders) {
-        # ARC 3/4 only (not pm.bat / launch-arc.bat). ARC 5 folders were already matched above.
-        $entry = Join-Path $full 'pm.ps1'
-        if (Test-Path -LiteralPath $entry -PathType Leaf) {
-            return [pscustomobject]@{ Root = $full; Entry = $entry; Kind = 'pm' }
         }
     }
     return $null
@@ -144,7 +119,6 @@ function Get-PacketRatFirstCommand {
 function Test-PacketRatLazaretteHelpersAvailable {
     return [bool](Get-Command Get-LazaretteSecret -ErrorAction SilentlyContinue) -or
            [bool](Get-Command Get-ArcSecret -ErrorAction SilentlyContinue) -or
-           [bool](Get-Command Get-PmStarkApiKey -ErrorAction SilentlyContinue) -or
            [bool](Get-Command Get-LiveVault -ErrorAction SilentlyContinue) -or
            [bool](Get-Command Ensure-VaultUnlocked -ErrorAction SilentlyContinue)
 }
@@ -152,7 +126,7 @@ function Test-PacketRatLazaretteHelpersAvailable {
 function Import-PacketRatLazaretteSession {
     <#
     .SYNOPSIS
-      Load the Lazarette engine once (lib\Lazarette.ps1 or lib\Arc.ps1; pm.ps1 only for ARC 3/4).
+      Load the Lazarette engine once (its entry file under lib\).
       Safe to call repeatedly; never re-dot-sources after the first attempt. Does not unlock.
     #>
     [CmdletBinding()]
@@ -173,9 +147,9 @@ function Import-PacketRatLazaretteSession {
     $found = $null
     if ($LazaretteRoot) {
         $libDir = Join-Path $LazaretteRoot 'lib'
-        foreach ($entry in @((Join-Path $libDir 'Lazarette.ps1'), (Join-Path $libDir 'Arc.ps1'), (Join-Path $LazaretteRoot 'pm.ps1'))) {
+        foreach ($entry in @((Join-Path $libDir 'Lazarette.ps1'), (Join-Path $libDir 'Arc.ps1'))) {
             if (Test-Path -LiteralPath $entry -PathType Leaf) {
-                $found = [pscustomobject]@{ Root = $LazaretteRoot; Entry = $entry; Kind = $(if ((Split-Path $entry -Leaf) -eq 'pm.ps1') { 'pm' } else { 'engine' }) }
+                $found = [pscustomobject]@{ Root = $LazaretteRoot; Entry = $entry; Kind = 'engine' }
                 break
             }
         }
@@ -212,7 +186,7 @@ function Import-PacketRatLazaretteSession {
             Import-Module -ModuleInfo $packetRatLazarette -Global -Force -WarningAction SilentlyContinue
         }
     } catch {
-        # Do not try a second load if anything partially loaded (e.g. the ARC 5 pm.ps1 stub threw).
+        # Do not try a second load if anything partially loaded.
         if (-not $Quiet) {
             Write-Host "[x] Lazarette load failed: $($_.Exception.Message)" -ForegroundColor Red
         }
@@ -225,7 +199,7 @@ function Import-PacketRatLazaretteSession {
 function Assert-PacketRatLazaretteUnlocked {
     <#
     .SYNOPSIS
-      Lazarette / ARC 5: if the vault is locked, unlock it in this console with
+      If the vault is locked, unlock it in this console with
       Unlock-LazaretteVaultInteractive (or Unlock-ArcVaultInteractive). Returns $true when open.
       Unlocking is interactive by design; nothing is unlocked silently.
     #>
@@ -234,7 +208,7 @@ function Assert-PacketRatLazaretteUnlocked {
     $test = Get-PacketRatFirstCommand @('Test-LazaretteVaultUnlocked', 'Test-ArcVaultUnlocked')
     if ($test -and (& $test)) { return $true }
     $unlock = Get-PacketRatFirstCommand @('Unlock-LazaretteVaultInteractive', 'Unlock-ArcVaultInteractive')
-    if (-not $unlock) { return [bool]($null -eq $test) }   # no lock concept (ARC 3/4 helpers)
+    if (-not $unlock) { return [bool]($null -eq $test) }   # no lock concept
     Write-Host '[*] Lazarette is locked. Unlock it in this console window to continue.' -ForegroundColor Yellow
     return [bool](& $unlock)
 }
@@ -243,7 +217,7 @@ function Resolve-PacketRatLazaretteServiceName {
     <#
     .SYNOPSIS
       Resolve the vault lookup name for a profile: an item-name env override if set, else the canonical name.
-      Legacy aliases and matchers are only used by Get-PacketRatLazaretteSecretByName, never returned here.
+      Matchers are only used by Get-PacketRatLazaretteSecretByName, never returned here.
     #>
     [CmdletBinding()]
     param(
@@ -265,21 +239,19 @@ function Resolve-PacketRatLazaretteServiceName {
 }
 
 function Get-PacketRatLlmVaultSpec {
-    # The vault-item spec whose canonical name (or legacy alias) is $ServiceName; $null for a custom name.
+    # The vault-item spec whose canonical name is $ServiceName; $null for a custom name.
     param([string]$ServiceName)
     foreach ($spec in $script:PacketRatLlmVaultItems.Values) {
-        if ($spec.Name -eq $ServiceName -or @($spec.Legacy) -contains $ServiceName) { return $spec }
+        if ($spec.Name -eq $ServiceName) { return $spec }
     }
     return $null
 }
 
 function Test-PacketRatLlmVaultAlias {
-    # True when a vault service/name matches a spec's legacy aliases or matchers.
+    # True when a vault service/name is a spec's canonical name or one of its matchers.
     param($Spec, [string]$Value)
     if (-not $Spec -or [string]::IsNullOrWhiteSpace($Value)) { return $false }
-    if ($Value -eq $Spec.Name -or @($Spec.Legacy) -contains $Value -or @($Spec.Match) -contains $Value) { return $true }
-    foreach ($pattern in @($Spec.LegacyLike)) { if ($Value -like $pattern) { return $true } }
-    return $false
+    return ($Value -eq $Spec.Name -or @($Spec.Match) -contains $Value)
 }
 
 function Get-PacketRatLazaretteSecretByName {
@@ -288,8 +260,7 @@ function Get-PacketRatLazaretteSecretByName {
       Resolve a vault secret by Lazarette item (service) name. Never prints secret values.
     .NOTES
       Primary lookup uses exact ServiceName (canonical: ai-endpoint-api, grok-api).
-      When ServiceName is a canonical name (or a legacy alias), the canonical name, legacy aliases and matchers from
-      $script:PacketRatLlmVaultItems are tried next (deprecated vault item names keep working).
+      When ServiceName is a canonical name, the matchers from $script:PacketRatLlmVaultItems are tried next.
     #>
     [CmdletBinding()]
     param(
@@ -298,7 +269,7 @@ function Get-PacketRatLazaretteSecretByName {
 
     if ([string]::IsNullOrWhiteSpace($ServiceName)) { return $null }
 
-    # 1) Lazarette / ARC 5: Get-LazaretteSecret if defined, else Get-ArcSecret (exactly one match or it throws)
+    # 1) Get-LazaretteSecret if defined, else Get-ArcSecret (exactly one match or it throws)
     $get = Get-PacketRatFirstCommand @('Get-LazaretteSecret', 'Get-ArcSecret')
     if ($get) {
         if (-not (Assert-PacketRatLazaretteUnlocked)) {
@@ -306,12 +277,11 @@ function Get-PacketRatLazaretteSecretByName {
             return $null
         }
         $names = @($ServiceName)
-        # Legacy aliases and matchers only when the primary name is a canonical item
+        # Matchers only when the primary name is a canonical item
         $spec = Get-PacketRatLlmVaultSpec -ServiceName $ServiceName
         if ($spec) {
-            $names += @(@($spec.Name) + @($spec.Legacy) | Where-Object { $_ -ne $ServiceName })
             $list = Get-PacketRatFirstCommand @('Get-LazaretteItemNames', 'Get-ArcItemNames')
-            if ($list -and (@($spec.Match).Count -gt 0 -or @($spec.LegacyLike).Count -gt 0)) {
+            if ($list -and @($spec.Match).Count -gt 0) {
                 try {
                     $names += @(& $list | ForEach-Object { [string]$_.Service } |
                         Where-Object { $_ -and $names -notcontains $_ -and (Test-PacketRatLlmVaultAlias -Spec $spec -Value $_) } |
@@ -328,20 +298,7 @@ function Get-PacketRatLazaretteSecretByName {
         return $null
     }
 
-    # 2) ARC 3/4 pm.ps1 helper lookup (canonical or env-overridden name, then legacy aliases)
-    if (Get-Command Get-PmStarkApiKey -ErrorAction SilentlyContinue) {
-        $pmNames = @($ServiceName)
-        $pmSpec = Get-PacketRatLlmVaultSpec -ServiceName $ServiceName
-        if ($pmSpec) { $pmNames += @(@($pmSpec.Name) + @($pmSpec.Legacy) | Where-Object { $_ -ne $ServiceName }) }
-        foreach ($pmName in $pmNames) {
-            try {
-                $v = Get-PmStarkApiKey -ServiceName $pmName -ErrorAction Stop
-                if (-not [string]::IsNullOrWhiteSpace([string]$v)) { return [string]$v }
-            } catch {}
-        }
-    }
-
-    # 3) Vault row match - exact Service/Name first
+    # 2) Vault row match - exact Service/Name first
     if (Get-Command Get-LiveVault -ErrorAction SilentlyContinue) {
         try {
             $vault = Get-LiveVault
@@ -350,7 +307,7 @@ function Get-PacketRatLazaretteSecretByName {
                     $_.Service -eq $ServiceName -or $_.Name -eq $ServiceName
                 } | Select-Object -First 1
 
-                # Legacy aliases and matchers only when the primary name is a canonical item
+                # Matchers only when the primary name is a canonical item
                 $rowSpec = Get-PacketRatLlmVaultSpec -ServiceName $ServiceName
                 if (-not $row -and $rowSpec) {
                     $row = $vault | Where-Object {
