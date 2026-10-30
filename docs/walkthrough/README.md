@@ -57,4 +57,4 @@ Select a section and generate an **Action plan**, **Leadership briefing**, **Ris
 
 ## About these images
 
-Images live in [`docs/assets/walkthrough/`](../assets/walkthrough/), named `NN-<screen>.png` after the step they belong to. They are 1440x900 at 100% scale in the Dark (PacketRat has one theme) theme, and show demo data only.
+Images live in [`docs/assets/walkthrough/`](../assets/walkthrough/), named `NN-<screen>.png` after the step they belong to. They are 1440x900 at 100% scale in the Night watch (dark) theme, and show demo data only. `node tools/capture-screenshots.mjs` retakes them, with the README pair in `docs/screenshots/`, from the offline demo.
