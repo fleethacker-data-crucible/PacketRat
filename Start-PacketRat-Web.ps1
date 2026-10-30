@@ -8,7 +8,7 @@
   The browser tab owns this server: it stops itself once no PacketRat tab has sent a
   heartbeat for 20 s (5 s after a tab's leaving signal), never in the middle of a request.
  .PARAMETER Stay
-  Keep running after the browser tab closes. Also: --stay, or PACKETRAT_AUTO_STOP=0 (former MAILHAWK_AUTO_STOP still read).
+  Keep running after the browser tab closes. Also: --stay, or PACKETRAT_AUTO_STOP=0.
  .PARAMETER Replace
   If PacketRat is already running, stop it and start fresh without asking. Also: --replace.
 #>
@@ -33,13 +33,12 @@ foreach($option in @($Rest)){
         default {if($option){Write-Warning "Ignoring unknown option $option"}}
     }
 }
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
-# Config\packetrat.env; an installed copy's former Config\mailhawk.env is still read when the new file is absent.
+# Config\packetrat.env
 $envFile=Join-Path $Root 'Config\packetrat.env'
-if(-not (Test-Path $envFile)){$legacyEnv=Join-Path $Root 'Config\mailhawk.env';if(Test-Path $legacyEnv){$envFile=$legacyEnv}}
 if(Test-Path $envFile){
     foreach($line in Get-Content $envFile){
         if($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$'){
@@ -47,7 +46,6 @@ if(Test-Path $envFile){
         }
     }
 }
-Initialize-PacketRatLegacyEnvironment
 # One instance: a running server holds the store and Outlook session; offer to replace it.
 $running=@(Get-PacketRatProcesses -Root $Root)
 if($running.Count -gt 0){

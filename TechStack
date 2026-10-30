@@ -62,6 +62,6 @@ Direction (2026-10-26): Fleet tools stop hard-coding external endpoints and defa
 
 | Access | Today | Where | Settings |
 | --- | --- | --- | --- |
-| AI/LLM | OpenAI-compatible chat completions; default local phoenix-lai `http://127.0.0.1:1234/v1/chat/completions` (loopback); optional Grok profile with no built-in URL; manual session token in the UI | `Private/PacketRatLlm.ps1:12`; requests `:380` | `LLM_URL`, `PACKETRAT_AI_ENDPOINT_URL`, `PACKETRAT_GROK_URL`, `PACKETRAT_LLM_PROFILE`, `LLM_MODEL`, `LLM_TOKEN`, `AI_ENDPOINT_TOKEN`/`GENAI_TOKEN`, `DATABRICKS_TOKEN`; vault items `ai-endpoint-api`, `grok-api` (`Private/LazaretteBridge.ps1:19-36`) |
+| AI/LLM | OpenAI-compatible chat completions; default local phoenix-lai `http://127.0.0.1:1234/v1/chat/completions` (loopback); optional Grok profile with no built-in URL; manual session token in the UI | `Private/PacketRatLlm.ps1:12`; requests `:380` | `LLM_URL`, `PACKETRAT_AI_ENDPOINT_URL`, `PACKETRAT_GROK_URL`, `PACKETRAT_LLM_PROFILE`, `LLM_MODEL`, `LLM_TOKEN`, `AI_ENDPOINT_TOKEN`, `DATABRICKS_TOKEN`; vault items `ai-endpoint-api`, `grok-api` (`Private/LazaretteBridge.ps1:19-36`) |
 | Git repositories | none |  |  |
 | Databases | none (mail comes from Outlook COM and, optionally, Microsoft Graph PowerShell modules; not a database) |  |  |

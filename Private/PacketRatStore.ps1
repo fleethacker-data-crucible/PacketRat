@@ -11,15 +11,6 @@ function Get-PacketRatStorePath {
     $dir = Join-Path $Root 'Logs'
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $path = Join-Path $dir 'packetrat-store.json'
-    # One-time copy-forward from the former name (MailHawk). The old file is left untouched,
-    # and nothing happens once packetrat-store.json exists, so this is idempotent.
-    if (-not (Test-Path -LiteralPath $path)) {
-        $legacy = Join-Path $dir 'mailhawk-store.json'
-        if (Test-Path -LiteralPath $legacy) {
-            try { Copy-Item -LiteralPath $legacy -Destination $path -ErrorAction Stop }
-            catch { Write-Warning "Could not copy legacy mailhawk-store.json forward: $($_.Exception.Message)" }
-        }
-    }
     return $path
 }
 

@@ -1,0 +1,30 @@
+From: =?UTF-8?B?Sm9zw6kgRXhhbXBsZQ==?= <jose@example.test>
+To: me@example.test
+Subject: =?UTF-8?Q?Caf=C3=A9_menu_for_the_review?=
+Date: Tue, 27 Oct 2026 16:40:00 -0400 (EDT)
+Message-ID: <menu-2@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+Preamble ignored.
+--outer
+Content-Type: multipart/alternative; boundary="inner"
+
+--inner
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Caf=C3=A9 menu attached. Please reply with your choice=
+ by Friday.
+--inner
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>HTML copy</p></body></html>
+--inner--
+--outer
+Content-Type: application/pdf; name="menu.pdf"
+Content-Disposition: attachment; filename="menu.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQK
+--outer--

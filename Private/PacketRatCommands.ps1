@@ -22,10 +22,11 @@ $script:PacketRatCommands = @(
     [pscustomobject]@{ Name = 'packetrat queue show'; Route = '/api/state'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'The action queue, dismissals, rules, credential status and the last report.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat inbox analyze'; Route = '/api/analyze'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
-        Summary = 'Read recent Outlook mail and build the report and action queue (no mail is changed or sent).'
+        Summary = 'Read recent Outlook mail (or exported .eml/.msg files) and build the report and action queue (no mail is changed or sent).'
         Inputs = @(
             (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile: Auto, AiEndpoint or Grok (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))
-            (New-PacketRatInput 'provider' 'provider' 'string' $false 'Mail source: COM (classic Outlook) or Graph (default COM).' @('COM', 'Graph'))
+            (New-PacketRatInput 'provider' 'provider' 'string' $false 'Mail source: COM (classic Outlook), Graph, or Files (exported .eml/.msg, no Outlook; default COM).' @('COM', 'Graph', 'Files'))
+            (New-PacketRatInput 'folder' 'folder' 'string' $false 'Files provider: folder of .eml and .msg files (default: PACKETRAT_MAIL_FOLDER). Subfolders are not read.')
             (New-PacketRatInput 'max-emails' 'maxEmails' 'int' $false 'Most messages to read, 1-150 (default 40).')
             (New-PacketRatInput 'days-back' 'daysBack' 'int' $false 'How many days back, 1-90 (default 14).')
             (New-PacketRatInput 'classification' 'classification' 'string' $false 'Single (one report answer, default) or Batch (typed records per batch; PacketRat compiles the report). PACKETRAT_CLASSIFY=batch sets the default.' @('Single', 'Batch'))) }

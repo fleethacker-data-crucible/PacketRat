@@ -19,6 +19,7 @@ function Resolve-PacketRatOutlookEntryId($Item) {
     # Classic Outlook opens a message by EntryID. A Graph message has only a Graph id, so find the same message in
     # classic Outlook by its Internet message id (a read-only lookup). Returns the EntryID or throws a clear reason.
     $entryId=[string]$Item.EntryID
+    if($script:LastResult -and $script:LastResult.Provider -eq 'Files'){throw 'This message was read from a file, so there is no Outlook copy to open. Open the source file instead.'}
     if(-not ($script:LastResult -and $script:LastResult.Provider -eq 'Graph')){return $entryId}
     $internetId=if($Item.PSObject.Properties['InternetMessageId']){[string]$Item.InternetMessageId}else{''}
     if(-not $internetId -and $script:LastResult.Summary){
@@ -76,7 +77,7 @@ function Invoke-PacketRatApi {
       }
       '/api/analyze' {
           $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
-          $provider=if(@('COM','Graph') -contains $Data.provider){$Data.provider}else{'COM'}
+          $provider=if(@('COM','Graph','Files') -contains $Data.provider){$Data.provider}else{'COM'}
           $max=[Math]::Max(1,[Math]::Min(150,[int]$Data.maxEmails))
           $days=[Math]::Max(1,[Math]::Min(90,[int]$Data.daysBack))
           # Fail before scanning Outlook if the chosen AI credential source is unusable.
@@ -84,6 +85,7 @@ function Invoke-PacketRatApi {
           # A local (loopback) endpoint needs no token; a remote one throws here when its token is missing.
           $null=Get-PacketRatLlmAuthToken -Config (Get-PacketRatLlmConfig -Profile $profile)
           $extra=@{}
+          if($provider -eq 'Files'){$extra.Folder=[string]$Data.folder}
           if(@('Single','Batch') -contains [string]$Data.classification){$extra.Classification=[string]$Data.classification}
           $script:LastResult=Invoke-PacketRatInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root @extra
           $run=$script:LastResult
@@ -225,7 +227,7 @@ function Invoke-PacketRatApi {
           $item=Find-PacketRatItem $store $key
           if(-not $item){$item=Find-PacketRatReportSource $key}
           if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
-          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          if($script:LastResult -and $script:LastResult.Provider -in @('Graph','Files')){throw 'Inbox actions require classic Outlook (COM mode); mail read from files or Graph cannot be changed here.'}
           $null=Move-PacketRatMailToArchive -EntryID ([string]$item.EntryID)
           if((Find-PacketRatItem $store $key) -and -not (Test-PacketRatDismissed -Store $store -Key $key)){
               $fromVal=if($item.PSObject.Properties['From']){[string]$item.From}else{[string]$item.FromName}
@@ -241,7 +243,7 @@ function Invoke-PacketRatApi {
           $item=Find-PacketRatItem $store $key
           if(-not $item){$item=Find-PacketRatReportSource $key}
           if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
-          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          if($script:LastResult -and $script:LastResult.Provider -in @('Graph','Files')){throw 'Inbox actions require classic Outlook (COM mode); mail read from files or Graph cannot be changed here.'}
           $folder=[string]$Data.folder
           if([string]::IsNullOrWhiteSpace($folder) -or $folder.Length -gt 256){throw 'A folder name of 1-256 characters is required.'}
           $null=Move-PacketRatMailToFolder -EntryID ([string]$item.EntryID) -FolderName $folder
@@ -253,7 +255,7 @@ function Invoke-PacketRatApi {
           $item=Find-PacketRatItem $store $key
           if(-not $item){$item=Find-PacketRatReportSource $key}
           if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
-          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          if($script:LastResult -and $script:LastResult.Provider -in @('Graph','Files')){throw 'Inbox actions require classic Outlook (COM mode); mail read from files or Graph cannot be changed here.'}
           $category=[string]$Data.category
           if([string]::IsNullOrWhiteSpace($category) -or $category.Length -gt 255 -or $category -match ';'){throw 'Category must be 1-255 characters with no semicolons.'}
           $null=Set-PacketRatMailCategory -EntryID ([string]$item.EntryID) -Category $category
@@ -265,7 +267,7 @@ function Invoke-PacketRatApi {
           $item=Find-PacketRatItem $store $key
           if(-not $item){$item=Find-PacketRatReportSource $key}
           if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
-          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          if($script:LastResult -and $script:LastResult.Provider -in @('Graph','Files')){throw 'Inbox actions require classic Outlook (COM mode); mail read from files or Graph cannot be changed here.'}
           $unread=[bool]$Data.unread
           $null=Set-PacketRatMailRead -EntryID ([string]$item.EntryID) -Unread:$unread
           $null=Add-PacketRatUsage -Action markedRead -Root $Root

@@ -62,15 +62,6 @@ try {
     Assert-Lifecycle (-not (Test-PacketRatAutoStopEnabled)) 'PACKETRAT_AUTO_STOP=0 disables auto-stop'
     [Environment]::SetEnvironmentVariable('PACKETRAT_AUTO_STOP','1','Process')
     Assert-Lifecycle (Test-PacketRatAutoStopEnabled) 'PACKETRAT_AUTO_STOP=1 keeps auto-stop'
-    # Rename compatibility: the former MAILHAWK_AUTO_STOP is read only when PACKETRAT_AUTO_STOP is unset.
-    $savedLegacy=[Environment]::GetEnvironmentVariable('MAILHAWK_AUTO_STOP','Process')
-    try {
-        [Environment]::SetEnvironmentVariable('PACKETRAT_AUTO_STOP',$null,'Process')
-        [Environment]::SetEnvironmentVariable('MAILHAWK_AUTO_STOP','0','Process')
-        Assert-Lifecycle (-not (Test-PacketRatAutoStopEnabled)) 'legacy MAILHAWK_AUTO_STOP=0 still disables auto-stop'
-        [Environment]::SetEnvironmentVariable('PACKETRAT_AUTO_STOP','1','Process')
-        Assert-Lifecycle (Test-PacketRatAutoStopEnabled) 'PACKETRAT_AUTO_STOP wins over MAILHAWK_AUTO_STOP'
-    } finally { [Environment]::SetEnvironmentVariable('MAILHAWK_AUTO_STOP',$savedLegacy,'Process') }
 } finally { [Environment]::SetEnvironmentVariable('PACKETRAT_AUTO_STOP',$saved,'Process') }
 $state=New-PacketRatPresence -AutoStop $false
 Register-PacketRatPresence -State $state -Tab 'tab-a' -Now $t0
@@ -102,15 +93,6 @@ try {
     [IO.File]::WriteAllText($broken,'not json')
     $null=Get-PacketRatRuntimeEntries -Root $testRoot
     Assert-Lifecycle (-not (Test-Path -LiteralPath $broken)) 'unreadable runtime file removed'
-    # A server started by an older MailHawk build wrote mailhawk-server-<pid>.json: still discovered and swept.
-    $legacyLive=Join-Path (Split-Path $file -Parent) ('mailhawk-server-'+$PID+'.json')
-    [IO.File]::Copy($file,$legacyLive)
-    Assert-Lifecycle (@(Get-PacketRatRuntimeEntries -Root $testRoot | Where-Object {$_.File -eq $legacyLive}).Count -eq 1) 'legacy mailhawk-server runtime file found'
-    Remove-Item -LiteralPath $legacyLive -Force
-    $legacyStale=Join-Path (Split-Path $file -Parent) 'mailhawk-server-999998.json'
-    [IO.File]::WriteAllText($legacyStale,'{"pid":999998,"port":1,"url":"http://127.0.0.1:1/","startedAt":"2026-01-01T00:00:00Z"}')
-    $null=Get-PacketRatRuntimeEntries -Root $testRoot
-    Assert-Lifecycle (-not (Test-Path -LiteralPath $legacyStale)) 'stale legacy runtime file removed on sight'
     Remove-PacketRatRuntimeFile -Path $file
     Assert-Lifecycle (-not (Test-Path -LiteralPath $file)) 'runtime file removed on stop'
 } finally {
@@ -124,6 +106,6 @@ foreach($needle in @("'/api/heartbeat'","'/api/session/stop'",'Write-PacketRatRu
     Assert-Lifecycle ($service.Contains($needle)) ('service uses '+$needle)
 }
 $life=[IO.File]::ReadAllText((Join-Path $root 'Private/PacketRatLifecycle.ps1'))
-Assert-Lifecycle ($life.Contains("'Start-(PacketRat|MailHawk)-Web\.ps1'")) 'process scan also finds an older MailHawk server'
+Assert-Lifecycle ($life.Contains("'Start-PacketRat-Web\.ps1'")) 'process scan finds a PacketRat server'
 Assert-Lifecycle (-not ($service -match 'Write-[A-Za-z]+ .*\$Data\b')) 'request bodies are never written out'
 Write-Host 'PacketRat lifecycle (presence, runtime file, beacon token) tests passed' -ForegroundColor Green

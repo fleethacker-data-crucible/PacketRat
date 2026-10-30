@@ -15,8 +15,6 @@ No Python or Node.js installation is required on the target workstation.
 
 Packet ships carried the mail on scheduled routes, and the sailors aboard were called packet rats. PacketRat makes the same run through your Outlook inbox and sorts it into a human-reviewed action queue.
 
-Formerly MailHawk.
-
 > **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/smart card, AI provider connectivity, and operational workstation execution need validation in the approved environment. Not accredited or production-ready.
 
 | Night watch (dark) | Chart room (light) |
@@ -25,10 +23,10 @@ Formerly MailHawk.
 
 The screenshots use the offline demo's sample mail. PacketRat follows the Windows light or dark setting; the theme button in the sidebar cycles Follow Windows, Night watch and Chart room.
 
-## Only two launchers
+## Launchers
 
 - **`Launch-PacketRat.bat`** — opens the modern browser GUI, the default.
-- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile AiEndpoint` or `-Profile Grok` are accepted; the former AI-endpoint profile name still works). It also runs any browser action by name, for scripts and agents: `PacketRat-CLI.bat commands` lists them, and [`docs/CLI.md`](docs/CLI.md) covers the flags, JSON output and exit codes.
+- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile AiEndpoint` or `-Profile Grok`). It also runs any browser action by name, for scripts and agents: `PacketRat-CLI.bat commands` lists them, and [`docs/CLI.md`](docs/CLI.md) covers the flags, JSON output and exit codes.
 
 The browser launcher also supports optional commands from an existing CMD prompt:
 
@@ -54,9 +52,9 @@ The browser tab owns the local PowerShell service. The page sends a heartbeat ev
 - `Launch-PacketRat.bat stop` (runs `Stop-PacketRat.ps1`), which stops every running PacketRat service without needing a PID.
 - Ctrl+C in the console, if it is visible.
 
-Launching while PacketRat already runs asks *Stop it and start fresh?*. `Launch-PacketRat.bat --replace` answers yes; `Launch-PacketRat.bat --stay` (or `PACKETRAT_AUTO_STOP=0` in the environment or `Config/packetrat.env`; the former `MAILHAWK_AUTO_STOP` still works) keeps the service running after the tab closes. Each running service writes `Logs/packetrat-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops. `Stop-PacketRat.ps1` and the single-instance check also find a server started by an older MailHawk build (`Logs/mailhawk-server-<pid>.json` or a `Start-MailHawk-Web.ps1` process).
+Launching while PacketRat already runs asks *Stop it and start fresh?*. `Launch-PacketRat.bat --replace` answers yes; `Launch-PacketRat.bat --stay` (or `PACKETRAT_AUTO_STOP=0` in the environment or `Config/packetrat.env`) keeps the service running after the tab closes. Each running service writes `Logs/packetrat-server-<pid>.json` (pid, port, url, start time; never the session nonce), removed when it stops.
 
-`MailHawk.bat` and `MailHawk-CLI.bat` are three-line forwarding stubs kept from before the rename so existing shortcuts keep working; they pass all options through to `Launch-PacketRat.bat` and `PacketRat-CLI.bat`. The five former user-facing BAT files were retired. Internal PowerShell files (`Start-PacketRat-Web.ps1`, `Start-PacketRat.ps1`) remain as implementation entrypoints and are not additional launchers.
+Internal PowerShell files (`Start-PacketRat-Web.ps1`, `Start-PacketRat.ps1`) remain as implementation entrypoints and are not additional launchers.
 
 The PowerShell process-scoped startup convention matches Halyard, but it **cannot override organization-managed security policy**. If the workstation blocks execution, use an approved signing/deployment process. The diagnostics option checks required files, parsing, policy precedence and local network binding without accessing mail or credentials.
 
@@ -66,7 +64,7 @@ The report is now an interactive, **source-verified intelligence workspace**, no
 
 - Conservative recovery of common encoding artifacts and model formatting, without stripping ordinary Unicode.
 - Verified inline source references and clickable table rows when the AI model includes source indices. Invalid model references are never made actionable.
-- A searchable list of actual source messages from the most recent inbox scan. Open in Outlook, draft a reply, or explicitly create an action from a report source. Graph-to-classic-Outlook opening is not yet implemented.
+- A searchable list of actual source messages from the most recent inbox scan. Open in Outlook, draft a reply, or explicitly create an action from a report source. A message read through Graph opens in classic Outlook when the same message is in the local profile.
 - Generate **Action plan**, **Leadership briefing**, **Risk review**, or **Explanation** from the full report or a selected section; follow-ups are generated on demand and do not send email or silently alter the action queue.
 - Report-quality indicators for unresolved character artifacts, unsupported model references, missing structured output, and conflicts between AI suggestions and local triage rules.
 
@@ -92,7 +90,7 @@ Malformed or incomplete outputs fail visibly instead of placing raw model output
 
 See [AI Wire Protocol v1](docs/AI_WIRE_PROTOCOL_V1.md) for delimiters, schemas, validation, and test requirements. The 20,000-output-token ceiling for drafts remains a provider request budget, not an email length requirement.
 
-## Intelligence workspace enhancements (feature branch)
+## Intelligence workspace
 
 - Overview KPI cards open the matching **Active**, **High priority**, **Completed**, or **Filtered** workspace.
 - Priority signals are clickable, and subject titles in the action queue open the original message in desktop Outlook (COM mode).
@@ -109,7 +107,7 @@ The default organization-domain rule requires a **verified direct recipient and 
 
 Open **Configuration → Credentials & connections** in the GUI.
 
-1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (AI endpoint item `ai-endpoint-api` or Grok item `grok-api`; override names in `Config/packetrat.env` if needed. The former item names are still found when these are absent).
+1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (AI endpoint item `ai-endpoint-api` or Grok item `grok-api`; override names in `Config/packetrat.env` if needed).
 2. Or select **Manual · current session**, select AI endpoint or Grok, paste a token for an **approved** provider, then select **Apply credential source**. Repeat for another provider if needed.
 3. Select **Check available token** to verify that the selected provider's token resolves locally. This does **not** contact an AI endpoint or scan your inbox.
 4. Select **Forget manual tokens** to erase manual credential references held in the current PowerShell process.
@@ -124,7 +122,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | --- | --- | --- | --- |
 | `PACKETRAT_AI_ENDPOINT_URL` | AiEndpoint | `http://127.0.0.1:1234/v1/chat/completions` (local phoenix-lai) | Full chat-completions URL. Overrides the default when set. |
 | `PACKETRAT_GROK_URL` | Grok | none | Outside provider, so no URL is built in. Required for the Grok profile. |
-| `LLM_URL` | any | none | Shared override (legacy alias): wins over both variables above. |
+| `LLM_URL` | any | none | Shared override: wins over both variables above. |
 | `LLM_MODEL` | any | `phoenixlai` on the local default, otherwise the profile's model | Set it when an override URL needs a specific model name. |
 | `AI_ENDPOINT_TOKEN` / `LLM_TOKEN` | AiEndpoint / any | none | Optional for a local (loopback) endpoint: phoenix-lai's API key is off by default, and no `Authorization` header is sent without a token. Required for a remote endpoint. |
 
@@ -139,6 +137,7 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
 | Microsoft Graph | Requires organization-authorized Graph configuration. Offline tests cover the mapping, sensitivity skip and dismissals against a fake Graph; no live sign-in has been tried |
+| Files provider: read exported `.eml` and `.msg` files with no Outlook (`inbox analyze --provider Files --folder <path>`, or `PACKETRAT_MAIL_FOLDER`) | Text and HTML bodies, attachment names only, malformed files listed as errors. `.msg` is parsed by C# source compiled with `Add-Type` (no DLL). Each record keeps its file path and byte offset or line. Offline tests with synthetic files only; not tried on real exports. Inbox actions, open-in-Outlook and reply drafts need classic Outlook, so they are refused for file mail. `--days-back` does not apply to files |
 | Minutes-saved counter (`stats`, Overview > Time saved) | An **estimate**, not a measurement. Counts what PacketRat performed or prepared (messages triaged, drafts, reports, inbox actions, dismissals) in the local store (`Logs/`) and multiplies by the minutes assumed per action in `Config/minutes-saved.json` (edit freely; 0-240). Never sent anywhere, never a score for a person. `stats export --out counts.json` writes the raw counts. Offline tests only; the minutes are assumptions, not timings |
 | Open or reply to a Graph-read message in classic Outlook | Looks the message up in classic Outlook by its Internet message id (read-only) and opens that copy; offline tests with a fake Outlook, live check pending. Fails with a clear message if classic Outlook does not hold the message |
 | Fairlead router (`PACKETRAT_ROUTER=fairlead`) | Opt-in, off by default; offline tests against a stub. Not tried against a running Fairlead |
@@ -159,10 +158,10 @@ PacketRat reads mail through Outlook on this PC; the action queue, rules and log
 
 ## Project layout
 
-- `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers (`MailHawk.bat` / `MailHawk-CLI.bat` just forward to them).
+- `Launch-PacketRat.bat` and `PacketRat-CLI.bat` — the only user launchers.
 - `Start-PacketRat-Web.ps1` — local HTTP/JSON service.
 - `Stop-PacketRat.ps1` — stops every running PacketRat browser service (`Launch-PacketRat.bat stop`).
-- `Start-PacketRat.ps1` — legacy engine with console mode used by the CLI.
+- `Start-PacketRat.ps1` — console-mode engine used by `PacketRat-CLI.bat`.
 - `Web/` — browser application, styling, and logo assets.
 - `Private/`, `Public/` — Outlook, Lazarette, AI, persistence and analysis modules.
 - `tools/Test-PacketRatStartup.ps1` — noninvasive diagnostics invoked by `Launch-PacketRat.bat diagnostics`.
@@ -172,14 +171,6 @@ PacketRat reads mail through Outlook on this PC; the action queue, rules and log
 
 See [`docs/WORKSTATION_LAUNCH_STANDARD.md`](docs/WORKSTATION_LAUNCH_STANDARD.md) for the Lazarette/Halyard launch convention and security constraints.
 
-## Upgrading from MailHawk
+## Lazarette bridge
 
-The rename keeps existing installs working:
-
-- **Launchers:** `MailHawk.bat` is now `Launch-PacketRat.bat` and `MailHawk-CLI.bat` is now `PacketRat-CLI.bat`. The old names remain as forwarding stubs (options such as `stop`, `--replace` and `--stay` pass through), so existing shortcuts keep working; point new shortcuts at the new names.
-- **Local data:** on first start, `Logs/mailhawk-store.json` (action queue, dismissals, rules) is copied to `Logs/packetrat-store.json`. The original file is left in place. New log files are written as `packetrat*.log`.
-- **Configuration:** `Config/packetrat.env` is read first; an existing `Config/mailhawk.env` is still read when the new file is absent. Every `PACKETRAT_*` setting falls back to its former `MAILHAWK_*` name.
-- **Browser settings:** the saved preferences key `mailhawk-prefs` is copied to `packetrat-prefs` once; the old key is left in place.
-- **Lazarette (formerly ARC):** a folder counts as Lazarette when it contains `lib\Lazarette.ps1` or `lib\Arc.ps1` (ARC 5); `pm.ps1` is only a last-resort fallback for ARC 3/4. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `ARC_PATH`/`ARC_ROOT`/`ARC_HOME`, then `%LOCALAPPDATA%\Lazarette`, `%LOCALAPPDATA%\ARC`, then a `Lazarette` or `arc` folder next to this repo or under `%USERPROFILE%\Projects`. The default vault item names are now `ai-endpoint-api` and `grok-api`; the former item names are still looked up when those are absent, so existing vaults keep working.
-- **Port:** unchanged (8766), so browser storage for the existing origin is kept.
-- **AI envelopes:** the model response markers are now `PACKETRAT_*_V1`. They are never saved and parsed again, so no old-name fallback is needed.
+A folder counts as Lazarette when it contains its engine entry file under `lib\` (`Lazarette.ps1`, or the file Lazarette ships under its previous name). PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` (or `Unlock-ArcVaultInteractive`) in the console when the vault is locked, and reads items with `Get-LazaretteSecret` (or `Get-ArcSecret`). Folders are searched via `LAZARETTE_PATH`/`LAZARETTE_ROOT`/`LAZARETTE_HOME`, then `LAZARETTE_PATH=` in `Config/packetrat.env`, then `%LOCALAPPDATA%\Lazarette`, then a `Lazarette` folder next to this repo or under `%USERPROFILE%\Projects`. The vault item names are `ai-endpoint-api` and `grok-api`.
