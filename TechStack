@@ -58,7 +58,7 @@ Notes:
 
 ## Intelligence router
 
-Direction (2026-10-26): Fleet tools stop hard-coding external endpoints and default to the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), for AI/LLM endpoints, git repository access and database connections. Fairlead will own endpoint selection, credentials (through Lazarette / Windows Credential Manager, never in tool config), policy and routing. Until PacketRat is moved behind it, the current settings in the table below stay as they are; nothing has changed in code yet.
+Direction (2026-10-26): Fleet tools stop hard-coding external endpoints and default to the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), for AI/LLM endpoints, git repository access and database connections. Fairlead will own endpoint selection, credentials (through Lazarette / Windows Credential Manager, never in tool config), policy and routing. Until Fairlead is the default, the current settings in the table below stay as they are. **Opt-in routing is implemented** (2026-10-30, off by default): set `PACKETRAT_ROUTER=fairlead` and every AI call goes to `http://127.0.0.1:8776/v1/chat/completions` with the route name `auto` (override: `PACKETRAT_FAIRLEAD_URL`, `PACKETRAT_FAIRLEAD_MODEL`). PacketRat then sends no provider token: only an optional `FAIRLEAD_TOKEN` for Fairlead itself (required when Fairlead is not on this PC), and `PACKETRAT_FAIRLEAD_PRIVACY=local` adds Fairlead's `X-Fairlead-Privacy: local` header. The shared `LLM_URL` still wins. Tested offline against a stub; not tried against a running Fairlead.
 
 | Access | Today | Where | Settings |
 | --- | --- | --- | --- |
