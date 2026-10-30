@@ -1,0 +1,10 @@
+From: "Dana Example" <dana@example.test>
+To: me@example.test, ops@example.test
+Subject: Approve the synthetic budget by Nov 5
+Date: Wed, 28 Oct 2026 09:15:00 +0000
+Message-ID: <budget-1@example.test>
+Importance: high
+Content-Type: text/plain; charset=utf-8
+
+Please approve the budget line by Nov 5.
+Thanks, Dana
