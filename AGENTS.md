@@ -7,7 +7,7 @@ Never ship or load a prebuilt or custom DLL (`Add-Type -Path *.dll`, `Assembly.L
 
 ## Stable launcher and AI credential contract
 
-Two user-facing BAT files in the root: `Launch-PacketRat.bat` for browser GUI (`demo`, `diagnostics` subcommands) and `PacketRat-CLI.bat` for console (plus the demo-only `Launch-LocalDev.bat`). Do not add new root BAT launchers for each mode. Maintain two AI credential paths: Lazarette/approved environment and GUI-entered manual session token (never persist the latter or return it from an API). Before inbox analysis, fail fast if the selected provider has no usable token. Future changes must preserve token-handling safeguards and workstation policy compliance.
+Exactly two user-facing BAT files in the root: `Launch-PacketRat.bat` for browser GUI (`demo`, `diagnostics` subcommands) and `PacketRat-CLI.bat` for console. Do not add new root BAT launchers for each mode. Maintain two AI credential paths: Lazarette/approved environment and GUI-entered manual session token (never persist the latter or return it from an API). Before inbox analysis, fail fast if the selected provider has no usable token. Future changes must preserve token-handling safeguards and workstation policy compliance.
 
 ## CLI and API parity
 
