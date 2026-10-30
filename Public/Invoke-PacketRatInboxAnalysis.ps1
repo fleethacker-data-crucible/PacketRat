@@ -161,8 +161,10 @@ function Invoke-PacketRatInboxAnalysis {
     [CmdletBinding()]
     param(
         [string]$Profile = 'Auto',
-        [ValidateSet('COM', 'Graph')]
+        [ValidateSet('COM', 'Graph', 'Files')]
         [string]$Provider = 'COM',
+        # Files provider only: folder of .eml/.msg files (default PACKETRAT_MAIL_FOLDER).
+        [string]$Folder,
         [int]$MaxEmails = 40,
         [int]$BodyPreviewChars = 280,
         [int]$DaysBack = 14,
@@ -185,7 +187,10 @@ function Invoke-PacketRatInboxAnalysis {
     Write-PacketRatLogSafe -Level INFO -Message ("Collecting Inbox summary via {0}" -f $Provider) -Root $Root
     Write-Host "[*] Collecting Inbox summary via $Provider..." -ForegroundColor Cyan
 
-    if ($Provider -eq 'Graph') {
+    if ($Provider -eq 'Files') {
+        $summary = Get-PacketRatInboxSummaryFiles -Folder $Folder -MaxEmails $MaxEmails -BodyPreviewChars $BodyPreviewChars -Store $store
+        foreach ($e in @($summary.Errors)) { Write-Host ("    Unreadable: {0}: {1}" -f $e.File, $e.Error) -ForegroundColor Yellow }
+    } elseif ($Provider -eq 'Graph') {
         $summary = Get-PacketRatInboxSummaryGraph -MaxEmails $MaxEmails -BodyPreviewChars $BodyPreviewChars -DaysBack $DaysBack -Store $store
     } else {
         $summary = Get-PacketRatInboxSummary -MaxEmails $MaxEmails -BodyPreviewChars $BodyPreviewChars -DaysBack $DaysBack -Store $store
