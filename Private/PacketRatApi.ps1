@@ -1,4 +1,4 @@
-﻿# PacketRat command core: every action the browser UI takes goes through Invoke-PacketRatApi by route.
+# PacketRat command core: every action the browser UI takes goes through Invoke-PacketRatApi by route.
 # Dot-sourced by Start-PacketRat-Web.ps1 (the browser server) and Invoke-PacketRatCli.ps1 (the command line), so the GUI,
 # the CLI and the HTTP API run the same code (Fleet CLI parity). Expects $Root, $script:Presence, $script:StopReason and
 # $script:LastResult in the caller's script scope.
@@ -208,6 +208,11 @@ function Invoke-PacketRatApi {
           # append the reviewed text before it; never invent a new signature.
           $null=New-PacketRatOutlookReplyDraft -EntryID $entryId -Body $body -SuggestedSubject $subject -ApplySuggestedSubject:$apply
           return @{ok=$true}
+      }
+      '/api/cancel' {
+          # Stops a streaming AI generation that is running in this PacketRat process (the next chunk check sees the flag).
+          $null=Request-PacketRatCancel
+          return @{ok=$true;cancelRequested=$true}
       }
       '/api/item/archive' {
           $key=[string]$Data.key
