@@ -65,6 +65,22 @@ All six section IDs are required **in that order**; empty sections use empty arr
 
 This covers briefings, explanations, risk reviews and follow-up plans generated from the full report or a selected report section. Email index **0** means general advice with no specific message citation. The compiled UI is read-only and never sends mail automatically.
 
+### Schema-first batch classification — `PACKETRAT_CLASSIFY_V1` (opt-in)
+
+An alternative to the one-shot report, off by default. Turn it on with `PACKETRAT_CLASSIFY=batch` (or `inbox analyze --classification Batch`). The model is asked only for typed records, a batch of up to 20 messages at a time (`PACKETRAT_CLASSIFY_BATCH_SIZE`, 5-50), and PacketRat compiles the report from the reconciled records with no further model call:
+
+```text
+<<<PACKETRAT_CLASSIFY_V1>>>
+{"version":"PACKETRAT_CLASSIFY_V1","records":[{"index":1,"category":"must_reply","urgency":"High","reason":"Approval requested","requested_action":"Approve the plan","deadline":"2026-11-05","evidence":"by November 5","confidence":"high"}]}
+<<<END_PACKETRAT_CLASSIFY_V1>>>
+```
+
+- `category`: `must_reply`, `already_replied`, `no_action` or `caution`. `urgency`: High, Medium, Low. `confidence`: low, medium, high. `deadline`: empty or a real `YYYY-MM-DD` date; prose dates are rejected, never guessed.
+- A batch is rejected whole on a missing envelope, bad JSON, a wrong version, an index that was not in the batch, a duplicate record, an unknown value or an over-long field. It is retried once; if it still fails, its messages are listed as "not classified" in the report and a warning is shown. A transport or credential error stops the run instead.
+- User-dismissed and sensitive messages are never sent. A message the model leaves out is "not classified", not assumed to need no action.
+- Output: the same six-section report as REPORT_V1 (so rules, verification, the queue and the UI work unchanged) with typed `deadline`, `confidence`, `evidence` and `classification_source` on each item. No model prose reaches the report.
+- Not yet: thread-level grouping and confidence review tools; the browser has no switch for it (use the setting or the CLI option). Tested with a fake model only; quality on a real model is unmeasured.
+
 ## Parsing and error contract
 
 - ASCII delimiters are exact, alone on their lines. CRLF is normalized to LF.
