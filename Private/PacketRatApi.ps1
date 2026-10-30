@@ -15,6 +15,21 @@ function Find-PacketRatReportSource([string]$Key) {
     if($email.Count -eq 0){return $null}
     return $email[0]
 }
+function Resolve-PacketRatOutlookEntryId($Item) {
+    # Classic Outlook opens a message by EntryID. A Graph message has only a Graph id, so find the same message in
+    # classic Outlook by its Internet message id (a read-only lookup). Returns the EntryID or throws a clear reason.
+    $entryId=[string]$Item.EntryID
+    if(-not ($script:LastResult -and $script:LastResult.Provider -eq 'Graph')){return $entryId}
+    $internetId=if($Item.PSObject.Properties['InternetMessageId']){[string]$Item.InternetMessageId}else{''}
+    if(-not $internetId -and $script:LastResult.Summary){
+        $email=@($script:LastResult.Summary.Emails | Where-Object {[string]$_.EntryID -ceq $entryId} | Select-Object -First 1)
+        if($email.Count -gt 0 -and $email[0].PSObject.Properties['InternetMessageId']){$internetId=[string]$email[0].InternetMessageId}
+    }
+    if(-not $internetId){throw 'This Graph message has no Internet message id in the current analysis, so classic Outlook cannot be asked for it. Run the analysis again.'}
+    $found=Find-PacketRatOutlookEntryIdByInternetMessageId -InternetMessageId $internetId
+    if(-not $found){throw 'The message is not in the classic Outlook profile on this PC (it may not be synced, or classic Outlook is not signed in to this mailbox).'}
+    return [string]$found
+}
 function Invoke-PacketRatApi {
     param([string]$Route,$Data)
     if($Route -eq '/api/heartbeat') {
@@ -154,9 +169,9 @@ function Invoke-PacketRatApi {
           $item=Find-PacketRatItem $store ([string]$Data.key)
           if(-not $item){$item=Find-PacketRatReportSource ([string]$Data.key)}
           if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this verified source.'}
-          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Opening Graph-only messages in classic Outlook is not yet supported.'}
+          $entryId=Resolve-PacketRatOutlookEntryId $item
           $outlook=New-Object -ComObject Outlook.Application
-          $mail=$outlook.Session.GetItemFromID([string]$item.EntryID)
+          $mail=$outlook.Session.GetItemFromID($entryId)
           if(-not $mail){throw 'Email not found in Outlook'}
           $mail.Display()
           return @{ok=$true}
@@ -176,12 +191,12 @@ function Invoke-PacketRatApi {
           $item=Find-PacketRatItem $store ([string]$Data.key)
           if(-not $item){$item=Find-PacketRatReportSource ([string]$Data.key)}
           if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this verified source.'}
-          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Opening Graph-only messages in classic Outlook is not yet supported.'}
+          $entryId=Resolve-PacketRatOutlookEntryId $item
           $body=[string]$Data.body
           if(-not $body.Trim()){throw 'Empty draft'}
           if($body.Length -gt 16000){throw 'Draft exceeds 16000 characters'}
           $outlook=New-Object -ComObject Outlook.Application
-          $mail=$outlook.Session.GetItemFromID([string]$item.EntryID)
+          $mail=$outlook.Session.GetItemFromID($entryId)
           if(-not $mail){throw 'Email not found in Outlook'}
           $subject=[string]$Data.subject
           $apply=[bool]$Data.applySubject
@@ -191,13 +206,60 @@ function Invoke-PacketRatApi {
           # Classic Outlook injects its configured per-account reply signature
           # when the reply inspector opens. Preserve the existing HTML and
           # append the reviewed text before it; never invent a new signature.
-          $null=New-PacketRatOutlookReplyDraft -EntryID ([string]$item.EntryID) -Body $body -SuggestedSubject $subject -ApplySuggestedSubject:$apply
+          $null=New-PacketRatOutlookReplyDraft -EntryID $entryId -Body $body -SuggestedSubject $subject -ApplySuggestedSubject:$apply
           return @{ok=$true}
       }
       '/api/cancel' {
           # Stops a streaming AI generation that is running in this PacketRat process (the next chunk check sees the flag).
           $null=Request-PacketRatCancel
           return @{ok=$true;cancelRequested=$true}
+      }
+      '/api/item/archive' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $null=Move-PacketRatMailToArchive -EntryID ([string]$item.EntryID)
+          if((Find-PacketRatItem $store $key) -and -not (Test-PacketRatDismissed -Store $store -Key $key)){
+              $fromVal=if($item.PSObject.Properties['From']){[string]$item.From}else{[string]$item.FromName}
+              $null=Add-PacketRatDismissal -Store $store -Key $key -Subject ([string]$item.Subject) -From $fromVal -Reason 'Archived' -Root $Root
+              $store=Get-PacketRatStore -Root $Root
+              $null=Set-PacketRatChecklistStatus -Store $store -Key $key -Status dismissed -Root $Root
+          }
+          return @{ok=$true;store=(Get-PacketRatStore -Root $Root)}
+      }
+      '/api/item/move' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $folder=[string]$Data.folder
+          if([string]::IsNullOrWhiteSpace($folder) -or $folder.Length -gt 256){throw 'A folder name of 1-256 characters is required.'}
+          $null=Move-PacketRatMailToFolder -EntryID ([string]$item.EntryID) -FolderName $folder
+          return @{ok=$true;store=$store}
+      }
+      '/api/item/categorize' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $category=[string]$Data.category
+          if([string]::IsNullOrWhiteSpace($category) -or $category.Length -gt 255 -or $category -match ';'){throw 'Category must be 1-255 characters with no semicolons.'}
+          $null=Set-PacketRatMailCategory -EntryID ([string]$item.EntryID) -Category $category
+          return @{ok=$true;store=$store}
+      }
+      '/api/item/mark-read' {
+          $key=[string]$Data.key
+          $item=Find-PacketRatItem $store $key
+          if(-not $item){$item=Find-PacketRatReportSource $key}
+          if(-not $item -or -not $item.EntryID){throw 'Original Outlook message unavailable for this item.'}
+          if($script:LastResult -and $script:LastResult.Provider -eq 'Graph'){throw 'Inbox actions require classic Outlook (COM mode).'}
+          $unread=[bool]$Data.unread
+          $null=Set-PacketRatMailRead -EntryID ([string]$item.EntryID) -Unread:$unread
+          return @{ok=$true;store=$store}
       }
       default {throw 'Unknown API route'}
     }

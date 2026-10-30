@@ -23,6 +23,10 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `item restore` | Restore a dismissed action. | `--key` (required) |
 | `inbox cancel` | Cancel an AI generation that is streaming in a running PacketRat (needs `PACKETRAT_LLM_STREAM=1`). Run it from a second console. | none |
 | `item open` | Open the original message in classic Outlook. | `--key` (required) |
+| `item archive` | Move the original to the Outlook archive folder and dismiss it from the queue. Needs `--yes`. Classic Outlook (COM) only. | `--key` (required) |
+| `item move` | Move the original to an existing Outlook folder (inbox subfolder or sibling). Needs `--yes`. COM only. | `--key`, `--folder` (both required) |
+| `item categorize` | Add an Outlook category to the original (existing categories are kept). COM only. | `--key`, `--category` (both required) |
+| `item mark-read` | Mark the original read, or unread with `--unread`. COM only. | `--key` (required), `--unread` |
 | `priority set` | Override an action's priority. | `--key` `--urgency` (both required) |
 | `priority reset` | Return an action to its triaged priority. | `--key` (required) |
 | `rules set` | Replace the triage rules with the ones in a JSON file. **Needs `--yes`.** | `--file` (required) |
