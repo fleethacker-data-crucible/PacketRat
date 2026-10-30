@@ -70,3 +70,4 @@ jobs:
           .\tests\Test-PacketRatStreaming.ps1
           .\tests\Test-PacketRatGraph.ps1
           .\tests\Test-PacketRatInboxActions.ps1
+          .\tests\Test-PacketRatMailFiles.ps1
