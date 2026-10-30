@@ -1,4 +1,4 @@
-# PacketRat - Safe mail summary for AI analysis (COM provider)
+﻿# PacketRat - Safe mail summary for AI analysis (COM provider)
 #requires -Version 5.1
 
 function Get-PacketRatOutlookProfileProblem {
@@ -286,6 +286,120 @@ function Get-PacketRatInboxSummary {
     }
 }
 
+function Get-PacketRatOutlookItemConn {
+    param([Parameter(Mandatory)][string]$EntryID)
+    $conn = Connect-PacketRatOutlook
+    $item = $conn.Namespace.GetItemFromID($EntryID)
+    if (-not $item) {
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($conn.Namespace) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($conn.Application) | Out-Null } catch {}
+        throw "Mail item not found in Outlook."
+    }
+    return [pscustomobject]@{ Conn = $conn; Item = $item }
+}
+
+function Move-PacketRatMailToArchive {
+    param([Parameter(Mandatory)][string]$EntryID)
+    $ic = Get-PacketRatOutlookItemConn -EntryID $EntryID
+    $ns = $ic.Conn.Namespace
+    $mailItem = $ic.Item
+    $archive = $null
+    try {
+        try { $archive = $ns.GetDefaultFolder(23) } catch {}
+        if (-not $archive) {
+            $inbox = $ns.GetDefaultFolder(6)
+            try {
+                $archive = $inbox.Parent.Folders.Item('Archive')
+            } catch {
+                throw "No archive folder found. Enable archiving in Outlook or create an Archive folder first."
+            } finally {
+                try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($inbox) | Out-Null } catch {}
+            }
+        }
+        $mailItem.Move($archive) | Out-Null
+        return $true
+    } finally {
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch {}
+        if ($archive) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($archive) | Out-Null } catch {} }
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ns) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ic.Conn.Application) | Out-Null } catch {}
+    }
+}
+
+function Move-PacketRatMailToFolder {
+    param(
+        [Parameter(Mandatory)][string]$EntryID,
+        [Parameter(Mandatory)][string]$FolderName
+    )
+    $ic = Get-PacketRatOutlookItemConn -EntryID $EntryID
+    $ns = $ic.Conn.Namespace
+    $mailItem = $ic.Item
+    $folder = $null
+    $inbox = $null
+    try {
+        $inbox = $ns.GetDefaultFolder(6)
+        try {
+            $folder = $inbox.Folders.Item($FolderName)
+        } catch {
+            try {
+                $folder = $inbox.Parent.Folders.Item($FolderName)
+            } catch {
+                throw "Folder '$FolderName' not found. Create it in Outlook first."
+            }
+        }
+        $mailItem.Move($folder) | Out-Null
+        return $true
+    } finally {
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch {}
+        if ($folder) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($folder) | Out-Null } catch {} }
+        if ($inbox) { try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($inbox) | Out-Null } catch {} }
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ns) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ic.Conn.Application) | Out-Null } catch {}
+    }
+}
+
+function Set-PacketRatMailCategory {
+    param(
+        [Parameter(Mandatory)][string]$EntryID,
+        [Parameter(Mandatory)][string]$Category
+    )
+    if ($Category.Length -gt 255) { throw "Category name exceeds 255 characters." }
+    if ($Category -match ';') { throw "Category name must not contain semicolons." }
+    $ic = Get-PacketRatOutlookItemConn -EntryID $EntryID
+    $mailItem = $ic.Item
+    try {
+        $existing = [string]$mailItem.Categories
+        $cats = @($existing -split ';\s*' | Where-Object { $_ })
+        if ($cats -notcontains $Category) {
+            $cats = @($cats) + @($Category)
+            $mailItem.Categories = ($cats -join '; ')
+            $mailItem.Save()
+        }
+        return $true
+    } finally {
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ic.Conn.Namespace) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ic.Conn.Application) | Out-Null } catch {}
+    }
+}
+
+function Set-PacketRatMailRead {
+    param(
+        [Parameter(Mandatory)][string]$EntryID,
+        [switch]$Unread
+    )
+    $ic = Get-PacketRatOutlookItemConn -EntryID $EntryID
+    $mailItem = $ic.Item
+    try {
+        $mailItem.UnRead = $Unread.IsPresent
+        $mailItem.Save()
+        return $true
+    } finally {
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($mailItem) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ic.Conn.Namespace) | Out-Null } catch {}
+        try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ic.Conn.Application) | Out-Null } catch {}
+    }
+}
 function Open-PacketRatMailItem {
     [CmdletBinding()]
     param(
