@@ -109,6 +109,11 @@ $script:PacketRatCommands = @(
         Summary = 'Zero the minutes-saved counters and start a new count.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat assist brief'; Route = '/api/assist/brief'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice).'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat assist ask'; Route = '/api/assist/ask'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Ask a question about the action queue. The AI answers from the queue only and may propose actions (dismiss, status, priority); nothing is run, each proposal comes with the exact command to confirm.'
+        Inputs = @(
+            (New-PacketRatInput 'question' 'question' 'string' $true 'Your question, up to 500 characters.')
+            (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))) }
     [pscustomobject]@{ Name = 'packetrat credentials status'; Route = '/api/credentials/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Which AI credential source is set (tokens are never shown).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials set'; Route = '/api/credentials'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
