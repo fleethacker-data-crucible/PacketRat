@@ -107,6 +107,19 @@ $script:PacketRatCommands = @(
         Summary = 'The raw action counts as JSON (schema packetrat.usage-counts/1) for another tool; add --out to write a file.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat stats reset'; Route = '/api/stats/reset'; Method = 'POST'; Destructive = $true; NeedsAnalysis = $false
         Summary = 'Zero the minutes-saved counters and start a new count.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat burden show'; Route = '/api/burden'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'The measured-burden record: per task, the baseline entered once and the elapsed times of later runs, with the mean, median and change. A record of numbers a person timed; PacketRat times nothing itself. See docs\BURDEN-RECORD.md.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat burden baseline'; Route = '/api/burden/baseline'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Enter the before time of a task, in seconds. It is entered once; a second entry is refused unless --replace true (the old value is kept).'
+        Inputs = @(
+            (New-PacketRatInput 'task' 'task' 'string' $true 'Short task id: lowercase letters, digits and hyphens, for example triage-inbox.')
+            (New-PacketRatInput 'seconds' 'seconds' 'int' $true 'How long the task took before PacketRat, in whole seconds (1-86400).')
+            (New-PacketRatInput 'replace' 'replace' 'bool' $false 'Pass true to correct a baseline that was already entered.')) }
+    [pscustomobject]@{ Name = 'packetrat burden record'; Route = '/api/burden/record'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Record one timed run of a task, in seconds.'
+        Inputs = @(
+            (New-PacketRatInput 'task' 'task' 'string' $true 'Short task id, as used for the baseline.')
+            (New-PacketRatInput 'seconds' 'seconds' 'int' $true 'Elapsed time of this run, in whole seconds (1-86400).')) }
     [pscustomobject]@{ Name = 'packetrat assist brief'; Route = '/api/assist/brief'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat assist ask'; Route = '/api/assist/ask'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
