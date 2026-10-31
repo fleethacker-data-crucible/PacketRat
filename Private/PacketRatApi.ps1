@@ -306,7 +306,8 @@ function Invoke-PacketRatApi {
     # The single door every action goes through (browser, CLI): run it, then record it. Reads are not recorded.
     param([string]$Route, $Data)
     $action = $script:PacketRatLoggedRoutes[$Route]
-    if (-not $action -or -not (Get-Command Write-PacketRatActionLog -ErrorAction SilentlyContinue)) { return (Invoke-PacketRatApiCore -Route $Route -Data $Data) }
+    $logAvailable = [bool](Get-Command Write-PacketRatActionLog -ErrorAction SilentlyContinue)
+    if (-not $action -or -not $logAvailable) { return (Invoke-PacketRatApiCore -Route $Route -Data $Data) }
     $key = ''
     try { if ($Data -and $Data.PSObject.Properties['key']) { $key = [string]$Data.key } } catch { $key = '' }
     try { $result = Invoke-PacketRatApiCore -Route $Route -Data $Data }
