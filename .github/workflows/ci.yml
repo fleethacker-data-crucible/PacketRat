@@ -74,5 +74,6 @@ jobs:
           .\tests\Test-PacketRatInboxActions.ps1
           .\tests\Test-PacketRatMailFiles.ps1
           .\tests\Test-PacketRatUsage.ps1
+          .\tests\Test-PacketRatRouter.ps1
           .\tests\Test-PacketRatAssistant.ps1
           .\tests\Test-PacketRatVoiceAssets.ps1

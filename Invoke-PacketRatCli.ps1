@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
 $cliArgs = @($args | ForEach-Object { [string]$_ })
 
-foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm', 'PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph','PacketRatMailFiles', 'PacketRatDraft', 'PacketRatApi', 'PacketRatCommands')) {
+foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm','PacketRatRouter', 'PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph','PacketRatMailFiles', 'PacketRatDraft', 'PacketRatApi', 'PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -103,6 +103,11 @@ if (Test-Path $envFile) {
     foreach ($line in Get-Content $envFile) {
         if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
     }
+}
+# Commands that call the AI make sure Fairlead is running when it is the router (no dialog; the previous setup is used).
+if (@('packetrat inbox analyze', 'packetrat report generate', 'packetrat draft create', 'packetrat assist ask') -contains $command.Name -and (Test-PacketRatFairleadEnabled)) {
+    $fl = Ensure-PacketRatFairlead -Root $Root
+    if ($fl.State -ne 'Skipped' -and $fl.State -ne 'AlreadyRunning') { [Console]::Error.WriteLine('Fairlead: ' + $fl.Message) }
 }
 try {
     if ($command.NeedsAnalysis -and $global.analyze) {
