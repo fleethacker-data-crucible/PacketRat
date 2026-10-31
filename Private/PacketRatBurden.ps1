@@ -12,10 +12,8 @@ $script:PacketRatBurdenNote = 'Record only: PacketRat does not time anything its
 
 function Get-PacketRatBurdenPath {
     param([string]$Root)
-    if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
-    $dir = Join-Path $Root 'Logs'
-    if (-not (Test-Path -LiteralPath $dir)) { [void](New-Item -ItemType Directory -Path $dir -Force) }
-    return (Join-Path $dir $script:PacketRatBurdenFile)
+    # The data folder: Logs\ under the app folder, or PACKETRAT_DATA_DIR (Get-PacketRatDataDir in PacketRatStore.ps1).
+    return (Join-Path (Get-PacketRatDataDir -Root $Root) $script:PacketRatBurdenFile)
 }
 
 function Read-PacketRatBurden([string]$Root) {

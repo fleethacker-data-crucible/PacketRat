@@ -22,7 +22,7 @@ A task id is a short name: lowercase letters, digits and hyphens, starting with 
 
 ## What is stored
 
-`Logs/packetrat-burden.json` (not committed, never sent anywhere) holds task ids, seconds and UTC times. No names, no mail content, no notes.
+`packetrat-burden.json` in the data folder (`Logs/`, or `PACKETRAT_DATA_DIR` when set; not committed, never sent anywhere) holds task ids, seconds and UTC times. No names, no mail content, no notes.
 
 ## What `burden show` returns
 

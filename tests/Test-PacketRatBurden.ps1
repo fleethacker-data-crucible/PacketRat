@@ -58,6 +58,16 @@ try{
     foreach($bad in '0','-5','86401','abc','1.5','',' 3'){ Assert-Throws { Add-PacketRatBurdenRun -Task 'triage-inbox' -Seconds $bad -Root $tmp } 'whole number' "seconds '$bad' is refused" }
     Assert-Burden ((Get-PacketRatBurdenView -Root $tmp).totalRuns -eq 5) 'refused entries are not stored'
 
+    # --- PACKETRAT_DATA_DIR moves the record with the rest of the data ----------------------------------------------------------
+    $savedDir=[Environment]::GetEnvironmentVariable('PACKETRAT_DATA_DIR')
+    try{
+        $env:PACKETRAT_DATA_DIR=Join-Path $tmp 'fresh data'
+        $null=Add-PacketRatBurdenRun -Task 'moved-task' -Seconds '5' -Root $tmp
+        Assert-Burden (Test-Path -LiteralPath (Join-Path $env:PACKETRAT_DATA_DIR 'packetrat-burden.json')) 'the record is written to the data folder when one is set'
+        Assert-Burden ((Get-PacketRatBurdenView -Root $tmp).totalRuns -eq 1) 'a fresh data folder starts with an empty record'
+    }finally{ [Environment]::SetEnvironmentVariable('PACKETRAT_DATA_DIR',$savedDir) }
+    Assert-Burden ((Get-PacketRatBurdenView -Root $tmp).totalRuns -eq 5) 'and the default record is untouched'
+
     # --- What is stored: ids and seconds only ------------------------------------------------------------------------------------
     $path=Join-Path $tmp 'Logs\packetrat-burden.json'
     $bytes=[IO.File]::ReadAllBytes($path)
