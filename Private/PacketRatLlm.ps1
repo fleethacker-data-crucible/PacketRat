@@ -14,9 +14,11 @@ $script:PacketRatLlmDefaults = @{
     LocalDefaultModel = 'phoenixlai'   # phoenix-lai's name for "the model it has loaded"
 }
 
-# Fleet intelligence router (Fairlead): opt-in and OFF by default. With PACKETRAT_ROUTER=fairlead every AI call goes to
-# Fairlead's OpenAI-compatible address instead of the profile endpoints; Fairlead then owns endpoint choice and
-# credentials. PACKETRAT_FAIRLEAD_URL overrides the address, PACKETRAT_FAIRLEAD_MODEL the route name (default 'auto'),
+# Fleet intelligence router (Fairlead): the DEFAULT. Every AI call goes to Fairlead's OpenAI-compatible address
+# (127.0.0.1:8776) instead of the profile endpoints; Fairlead then owns endpoint choice and credentials. An exact endpoint
+# a person set still wins: LLM_URL, PACKETRAT_AI_ENDPOINT_URL or PACKETRAT_GROK_URL keep the call direct, and
+# PACKETRAT_ROUTER=direct (or off, none, 0, false, no) opts out. PACKETRAT_ROUTER=fairlead forces the router over the
+# profile URL variables (LLM_URL still wins). PACKETRAT_FAIRLEAD_URL overrides the address, PACKETRAT_FAIRLEAD_MODEL the route name (default 'auto'),
 # FAIRLEAD_TOKEN is an optional key for Fairlead itself (needed only for a Fairlead that is not on this PC), and
 # PACKETRAT_FAIRLEAD_PRIVACY=local adds Fairlead's X-Fairlead-Privacy header so prompts stay on local models.
 $script:PacketRatFairleadDefaults = @{
@@ -116,7 +118,14 @@ function Clear-PacketRatManualTokens {
 }
 
 function Test-PacketRatFairleadEnabled {
-    return ([string][Environment]::GetEnvironmentVariable('PACKETRAT_ROUTER')).Trim() -ieq 'fairlead'
+    $setting = ([string][Environment]::GetEnvironmentVariable('PACKETRAT_ROUTER')).Trim()
+    if ($setting -ieq 'fairlead') { return $true }
+    if ($setting) { return $false }   # direct, off, none... or anything else: use the profile endpoints
+    # Not set: the router is the default, unless a person named an exact endpoint.
+    foreach ($name in @('LLM_URL', $script:PacketRatLlmDefaults.AiEndpointUrlEnv, $script:PacketRatLlmDefaults.GrokUrlEnv)) {
+        if (-not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { return $false }
+    }
+    return $true
 }
 
 function Get-PacketRatLlmConfig {
