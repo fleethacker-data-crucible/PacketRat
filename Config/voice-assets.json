@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "Local speech input assets (transformers.js, ONNX Runtime WASM, a Whisper model). Not in git and not shipped. Obtain them from a source you trust, put them in Web/vendor/voice (or the folder named by PACKETRAT_VOICE_DIR), then list every file here as {\"name\": \"transformers.min.js\", \"sha256\": \"<64 hex>\"}. The server serves only listed files whose SHA-256 still matches. See docs/VOICE.md.",
+  "files": []
+}

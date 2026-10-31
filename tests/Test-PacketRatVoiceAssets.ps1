@@ -1,0 +1,66 @@
+#requires -Version 5.1
+# Offline tests for the hash-checked local speech-input assets. Synthetic stand-in files only; no model is used.
+$ErrorActionPreference='Stop'
+$Root=Split-Path $PSScriptRoot -Parent
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatAssistant','PacketRatVoiceAssets','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+    . (Join-Path $Root "Private\$name.ps1")
+}
+function Assert-Voice([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Voice assets test failed: '+$Message)}}
+function Assert-Throws([scriptblock]$Block,[string]$Pattern,[string]$Message){
+    $threw=$null
+    try{& $Block}catch{$threw=$_.Exception.Message}
+    Assert-Voice ($null -ne $threw -and $threw -match $Pattern) ($Message+" (got: $threw)")
+}
+function Get-Sha([byte[]]$b){$s=[Security.Cryptography.SHA256]::Create();try{(($s.ComputeHash($b)|ForEach-Object{$_.ToString('x2')}) -join '')}finally{$s.Dispose()}}
+
+# The shipped manifest lists nothing, so the feature reports "not installed" instead of failing.
+$shipped=Get-PacketRatVoiceStatus -Root $Root
+Assert-Voice ($shipped.installed -eq $false -and $shipped.listed -eq 0 -and $shipped.note -match 'not installed') 'the shipped manifest means not installed'
+$cmd=Find-PacketRatCommand 'voice status'
+Assert-Voice ($null -ne $cmd -and $cmd.Method -eq 'GET') 'voice status is a GET command'
+
+$tmp=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-voice-'+[guid]::NewGuid().ToString('N'))
+$cfg=Join-Path $tmp 'Config'; $vdir=Join-Path $tmp 'voicefiles'
+[void](New-Item -ItemType Directory -Path $cfg -Force); [void](New-Item -ItemType Directory -Path (Join-Path $vdir 'models') -Force)
+$saved=$env:PACKETRAT_VOICE_DIR
+try{
+    $env:PACKETRAT_VOICE_DIR=$vdir
+    $js=[Text.Encoding]::UTF8.GetBytes('export const env={};'); $bin=[byte[]](1..200)
+    [IO.File]::WriteAllBytes((Join-Path $vdir 'transformers.min.js'),$js)
+    [IO.File]::WriteAllBytes((Join-Path $vdir 'models\whisper.onnx'),$bin)
+    [IO.File]::WriteAllBytes((Join-Path $tmp 'secret.txt'),[byte[]](9,9,9))
+    function Write-Manifest($entries){ ([ordered]@{version=1;files=@($entries)} | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath (Join-Path $cfg 'voice-assets.json') -Encoding UTF8 }
+    $good=@(@{name='transformers.min.js';sha256=(Get-Sha $js)},@{name='models/whisper.onnx';sha256=(Get-Sha $bin)})
+    Write-Manifest $good
+    $s=Get-PacketRatVoiceStatus -Root $tmp
+    Assert-Voice ($s.installed -and $s.listed -eq 2 -and $s.missing.Count -eq 0 -and $s.mismatched.Count -eq 0) 'matching files are installed'
+    Assert-Voice ((Read-PacketRatVoiceAsset -Name 'models/whisper.onnx' -Root $tmp).Length -eq 200) 'a listed asset is served'
+    Assert-Voice ((Get-PacketRatVoiceMime 'a.wasm') -eq 'application/wasm' -and (Get-PacketRatVoiceMime 'transformers.min.js') -match 'javascript') 'mime types'
+
+    # Not listed / traversal.
+    Assert-Throws { Read-PacketRatVoiceAsset -Name 'secret.txt' -Root $tmp } 'Not a listed' 'an unlisted file is refused'
+    Assert-Throws { Read-PacketRatVoiceAsset -Name '..\secret.txt' -Root $tmp } 'Not a listed' 'a traversal name is refused'
+    Write-Manifest @(@{name='..\secret.txt';sha256=(Get-Sha ([byte[]](9,9,9)))})
+    Assert-Throws { Get-PacketRatVoiceManifest -Root $tmp } 'bad entry' 'a manifest entry with traversal is rejected'
+    Write-Manifest @(@{name='transformers.min.js';sha256='abc'})
+    Assert-Throws { Get-PacketRatVoiceManifest -Root $tmp } 'bad entry' 'a malformed hash is rejected'
+
+    # Swapped / missing files.
+    Write-Manifest $good
+    [IO.File]::WriteAllBytes((Join-Path $vdir 'transformers.min.js'),[Text.Encoding]::UTF8.GetBytes('evil();'))
+    $s=Get-PacketRatVoiceStatus -Root $tmp
+    Assert-Voice (-not $s.installed -and $s.mismatched -contains 'transformers.min.js') 'a changed file is reported as mismatched'
+    Assert-Throws { Read-PacketRatVoiceAsset -Name 'transformers.min.js' -Root $tmp } 'hash' 'a changed file is not served'
+    Remove-Item (Join-Path $vdir 'models\whisper.onnx')
+    $s=Get-PacketRatVoiceStatus -Root $tmp
+    Assert-Voice ($s.missing -contains 'models/whisper.onnx') 'a missing file is reported'
+    Assert-Throws { Read-PacketRatVoiceAsset -Name 'models/whisper.onnx' -Root $tmp } 'missing' 'a missing file is not served'
+
+    # API route.
+    $r=Invoke-PacketRatApi -Route '/api/voice/status' -Data $null -Root $tmp
+    Assert-Voice ($r.ok -and $r.voice.installed -eq $false) 'the API route reports status'
+    Write-Host 'Voice assets tests passed.'
+}finally{
+    $env:PACKETRAT_VOICE_DIR=$saved
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
