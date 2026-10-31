@@ -70,6 +70,7 @@ jobs:
           .\tests\Test-PacketRatCommands.ps1
           .\tests\Test-PacketRatClassify.ps1
           .\tests\Test-PacketRatFairlead.ps1
+          .\tests\Test-PacketRatFairleadDefault.ps1
           .\tests\Test-PacketRatStreaming.ps1
           .\tests\Test-PacketRatGraph.ps1
           .\tests\Test-PacketRatInboxActions.ps1

@@ -1,5 +1,5 @@
 #requires -Version 5.1
-# Offline tests for the opt-in Fairlead router setting. No network: Invoke-RestMethod is replaced and no router runs.
+# Offline tests for the Fairlead router setting (the default intelligence endpoint). No network: Invoke-RestMethod is replaced and no router runs.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
 foreach($name in @('LazaretteBridge','PacketRatStore','PacketRatLlm')){ . (Join-Path $Root "Private\$name.ps1") }
@@ -17,14 +17,36 @@ $global:sent=$null
 function global:Invoke-RestMethod { param($Uri,$Method,$Headers,$Body,$ContentType,$TimeoutSec) $global:sent=@{Uri=$Uri;Headers=$Headers;Body=[Text.Encoding]::UTF8.GetString($Body)}; [pscustomobject]@{choices=@([pscustomobject]@{message=[pscustomobject]@{content='routed'}})} }
 $msgs=@(@{role='user';content='Synthetic prompt.'})
 try{
-    # Off by default: the profile endpoint (local phoenix-lai) is used, not Fairlead.
+    # The default: nothing set, so Fairlead is the endpoint.
     $cfg=Get-PacketRatLlmConfig -Profile Auto
-    Assert-Router ($cfg.Router -eq '' -and $cfg.Url -eq 'http://127.0.0.1:1234/v1/chat/completions') 'router is off by default'
-    Assert-Router ((Get-PacketRatCredentialStatus).router -eq 'Direct') 'status reports Direct by default'
+    Assert-Router ($cfg.Router -eq 'Fairlead' -and $cfg.Url -eq 'http://127.0.0.1:8776/v1/chat/completions') 'the router is the default'
+    Assert-Router ((Get-PacketRatCredentialStatus).router -eq 'Fairlead') 'status reports Fairlead by default'
     $null=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint
-    Assert-Router ($global:sent.Uri -eq 'http://127.0.0.1:1234/v1/chat/completions') 'a default call does not go to Fairlead'
+    Assert-Router ($global:sent.Uri -eq 'http://127.0.0.1:8776/v1/chat/completions') 'a default call goes to Fairlead'
+
+    # An exact endpoint a person set keeps the call direct, without any router setting.
+    foreach($name in 'PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_GROK_URL','LLM_URL'){
+        [Environment]::SetEnvironmentVariable($name,'http://127.0.0.1:1234/v1/chat/completions')
+        $cfg=Get-PacketRatLlmConfig -Profile AiEndpoint
+        Assert-Router ($cfg.Router -eq '' -and $cfg.Url -eq 'http://127.0.0.1:1234/v1/chat/completions' -and -not (Test-PacketRatFairleadEnabled)) "$name keeps the call direct"
+        [Environment]::SetEnvironmentVariable($name,$null)
+    }
+    $env:PACKETRAT_AI_ENDPOINT_URL='http://127.0.0.1:1234/v1/chat/completions'
+    $null=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint
+    Assert-Router ($global:sent.Uri -eq 'http://127.0.0.1:1234/v1/chat/completions') 'an explicit endpoint call does not go to Fairlead'
+    $env:PACKETRAT_ROUTER='fairlead'
+    Assert-Router ((Get-PacketRatLlmConfig -Profile AiEndpoint).Router -eq 'Fairlead') 'PACKETRAT_ROUTER=fairlead still forces the router over a profile URL'
+    $env:PACKETRAT_AI_ENDPOINT_URL=$null
+
+    # Opting out: the profile endpoint (local phoenix-lai) is used.
+    foreach($v in 'direct','off','none','0','false','no','anything'){
+        $env:PACKETRAT_ROUTER=$v
+        $cfg=Get-PacketRatLlmConfig -Profile Auto
+        Assert-Router ($cfg.Router -eq '' -and $cfg.Url -eq 'http://127.0.0.1:1234/v1/chat/completions' -and (Get-PacketRatCredentialStatus).router -eq 'Direct') "PACKETRAT_ROUTER=$v uses the profile endpoint"
+    }
     $env:PACKETRAT_ROUTER='direct'
-    Assert-Router ((Get-PacketRatLlmConfig -Profile Auto).Router -eq '') 'any other router value stays off'
+    $null=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint
+    Assert-Router ($global:sent.Uri -eq 'http://127.0.0.1:1234/v1/chat/completions') 'an opted-out call does not go to Fairlead'
 
     # On: the default Fairlead address and the "auto" route.
     $env:PACKETRAT_ROUTER='Fairlead'
