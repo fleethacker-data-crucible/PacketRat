@@ -58,6 +58,28 @@ try{
     Assert-Voice ($s.missing -contains 'models/whisper.onnx') 'a missing file is reported'
     Assert-Throws { Read-PacketRatVoiceAsset -Name 'models/whisper.onnx' -Root $tmp } 'missing' 'a missing file is not served'
 
+    # TalkForge voice (tts/ names live in PACKETRAT_TTS_DIR, same tree as TalkForge's assets folder).
+    $ttsDir=Join-Path $tmp 'talkforge-assets'; [void](New-Item -ItemType Directory -Path (Join-Path $ttsDir 'vendor') -Force); [void](New-Item -ItemType Directory -Path (Join-Path $ttsDir 'models') -Force)
+    $eng=[Text.Encoding]::UTF8.GetBytes('export class PiperEngine {}'); $mdl=[byte[]](5..90)
+    [IO.File]::WriteAllBytes((Join-Path $ttsDir 'vendor\piper-engine.js'),$eng); [IO.File]::WriteAllBytes((Join-Path $ttsDir 'models\v.onnx'),$mdl)
+    $env:PACKETRAT_TTS_DIR=$ttsDir
+    ([ordered]@{version=1;tts=[ordered]@{model='v';speaker=2;lengthScale=0.9};files=@(@{name='tts/vendor/piper-engine.js';sha256=(Get-Sha $eng)},@{name='tts/models/v.onnx';sha256=(Get-Sha $mdl)})} | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $cfg 'voice-assets.json') -Encoding UTF8
+    $s=Get-PacketRatVoiceStatus -Root $tmp
+    Assert-Voice ($s.tts.installed -and $s.tts.model -eq 'v' -and $s.tts.speaker -eq 2 -and $s.tts.lengthScale -eq 0.9 -and $s.tts.listed -eq 2) 'TalkForge files are found in PACKETRAT_TTS_DIR and the voice setting is read'
+    Assert-Voice (-not $s.installed -and $s.listed -eq 0) 'speech input stays separate and not installed'
+    Assert-Voice ((Read-PacketRatVoiceAsset -Name 'tts/models/v.onnx' -Root $tmp).Length -eq 86) 'a TalkForge asset is served'
+    Assert-Throws { Read-PacketRatVoiceAsset -Name 'tts/vendor/other.js' -Root $tmp } 'Not a listed' 'an unlisted TalkForge file is refused'
+    [IO.File]::WriteAllBytes((Join-Path $ttsDir 'vendor\piper-engine.js'),[Text.Encoding]::UTF8.GetBytes('evil();'))
+    $s=Get-PacketRatVoiceStatus -Root $tmp
+    Assert-Voice (-not $s.tts.installed -and $s.tts.mismatched -contains 'tts/vendor/piper-engine.js') 'a changed TalkForge file is reported and refused'
+    Assert-Throws { Read-PacketRatVoiceAsset -Name 'tts/vendor/piper-engine.js' -Root $tmp } 'hash' 'a changed TalkForge file is not served'
+    $env:PACKETRAT_TTS_DIR=Join-Path $tmp 'nowhere'
+    $s=Get-PacketRatVoiceStatus -Root $tmp
+    Assert-Voice (-not $s.tts.installed -and $s.tts.missing.Count -eq 2) 'a wrong PACKETRAT_TTS_DIR reports the files missing'
+    $env:PACKETRAT_TTS_DIR=$null
+    $shippedTts=(Get-PacketRatVoiceStatus -Root $Root).tts
+    Assert-Voice ($shippedTts.listed -eq 11 -and $shippedTts.model -eq 'en_US-lessac-high') 'the shipped manifest pins the 11 TalkForge files for the default voice'
+
     # API route.
     $r=Invoke-ApiAt $tmp '/api/voice/status' $null
     Assert-Voice ($r.ok -and $r.voice.installed -eq $false) 'the API route reports status'

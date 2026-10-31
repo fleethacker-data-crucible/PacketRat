@@ -6,7 +6,14 @@ Bridge is PacketRat's voice layer. Everything stays on this PC: no audio, text o
 - **Brief me** on Overview reads a short briefing of the top open actions. `PacketRat-CLI.bat assist brief` returns the same text with no AI call.
 - Speech uses **only voices installed on this PC** (Windows voices). Browser "Online" or "Google" voices stream to a cloud service, so they are never used; if no local voice exists PacketRat stays silent and shows the text.
 - Off until you tick **Speak replies**; the choice is remembered in this browser only.
-- A local neural engine such as a Piper adapter can be plugged in later with `PacketRatVoice.registerEngine({ speak, stop })`; nothing is bundled today.
+- **TalkForge voice (recommended).** When TalkForge's own files are set up (below), Bridge speaks with TalkForge's Piper neural voice instead of the Windows voices. It uses TalkForge's engine, ONNX Runtime and voice models unchanged; nothing is copied into this repo and nothing is downloaded or sent anywhere.
+  1. `git clone` TalkForge and fetch its assets (its `populate-assets.bat`, or the release zip) so `assets\models\<voice>.onnx` exists.
+  2. Run once: `powershell -File tools\New-VoiceManifest.ps1 -TalkForgeAssets <TalkForge>\assets -Model en_US-lessac-high`. It hashes the 11 files and records the hashes in `Config\voice-assets.json` (the shipped file already pins TalkForge's current `en_US-lessac-high`).
+  3. Set `PACKETRAT_TTS_DIR=<TalkForge>\assets` (in `Config\packetrat.env` as `PACKETRAT_TTS_DIR=...`) and start PacketRat. Bridge notes "Speaking with the TalkForge voice" and Speak replies is on.
+  4. Pick another voice: run populate-assets for it, rerun the manifest tool with `-Model en_GB-alan-medium` (a British male voice, closest to a butler-AI sound), restart.
+  The first sentence waits for the voice to load (a few seconds; the high-quality model is 114 MB); later sentences stream while the previous one plays. Check with `PacketRat-CLI.bat voice status` (`tts` section).
+- Without TalkForge set up, Bridge falls back to the PC's installed voices as above.
+- Live check: in headless Chromium, TalkForge's engine loaded in about 1.5 s and spoke two sentences (about 9 s including playback) with `en_US-lessac-high`.
 
 ## Ask (text, and spoken when Speak replies is on)
 - **Ask** (Overview > Bridge) and `assist ask --question "..."` send your question plus the open queue to your configured AI profile (a local endpoint by default). The model answers in a strict `PACKETRAT_ASSIST_V1` envelope; anything else is rejected.
