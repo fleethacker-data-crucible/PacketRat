@@ -33,7 +33,7 @@ foreach($option in @($Rest)){
         default {if($option){Write-Warning "Ignoring unknown option $option"}}
     }
 }
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatAssistant','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -67,13 +67,13 @@ $script:LastResult=$null
 $script:Nonce=[guid]::NewGuid().ToString('N')
 $script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png';'.ico'='image/x-icon';'.svg'='image/svg+xml; charset=utf-8'}
 # Exact allow-list of served files (Fleet UI: vendored fleet.css, brand mark and emblems, Lucide icons).
-$script:AllowedAssets=@('index.html','app.js','report-experience.js','voice.js','style.css','shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png','brand/icon-256.png','brand/favicon.ico')
+$script:AllowedAssets=@('index.html','app.js','report-experience.js','voice.js','voice-input.js','voice-worker.js','voice-worklet.js','style.css','shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png','brand/icon-256.png','brand/favicon.ico')
 $script:UTF8=New-Object System.Text.UTF8Encoding $false
 
 function Send-PacketRatResponse {
     param([System.IO.Stream]$Stream,[int]$Status,[byte[]]$Bytes,[string]$Type='application/json; charset=utf-8')
     $reason=switch($Status){200{'OK'}400{'Bad Request'}403{'Forbidden'}404{'Not Found'}405{'Method Not Allowed'}413{'Payload Too Large'}500{'Internal Server Error'}default{'Error'}}
-    $head="HTTP/1.1 $Status $reason`r`nContent-Type: $Type`r`nContent-Length: $($Bytes.Length)`r`nCache-Control: no-store`r`nX-Content-Type-Options: nosniff`r`nX-Frame-Options: DENY`r`nReferrer-Policy: no-referrer`r`nContent-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`r`nConnection: close`r`n`r`n"
+    $head="HTTP/1.1 $Status $reason`r`nContent-Type: $Type`r`nContent-Length: $($Bytes.Length)`r`nCache-Control: no-store`r`nX-Content-Type-Options: nosniff`r`nX-Frame-Options: DENY`r`nReferrer-Policy: no-referrer`r`nContent-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`r`nConnection: close`r`n`r`n"
     $hb=[Text.Encoding]::ASCII.GetBytes($head)
     $Stream.Write($hb,0,$hb.Length)
     $Stream.Write($Bytes,0,$Bytes.Length)
@@ -163,7 +163,7 @@ try {
           Send-PacketRatText $stream 403 '{"ok":false,"error":"Invalid host"}';continue
       }
       if($path -match '^/api/'){
-          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/stats','/api/stats/export','/api/assist/brief')){
+          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/stats','/api/stats/export','/api/assist/brief','/api/voice/status')){
               Send-PacketRatText $stream 405 '{"ok":false,"error":"POST required"}';continue
           }
           if($method -eq 'POST'){
@@ -206,6 +206,12 @@ try {
               if(([DateTime]::UtcNow-$requestStarted).TotalSeconds -ge 2){$script:BusyUntil=[DateTime]::UtcNow}
           }
       }elseif($method -eq 'GET'){
+          if($path.StartsWith('/voice-assets/')){
+              $voiceName=$path.Substring(14)
+              try{Send-PacketRatResponse -Stream $stream -Status 200 -Bytes (Read-PacketRatVoiceAsset -Name $voiceName -Root $Root) -Type (Get-PacketRatVoiceMime $voiceName)}
+              catch{Send-PacketRatText $stream 404 'Not found' 'text/plain; charset=utf-8'}
+              continue
+          }
           $name=if($path -eq '/'){'index.html'}else{$path.TrimStart('/')}
           if($name -cnotin $script:AllowedAssets){Send-PacketRatText $stream 404 'Not found' 'text/plain; charset=utf-8';continue}
           $file=Join-Path (Join-Path $Root 'Web') $name
