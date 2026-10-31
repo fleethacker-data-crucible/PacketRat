@@ -35,7 +35,7 @@ One JSON object per line, UTF-8 without a BOM:
 Example:
 
 ```json
-{"seq":2,"at":"2026-10-31T13:02:11.0000000Z","route":"/api/item/archive","outcome":"ok","keyRef":"3f9a1c07be52","prev":"<hash of line 1>","hash":"<hash of this line>"}
+{"seq":2,"at":"2026-10-31T13:02:11.0000000Z","route":"/api/item/archive","outcome":"ok","keyRef":"<first 12 hex characters of the key hash>","prev":"<hash of line 1>","hash":"<hash of this line>"}
 ```
 
 ## What is logged
