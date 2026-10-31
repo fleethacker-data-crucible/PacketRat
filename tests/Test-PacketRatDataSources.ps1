@@ -49,5 +49,6 @@ try{
     ([ordered]@{schema='something.else/1'} | ConvertTo-Json) | Set-Content $bare -Encoding UTF8
     $threw=$false; try{ $null=& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root 'tools\Export-PacketRatCountsCsv.ps1') -Path $bare -Out $csv 2>&1; if($LASTEXITCODE -ne 0){$threw=$true} }catch{$threw=$true}
     Assert-Data $threw 'a file that is not a counts export is refused'
+    $global:LASTEXITCODE = 0   # the refused run above leaves 1 behind, and CI uses the last exit code as the step's result
     Write-Host 'Data source tests passed.'
 }finally{ Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
