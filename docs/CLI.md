@@ -35,6 +35,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `stats show` (or just `stats`) | Estimated minutes saved: a total and a per-action breakdown. An estimate, not a measurement and not a score for anyone. | |
 | `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. | |
 | `stats reset` | Zero the counters and start a new count. | needs `--yes` |
+| `assist brief` | A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice). | |
 | `credentials status` | Which AI credential source is set (tokens are never shown). | |
 | `credentials set` | Choose Lazarette or a manual session token. | `--source` `--profile` (required), `--token-env` |
 | `credentials check` | Check locally that a credential resolves (no AI call, no mail read). | `--profile` |

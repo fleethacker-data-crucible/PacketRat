@@ -276,6 +276,7 @@ function Invoke-PacketRatApi {
       '/api/stats' { return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
       '/api/stats/export' { return @{ok=$true;usage=(Get-PacketRatUsageExport -Root $Root)} }
       '/api/stats/reset' { Reset-PacketRatUsage -Root $Root; return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
+      '/api/assist/brief' { return @{ok=$true;briefing=(Get-PacketRatSpokenBriefing -Store $store)} }
       default {throw 'Unknown API route'}
     }
 }
