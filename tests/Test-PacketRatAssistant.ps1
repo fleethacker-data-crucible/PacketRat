@@ -80,7 +80,7 @@ $tmp2=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-bridge-'+[guid]::NewGuid(
 try{
     Save-PacketRatStore -Store (Get-PacketRatStore -Root $tmp2) -Root $tmp2
     $script:ChatReply=New-Env '{"version":"PACKETRAT_ASSIST_V1","say":"All quiet.","proposals":[]}'
-    $r=Invoke-PacketRatApi -Route '/api/assist/ask' -Data ([pscustomobject]@{question='Anything?';profile='AiEndpoint'}) -Root $tmp2
+    $r=Invoke-ApiAt $tmp2 '/api/assist/ask' ([pscustomobject]@{question='Anything?';profile='AiEndpoint'})
     Assert-Bridge ($r.ok -and $r.say -eq 'All quiet.' -and $r.note -match 'nothing was changed') 'the API route returns the answer'
 }finally{Remove-Item -LiteralPath $tmp2 -Recurse -Force -ErrorAction SilentlyContinue}
 'Bridge tests passed.'
