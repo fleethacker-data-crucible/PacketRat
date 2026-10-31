@@ -6,6 +6,8 @@ foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','Pa
     . (Join-Path $Root "Private\$name.ps1")
 }
 function Assert-Voice([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Voice assets test failed: '+$Message)}}
+# Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
+function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
 function Assert-Throws([scriptblock]$Block,[string]$Pattern,[string]$Message){
     $threw=$null
     try{& $Block}catch{$threw=$_.Exception.Message}
@@ -57,7 +59,7 @@ try{
     Assert-Throws { Read-PacketRatVoiceAsset -Name 'models/whisper.onnx' -Root $tmp } 'missing' 'a missing file is not served'
 
     # API route.
-    $r=Invoke-PacketRatApi -Route '/api/voice/status' -Data $null -Root $tmp
+    $r=Invoke-ApiAt $tmp '/api/voice/status' $null
     Assert-Voice ($r.ok -and $r.voice.installed -eq $false) 'the API route reports status'
     Write-Host 'Voice assets tests passed.'
 }finally{
