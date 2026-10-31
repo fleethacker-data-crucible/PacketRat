@@ -37,6 +37,7 @@ Everything above can be checked in the command list: `PacketRat-CLI.bat commands
 - `PacketRat-CLI.bat queue show`: the action queue, dismissals, rules and the last report.
 - `PacketRat-CLI.bat stats show`: counts of what PacketRat did (an estimate, not a score for anyone).
 - `PacketRat-CLI.bat credentials status`: which credential source is set. Tokens are never shown.
+- `PacketRat-CLI.bat log show` and `log verify`: the tamper-evident action log of what PacketRat ran, and a check that no line was edited, removed or reordered (see [ACTION-LOG.md](ACTION-LOG.md)).
 - `Logs/packetrat.log`: a plain text log of what the app did and any errors.
 - Outlook itself: archived and moved messages are in the folder you chose.
 - `--dry-run` on any command shows the route and body it would send without running it.

@@ -37,6 +37,8 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `stats show` (or just `stats`) | Estimated minutes saved: a total and a per-action breakdown. An estimate, not a measurement and not a score for anyone. | |
 | `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. Format: [COUNTS-EXPORT.md](COUNTS-EXPORT.md). | |
 | `stats reset` | Zero the counters and start a new count. | needs `--yes` |
+| `log show` | The newest lines of the tamper-evident action log (route, outcome, a short hash of the item key; never mail content) and the chain head. See [ACTION-LOG.md](ACTION-LOG.md). | |
+| `log verify` | Check the action log hash chain. Exits 1 and names the first broken line if the log was edited, reordered or cut in the middle. | |
 | `assist brief` | A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice). | |
 | `assist ask` | Ask about the queue. The AI answers from the queue only and may propose actions (dismiss, status, priority); nothing is run, and each proposal comes with the exact command to confirm. | `--question` (required), `--profile` |
 | `voice status` | Whether the local speech-input assets listed in `Config/voice-assets.json` are present and match their SHA-256. Nothing is downloaded or sent. | |

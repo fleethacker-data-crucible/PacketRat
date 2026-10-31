@@ -31,7 +31,7 @@ function Resolve-PacketRatOutlookEntryId($Item) {
     if(-not $found){throw 'The message is not in the classic Outlook profile on this PC (it may not be synced, or classic Outlook is not signed in to this mailbox).'}
     return [string]$found
 }
-function Invoke-PacketRatApi {
+function Invoke-PacketRatApiCore {
     param([string]$Route,$Data)
     if($Route -eq '/api/heartbeat') {
         Register-PacketRatPresence -State $script:Presence -Tab ([string]$Data.tab) -Leaving:($Data.leaving -eq $true)
@@ -43,6 +43,8 @@ function Invoke-PacketRatApi {
         return @{ok=$true;stopping=$true}
     }
     if($Route -eq '/api/health') {return @{ok=$true;service='PacketRat';mode='local';version='2.0'}}
+    if($Route -eq '/api/log') {return @{ok=$true;log=(Get-PacketRatActionLogView -Root $Root)}}
+    if($Route -eq '/api/log/verify') {$v=Test-PacketRatActionLog -Root $Root;return @{ok=[bool]$v.Valid;verify=$v}}
     if($Route -eq '/api/commands') {return @{ok=$true;schema='packetrat.commands/1';commands=@(Get-PacketRatCommandList)}}
     if($Route -eq '/api/authority') {return @{ok=$true;authority=(Get-PacketRatAuthority)}}
     if($Route -eq '/api/credentials/status') {return @{ok=$true;credentials=(Get-PacketRatCredentialStatus)}}
@@ -289,5 +291,24 @@ function Invoke-PacketRatApi {
       }
       '/api/voice/status' { return @{ok=$true;voice=(Get-PacketRatVoiceStatus -Root $Root)} }
       default {throw 'Unknown API route'}
+    }
+}
+
+# Every route goes through here so the action log sees what ran. Core errors are logged as failed and re-thrown unchanged.
+function Invoke-PacketRatApi {
+    param([string]$Route,$Data)
+    $outcome='ok'
+    try {
+        $result=Invoke-PacketRatApiCore -Route $Route -Data $Data
+        if($result -is [System.Collections.IDictionary] -and $result.Contains('ok') -and -not [bool]$result['ok']){$outcome='failed'}
+        return $result
+    } catch {
+        $outcome='failed'
+        throw
+    } finally {
+        if(Get-Command Write-PacketRatActionLogFor -ErrorAction SilentlyContinue){
+            $itemKey=Get-PacketRatActionLogKey $Data
+            Write-PacketRatActionLogFor -Route $Route -Key $itemKey -Outcome $outcome -Root $Root
+        }
     }
 }
