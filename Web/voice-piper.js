@@ -35,7 +35,8 @@
   };
   function ensure() {
     if (engine) return Promise.resolve(engine);
-    if (!loading) loading = api._loader(cfgNow).then(function (e) { engine = e; return e; }, function (err) { loading = null; throw err; });
+    if (!loading && api.onStatus) api.onStatus('Loading the TalkForge voice (the first time can take a minute)...');
+    if (!loading) loading = api._loader(cfgNow).then(function (e) { engine = e; if (api.onStatus) api.onStatus('Voice ready.'); return e; }, function (err) { loading = null; throw err; });
     return loading;
   }
   function play(blob) {

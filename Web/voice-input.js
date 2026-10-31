@@ -121,11 +121,13 @@
     function handleUtterance(audio) {
       busy = true;
       transcribe(audio).then(function (text) {
+        if (api.onHeard) api.onHeard(text);
         var m = matchWake(text);
         if (m.standDown) { api.setHail(false); if (api.onStandDown) api.onStandDown(); }
         else if (m.woke && hail) hail(m.command);
       }).catch(function (e) { if (api.onError) api.onError(e); }).then(function () { busy = false; });
     }
+    api.preload = function () { return loadWorker(); };
     api.startTalk = function () {
       if (talking) return Promise.resolve();
       talking = true; talkChunks = [];
