@@ -17,6 +17,13 @@ assert.strictEqual(v.matchWake('Stand down').standDown, true);
 assert.strictEqual(v.matchWake('secure the bridge now').standDown, true);
 assert.strictEqual(v.matchWake('Stand down').woke, false);
 
+// --- spoken shortcuts ---
+assert.strictEqual(v.intent('Brief me.'), 'brief');
+assert.strictEqual(v.intent('  What needs me? '), 'brief');
+assert.strictEqual(v.intent('Status report'), 'brief');
+assert.strictEqual(v.intent('brief me on the weather in Norfolk'), null, 'only the whole phrase is a shortcut');
+assert.strictEqual(v.intent(''), null);
+
 // --- resampling ---
 const tone = Float32Array.from({ length: 4800 }, (_, i) => Math.sin(2 * Math.PI * 440 * i / 48000));
 const down = v.downsample(tone, 48000, 16000);

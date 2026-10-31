@@ -16,8 +16,11 @@ function Assert-Throws([scriptblock]$Block,[string]$Pattern,[string]$Message){
 function Get-Sha([byte[]]$b){$s=[Security.Cryptography.SHA256]::Create();try{(($s.ComputeHash($b)|ForEach-Object{$_.ToString('x2')}) -join '')}finally{$s.Dispose()}}
 
 # The shipped manifest lists nothing, so the feature reports "not installed" instead of failing.
+$savedVoiceDir=$env:PACKETRAT_VOICE_DIR; $env:PACKETRAT_VOICE_DIR=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-no-voice-'+[guid]::NewGuid().ToString('N'))
 $shipped=Get-PacketRatVoiceStatus -Root $Root
-Assert-Voice ($shipped.installed -eq $false -and $shipped.listed -eq 0 -and $shipped.note -match 'not installed') 'the shipped manifest means not installed'
+$env:PACKETRAT_VOICE_DIR=$savedVoiceDir
+Assert-Voice ($shipped.installed -eq $false -and $shipped.listed -eq 12 -and $shipped.missing.Count -eq 12) 'the shipped manifest pins the 12 speech-input files and reports them missing when absent'
+Assert-Voice (@($shipped.missing) -contains 'models/whisper-tiny.en/onnx/encoder_model_quantized.onnx' -and @($shipped.missing) -contains 'transformers.min.js') 'the manifest names the Whisper model and transformers.js'
 $cmd=Find-PacketRatCommand 'voice status'
 Assert-Voice ($null -ne $cmd -and $cmd.Method -eq 'GET') 'voice status is a GET command'
 
