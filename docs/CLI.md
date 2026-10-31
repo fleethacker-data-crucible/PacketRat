@@ -33,7 +33,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `draft create` | Draft a reply with the AI for review (nothing is sent). | `--key` (required), `--instruction`, `--profile` |
 | `draft open` | Open an Outlook reply with reviewed text above your signature (never sent). | `--key` `--body-file` (required), `--subject`, `--apply-subject` |
 | `stats show` (or just `stats`) | Estimated minutes saved: a total and a per-action breakdown. An estimate, not a measurement and not a score for anyone. | |
-| `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. | |
+| `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. Format: [COUNTS-EXPORT.md](COUNTS-EXPORT.md). | |
 | `stats reset` | Zero the counters and start a new count. | needs `--yes` |
 | `assist brief` | A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice). | |
 | `assist ask` | Ask about the queue. The AI answers from the queue only and may propose actions (dismiss, status, priority); nothing is run, and each proposal comes with the exact command to confirm. | `--question` (required), `--profile` |
