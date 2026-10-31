@@ -33,7 +33,7 @@ foreach($option in @($Rest)){
         default {if($option){Write-Warning "Ignoring unknown option $option"}}
     }
 }
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatAssistant','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -67,7 +67,7 @@ $script:LastResult=$null
 $script:Nonce=[guid]::NewGuid().ToString('N')
 $script:Mime=@{'.html'='text/html; charset=utf-8';'.css'='text/css; charset=utf-8';'.js'='application/javascript; charset=utf-8';'.png'='image/png';'.ico'='image/x-icon';'.svg'='image/svg+xml; charset=utf-8'}
 # Exact allow-list of served files (Fleet UI: vendored fleet.css, brand mark and emblems, Lucide icons).
-$script:AllowedAssets=@('index.html','app.js','report-experience.js','style.css','shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png','brand/icon-256.png','brand/favicon.ico')
+$script:AllowedAssets=@('index.html','app.js','report-experience.js','voice.js','style.css','shell.js','icons.js','vendor/fleet/fleet.css','brand/mark.svg','brand/emblem-dark.png','brand/emblem-light.png','brand/icon-256.png','brand/favicon.ico')
 $script:UTF8=New-Object System.Text.UTF8Encoding $false
 
 function Send-PacketRatResponse {
@@ -163,7 +163,7 @@ try {
           Send-PacketRatText $stream 403 '{"ok":false,"error":"Invalid host"}';continue
       }
       if($path -match '^/api/'){
-          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/stats','/api/stats/export')){
+          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/stats','/api/stats/export','/api/assist/brief')){
               Send-PacketRatText $stream 405 '{"ok":false,"error":"POST required"}';continue
           }
           if($method -eq 'POST'){

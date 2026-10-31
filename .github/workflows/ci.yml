@@ -24,6 +24,7 @@ jobs:
           node --check Web/report-experience.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_intelligence.js
+          node tests/test_voice.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install development browser dependencies
         run: |
@@ -72,3 +73,4 @@ jobs:
           .\tests\Test-PacketRatInboxActions.ps1
           .\tests\Test-PacketRatMailFiles.ps1
           .\tests\Test-PacketRatUsage.ps1
+          .\tests\Test-PacketRatAssistant.ps1
