@@ -94,9 +94,7 @@ try{
 
     # --- The export matches the documented format ------------------------------------------------------------------------
     Assert-ExportMatchesDoc $x 'the export'
-    $ex=[regex]::Match($exportDoc,'(?s)```json
-?
-(.*?)```').Groups[1].Value | ConvertFrom-Json
+    $ex=[regex]::Match($exportDoc,'(?s)```json\r?\n(.*?)```').Groups[1].Value | ConvertFrom-Json
     Assert-Usage ($null -ne $ex.counts) 'the documented example parses'
     Assert-ExportMatchesDoc ([ordered]@{schema=$ex.schema;estimate=$ex.estimate;since=$ex.since;exportedAt=$ex.exportedAt;counts=$ex.counts}) 'the documented example'
     $fresh=Join-Path $tmp 'fresh'; [void](New-Item -ItemType Directory -Path $fresh -Force)
