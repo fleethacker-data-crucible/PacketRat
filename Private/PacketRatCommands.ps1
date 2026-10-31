@@ -107,6 +107,10 @@ $script:PacketRatCommands = @(
         Summary = 'The raw action counts as JSON (schema packetrat.usage-counts/1) for another tool; add --out to write a file.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat stats reset'; Route = '/api/stats/reset'; Method = 'POST'; Destructive = $true; NeedsAnalysis = $false
         Summary = 'Zero the minutes-saved counters and start a new count.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat log show'; Route = '/api/log'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'The newest lines of the tamper-evident action log (route, outcome, short key hash; never mail content) and the chain head. See docs\ACTION-LOG.md.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat log verify'; Route = '/api/log/verify'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Check the action log hash chain. Exits 1 and names the first broken line if the log was edited, reordered or cut.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat assist brief'; Route = '/api/assist/brief'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat assist ask'; Route = '/api/assist/ask'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
