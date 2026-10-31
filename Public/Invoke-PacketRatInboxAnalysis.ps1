@@ -279,8 +279,7 @@ $emailJson
     # Raw model responses may contain mail content; do not write them unless explicitly opted in.
     if ($env:PACKETRAT_SAVE_RAW_AI -eq '1') {
     try {
-        $logDir = Join-Path $Root 'Logs'
-        if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+        $logDir = Get-PacketRatDataDir -Root $Root
         $rawPath = Join-Path $logDir ('packetrat-ai-raw_{0}.txt' -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
         $utf8NoBom = New-Object System.Text.UTF8Encoding $false
         [System.IO.File]::WriteAllText($rawPath, $rawText, $utf8NoBom)

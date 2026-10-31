@@ -9,8 +9,15 @@ function Get-PacketRatLogDir {
             $Root = Split-Path $Root -Parent
         }
     }
-    $dir = Join-Path $Root 'Logs'
-    if (-not (Test-Path $dir)) {
+    # PACKETRAT_DATA_DIR (a full path) moves the data and the log to a fresh folder; see Get-PacketRatDataDir.
+    $custom = ([string][Environment]::GetEnvironmentVariable('PACKETRAT_DATA_DIR')).Trim()
+    if ($custom) {
+        if (-not [IO.Path]::IsPathRooted($custom)) { throw 'PACKETRAT_DATA_DIR must be a full path, for example C:\Demo\PacketRatData.' }
+        $dir = [IO.Path]::GetFullPath($custom)
+    } else {
+        $dir = Join-Path $Root 'Logs'
+    }
+    if (-not (Test-Path -LiteralPath $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
     return $dir
