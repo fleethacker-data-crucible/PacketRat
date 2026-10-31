@@ -27,6 +27,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `item move` | Move the original to an existing Outlook folder (inbox subfolder or sibling). Needs `--yes`. COM only. | `--key`, `--folder` (both required) |
 | `item categorize` | Add an Outlook category to the original (existing categories are kept). COM only. | `--key`, `--category` (both required) |
 | `item mark-read` | Mark the original read, or unread with `--unread`. COM only. | `--key` (required), `--unread` |
+| `item handoff` | Write a tracked action as a Halyard backlog item candidate in `Logs/handoff/` (subject, recommended action and urgency; no sender, body or Outlook id). Nothing is sent. See [HALYARD-HANDOFF.md](HALYARD-HANDOFF.md). | `--key` (required) |
 | `priority set` | Override an action's priority. | `--key` `--urgency` (both required) |
 | `priority reset` | Return an action to its triaged priority. | `--key` (required) |
 | `rules set` | Replace the triage rules with the ones in a JSON file. **Needs `--yes`.** | `--file` (required) |
