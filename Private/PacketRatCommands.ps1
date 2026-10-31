@@ -114,6 +114,8 @@ $script:PacketRatCommands = @(
         Inputs = @(
             (New-PacketRatInput 'question' 'question' 'string' $true 'Your question, up to 500 characters.')
             (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))) }
+    [pscustomobject]@{ Name = 'packetrat voice status'; Route = '/api/voice/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Whether the local speech-input assets listed in Config\voice-assets.json are present and match their SHA-256 (nothing is downloaded or sent).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials status'; Route = '/api/credentials/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Which AI credential source is set (tokens are never shown).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials set'; Route = '/api/credentials'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false

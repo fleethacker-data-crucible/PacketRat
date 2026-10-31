@@ -18,7 +18,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-SCRIPTS = ('shell.js', 'icons.js', 'report-experience.js', 'voice.js', 'app.js')
+SCRIPTS = ('shell.js', 'icons.js', 'report-experience.js', 'voice.js', 'voice-input.js', 'app.js')
 
 
 def add_scripts(page):
