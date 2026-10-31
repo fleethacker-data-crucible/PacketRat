@@ -112,6 +112,8 @@ try{
     Assert-Burden ($c.Code -eq 2) 'a non-numeric --seconds is a usage error (exit 2)'
     $c=Invoke-Cli @('burden','record','--task','triage-inbox','--dry-run','--json')
     Assert-Burden ($c.Code -eq 2) 'a missing --seconds is a usage error (exit 2)'
+    # The usage-error checks above leave exit code 2 in $LASTEXITCODE, which the CI step would report as a failure.
+    $global:LASTEXITCODE=0
     Write-Host 'Burden record tests passed.'
 }finally{
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
