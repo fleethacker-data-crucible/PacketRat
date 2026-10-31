@@ -8,6 +8,8 @@ foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','Pa
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
 function Assert-Files([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Mail files test failed: '+$Message)}}
+# Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
+function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
 function Assert-Throws([scriptblock]$Block,[string]$Pattern,[string]$Message){
     $threw=$null
     try{& $Block}catch{$threw=$_.Exception.Message}
@@ -168,9 +170,9 @@ try{
     $body=ConvertTo-PacketRatCommandBody $cmd @{provider='Files';folder=$mailDir}
     Assert-Files ($body.provider -eq 'Files' -and $body.folder -eq $mailDir) 'CLI --provider Files --folder maps to the API body'
     Assert-Throws { ConvertTo-PacketRatCommandBody $cmd @{provider='Nope'} } 'must be one of' 'unknown providers are refused by the CLI'
-    $api=Invoke-PacketRatApi -Route '/api/analyze' -Data ([pscustomobject]@{provider='Files';folder=$mailDir;classification='Batch';profile='AiEndpoint';maxEmails=40;daysBack=14})
+    $api=Invoke-ApiAt $tmp '/api/analyze' ([pscustomobject]@{provider='Files';folder=$mailDir;classification='Batch';profile='AiEndpoint';maxEmails=40;daysBack=14})
     Assert-Files ($api.ok -and $api.summary.Provider -eq 'Files') 'the API route runs the Files provider'
-    Assert-Throws { Invoke-PacketRatApi -Route '/api/item/archive' -Data ([pscustomobject]@{key=$r.MustReply[0].Key}) } 'classic Outlook' 'inbox actions are refused for file mail'
+    Assert-Throws { Invoke-ApiAt $tmp '/api/item/archive' ([pscustomobject]@{key=$r.MustReply[0].Key}) } 'classic Outlook' 'inbox actions are refused for file mail'
     Write-Host 'Mail files tests passed.'
 }finally{
     foreach($n in $savedEnv.Keys){[Environment]::SetEnvironmentVariable($n,$savedEnv[$n])}
