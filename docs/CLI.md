@@ -14,6 +14,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | Command | What it does | Options |
 |---|---|---|
 | `app health` | Check that PacketRat answers. | |
+| `app authority` | Where a person must approve, what PacketRat never does, where mail text goes when the AI is called, how to watch it and how to stop it. | |
 | `queue show` | The action queue, dismissals, rules, credential status and the last report. | |
 | `inbox analyze` | Read recent Outlook mail (or exported `.eml`/`.msg` files) and build the report and action queue (no mail is changed or sent). | `--profile` `--provider` (COM, Graph or Files), `--folder` (Files: folder of `.eml`/`.msg` files, default `PACKETRAT_MAIL_FOLDER`), `--max-emails` `--days-back` (not used by Files), `--classification` (Single or Batch) |
 | `report generate` | Ask the AI for a brief, actions, risks or an explanation of the current report. | `--mode` (required), `--section-id`, `--profile` |

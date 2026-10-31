@@ -283,6 +283,7 @@ function Invoke-PacketRatApi {
           return @{ok=$true;say=$answer.Say;proposals=@($answer.Proposals);profile=$answer.Profile;model=$answer.Model;note='Proposals are suggestions only; nothing was changed.'}
       }
       '/api/voice/status' { return @{ok=$true;voice=(Get-PacketRatVoiceStatus -Root $Root)} }
+      '/api/authority' { return @{ok=$true;authority=(Get-PacketRatAuthority -Root $Root)} }
       default {throw 'Unknown API route'}
     }
 }

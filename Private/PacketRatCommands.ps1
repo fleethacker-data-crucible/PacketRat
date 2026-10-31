@@ -19,6 +19,8 @@ function New-PacketRatInput([string]$Flag, [string]$Field, [string]$Type, [bool]
 $script:PacketRatCommands = @(
     [pscustomobject]@{ Name = 'packetrat app health'; Route = '/api/health'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Check that PacketRat answers.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat app authority'; Route = '/api/authority'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Where a person must approve, what PacketRat never does, where mail text goes when the AI is called, how to watch it and how to stop it.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat queue show'; Route = '/api/state'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'The action queue, dismissals, rules, credential status and the last report.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat inbox analyze'; Route = '/api/analyze'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
