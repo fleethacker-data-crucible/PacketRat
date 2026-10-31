@@ -31,7 +31,7 @@ function Resolve-PacketRatOutlookEntryId($Item) {
     if(-not $found){throw 'The message is not in the classic Outlook profile on this PC (it may not be synced, or classic Outlook is not signed in to this mailbox).'}
     return [string]$found
 }
-function Invoke-PacketRatApi {
+function Invoke-PacketRatApiCore {
     param([string]$Route,$Data)
     if($Route -eq '/api/heartbeat') {
         Register-PacketRatPresence -State $script:Presence -Tab ([string]$Data.tab) -Leaving:($Data.leaving -eq $true)
@@ -283,6 +283,36 @@ function Invoke-PacketRatApi {
           return @{ok=$true;say=$answer.Say;proposals=@($answer.Proposals);profile=$answer.Profile;model=$answer.Model;note='Proposals are suggestions only; nothing was changed.'}
       }
       '/api/voice/status' { return @{ok=$true;voice=(Get-PacketRatVoiceStatus -Root $Root)} }
+      '/api/log' { return @{ok=$true;entries=@(Read-PacketRatActionLog -Root $Root | Select-Object -Last 100);verify=(Test-PacketRatActionLog -Root $Root)} }
+      '/api/log/verify' { $v=Test-PacketRatActionLog -Root $Root; return @{ok=[bool]$v.ok;message=$(if($v.ok){'Chain intact: '+$v.count+' actions. Tip '+$v.tip}else{'CHAIN BROKEN at line '+$v.problemAtLine+': '+$v.reason});verify=$v} }
       default {throw 'Unknown API route'}
     }
+}
+
+# Routes whose use is recorded (writes and actions, not reads). Value = action name in the log.
+$script:PacketRatLoggedRoutes = @{
+    '/api/analyze' = 'inbox.analyze'; '/api/cancel' = 'inbox.cancel'
+    '/api/report/generate' = 'report.generate'; '/api/report/track' = 'report.track'
+    '/api/status' = 'item.status'; '/api/priority' = 'priority.set'; '/api/priority/reset' = 'priority.reset'
+    '/api/rules' = 'rules.set'; '/api/dismiss' = 'item.dismiss'; '/api/restore' = 'item.restore'
+    '/api/open' = 'item.open'; '/api/draft' = 'draft.create'; '/api/open-draft' = 'draft.open'
+    '/api/item/archive' = 'item.archive'; '/api/item/move' = 'item.move'; '/api/item/categorize' = 'item.categorize'; '/api/item/mark-read' = 'item.mark-read'
+    '/api/stats/reset' = 'stats.reset'; '/api/assist/ask' = 'assist.ask'
+    '/api/credentials' = 'credentials.set'; '/api/credentials/clear' = 'credentials.clear'
+    '/api/session/stop' = 'session.stop'
+}
+
+function Invoke-PacketRatApi {
+    # The single door every action goes through (browser, CLI): run it, then record it. Reads are not recorded.
+    param([string]$Route, $Data)
+    $action = $script:PacketRatLoggedRoutes[$Route]
+    if (-not $action -or -not (Get-Command Write-PacketRatActionLog -ErrorAction SilentlyContinue)) { return (Invoke-PacketRatApiCore -Route $Route -Data $Data) }
+    $key = ''
+    try { if ($Data -and $Data.PSObject.Properties['key']) { $key = [string]$Data.key } } catch { $key = '' }
+    try { $result = Invoke-PacketRatApiCore -Route $Route -Data $Data }
+    catch { $null = Write-PacketRatActionLog -Action $action -Key $key -Result 'error' -Root $Root; throw }
+    $ok = $true
+    if ($result -is [System.Collections.IDictionary] -and $result.Contains('ok')) { $ok = [bool]$result['ok'] }
+    $null = Write-PacketRatActionLog -Action $action -Key $key -Result $(if ($ok) { 'ok' } else { 'error' }) -Root $Root
+    return $result
 }

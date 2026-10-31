@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
 $cliArgs = @($args | ForEach-Object { [string]$_ })
 
-foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm','PacketRatRouter', 'PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph','PacketRatMailFiles', 'PacketRatDraft', 'PacketRatApi', 'PacketRatCommands')) {
+foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm','PacketRatRouter', 'PacketRatStore','PacketRatActionLog','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph','PacketRatMailFiles', 'PacketRatDraft', 'PacketRatApi', 'PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')

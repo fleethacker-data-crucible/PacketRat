@@ -14,6 +14,8 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | Command | What it does | Options |
 |---|---|---|
 | `app health` | Check that PacketRat answers. | |
+| `log show` | The last 100 recorded actions (what PacketRat did, when, to which message key) and whether the log chain is intact. No mail text is recorded. | |
+| `log verify` | Check the whole action log chain; any edited, removed or reordered line is reported with its line number, plus the tip hash. | |
 | `queue show` | The action queue, dismissals, rules, credential status and the last report. | |
 | `inbox analyze` | Read recent Outlook mail (or exported `.eml`/`.msg` files) and build the report and action queue (no mail is changed or sent). | `--profile` `--provider` (COM, Graph or Files), `--folder` (Files: folder of `.eml`/`.msg` files, default `PACKETRAT_MAIL_FOLDER`), `--max-emails` `--days-back` (not used by Files), `--classification` (Single or Batch) |
 | `report generate` | Ask the AI for a brief, actions, risks or an explanation of the current report. | `--mode` (required), `--section-id`, `--profile` |

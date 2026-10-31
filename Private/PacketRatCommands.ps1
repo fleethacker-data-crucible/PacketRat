@@ -19,6 +19,10 @@ function New-PacketRatInput([string]$Flag, [string]$Field, [string]$Type, [bool]
 $script:PacketRatCommands = @(
     [pscustomobject]@{ Name = 'packetrat app health'; Route = '/api/health'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Check that PacketRat answers.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat log show'; Route = '/api/log'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'The last 100 recorded actions (what PacketRat did, when, to which message key) and whether the log chain is intact. No mail text is recorded.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat log verify'; Route = '/api/log/verify'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Check the whole action log chain: any edited, removed or reordered line is reported with its line number. Also gives the tip hash to note outside this PC.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat queue show'; Route = '/api/state'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'The action queue, dismissals, rules, credential status and the last report.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat inbox analyze'; Route = '/api/analyze'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
