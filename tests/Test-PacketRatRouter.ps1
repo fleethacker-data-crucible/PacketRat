@@ -22,7 +22,7 @@ function Set-Setup([string]$state){ Remove-Item $cfgFile -ErrorAction SilentlyCo
 
 try{
     # --- off switches ---
-    Reset-Env; $env:PACKETRAT_ROUTER=$null
+    Reset-Env; $env:PACKETRAT_ROUTER='direct'
     $r=Ensure-PacketRatFairlead -Root $Root
     Assert-Router ($r.State -eq 'Skipped' -and $script:Started.Count -eq 0) 'router off: nothing happens'
     Reset-Env; $env:PACKETRAT_FAIRLEAD_AUTOSTART='off'

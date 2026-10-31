@@ -47,6 +47,7 @@ function Invoke-PacketRatApi {
     if($Route -eq '/api/burden/baseline') {return @{ok=$true;burden=(Set-PacketRatBurdenBaseline -Task ([string]$Data.task) -Seconds ([string]$Data.seconds) -Replace:([bool]$Data.replace) -Root $Root)}}
     if($Route -eq '/api/burden/record') {return @{ok=$true;burden=(Add-PacketRatBurdenRun -Task ([string]$Data.task) -Seconds ([string]$Data.seconds) -Root $Root)}}
     if($Route -eq '/api/commands') {return @{ok=$true;schema='packetrat.commands/1';commands=@(Get-PacketRatCommandList)}}
+    if($Route -eq '/api/authority') {return @{ok=$true;authority=(Get-PacketRatAuthority)}}
     if($Route -eq '/api/credentials/status') {return @{ok=$true;credentials=(Get-PacketRatCredentialStatus)}}
     $store=Get-PacketRatStore -Root $Root
     switch($Route){
@@ -275,6 +276,10 @@ function Invoke-PacketRatApi {
           $null=Set-PacketRatMailRead -EntryID ([string]$item.EntryID) -Unread:$unread
           $null=Add-PacketRatUsage -Action markedRead -Root $Root
           return @{ok=$true;store=$store}
+      }
+      '/api/item/handoff' {
+          $handoff=New-PacketRatHalyardHandoff -Store $store -Key ([string]$Data.key) -Root $Root
+          return @{ok=$true;handoff=$handoff.Document;file=$handoff.File;note='Written locally only. A person reviews it before Halyard uses it.'}
       }
       '/api/stats' { return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
       '/api/stats/export' { return @{ok=$true;usage=(Get-PacketRatUsageExport -Root $Root)} }

@@ -129,11 +129,11 @@ function itemRow(item,actions=false){
  const why=escapeHtml(item.Why||'No reason provided'),status=escapeHtml((item.Status||'open').replace('_',' '));
  const source=item.PriorityOverride?'Manual priority':item.RuleName?'Rule: '+item.RuleName:(item.TriageSource||'AI suggested');
  const label='<span class="source-label">'+escapeHtml(source)+'</span>';
- const title='<button type="button" class="item-title" data-act="open" data-key="'+key+'" title="Open original in Outlook">'+sub+'</button>';
+ const title='<button type="button" class="item-title" data-act="open" data-key="'+key+'" title="Open original in Outlook"'+(actions?'':' aria-label="Open '+sub+' in Outlook"')+'>'+sub+'</button>';
  const levels=['High','Medium','Low'];
  const prioritySelect='<label class="priority-selector">Priority <select data-priority-key="'+key+'" aria-label="Set priority for '+sub+'">'+levels.map(p=>'<option value="'+p+'"'+(item.Urgency===p?' selected':'')+'>'+p+'</option>').join('')+'</select></label>';
  const controls=actions?'<div class="item-actions"><button data-act="open" data-key="'+key+'">Outlook '+icon('external')+'</button><button data-act="draft" data-key="'+key+'">'+icon('draft')+' Draft</button>'+prioritySelect+(item.PriorityOverride?'<button data-act="resetpriority" data-key="'+key+'" title="Restore AI/rule priority">'+icon('reset')+' Reset priority</button>':'')+(item.Status==='done'?'<button data-act="openstatus" data-key="'+key+'">Reopen</button>':'<button data-act="done" data-key="'+key+'">'+icon('check')+' Done</button><button data-act="progress" data-key="'+key+'">In progress</button>')+'<button data-act="dismiss" data-key="'+key+'">Dismiss</button><span class="inbox-actions" role="group" aria-label="Inbox actions"><button data-act="archive" data-key="'+key+'" title="Move the original to the Outlook archive folder">Archive</button><button data-act="markread" data-key="'+key+'" title="Mark the original read in Outlook">Mark read</button><button data-act="categorize" data-key="'+key+'" title="Add an Outlook category to the original">Category</button><button data-act="move" data-key="'+key+'" title="Move the original to an existing Outlook folder">Move</button></span></div>':'';
- return '<article class="item'+(actions?'':' signal-item')+'"'+(actions?'':' role="button" tabindex="0" data-act="open" data-key="'+key+'" aria-label="Open '+sub+' in Outlook"')+'>'+priorityBadge(item)+'<div class="item-body">'+title+'<small title="'+from+' · '+why+'">'+from+' · '+why+' · '+status+' · '+label+'</small></div>'+controls+'</article>';
+ return '<article class="item'+(actions?'':' signal-item')+'"'+(actions?'':' data-act="open" data-key="'+key+'"')+'>'+priorityBadge(item)+'<div class="item-body">'+title+'<small title="'+from+' · '+why+'">'+from+' · '+why+' · '+status+' · '+label+'</small></div>'+controls+'</article>';
 }
 const empty=(caption)=>`<div class="empty"><span class="empty-icon">${icon('inbox',20)}</span>${escapeHtml(caption)}</div>`;
 function filteredQueue(){
@@ -376,10 +376,6 @@ document.addEventListener('change',async event=>{
  try{const result=await api('priority',{key,urgency});store=result.store||store;render();notify('Priority updated to '+urgency+'. Manual choice will survive reanalysis.')}
  catch(error){notify(error.message,true);render()}
  finally{input.disabled=false}
-});
-document.addEventListener('keydown',event=>{
- const row=event.target.matches('.signal-item')?event.target:null;
- if(row&&(event.key==='Enter'||event.key===' ')){event.preventDefault();row.click()}
 });
 
 $('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();loadStats();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});

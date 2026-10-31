@@ -80,7 +80,7 @@ function Ensure-PacketRatFairlead {
     if (Test-PacketRatFairleadUp -Uri $uri) { return @{ State = 'AlreadyRunning'; Message = 'Fairlead is already running.' } }
 
     $dir = Get-PacketRatFairleadDir -Root $Root
-    if (-not $dir) { return @{ State = 'NotFound'; Message = 'Fairlead is not running and its folder was not found. Put it next to PacketRat or set FAIRLEAD_DIR.' } }
+    if (-not $dir) { return @{ State = 'NotFound'; Message = 'Fairlead is not running and its folder was not found. Put it next to PacketRat or set FAIRLEAD_DIR. To use the profile endpoint instead, set PACKETRAT_ROUTER=direct.' } }
 
     $setup = Get-PacketRatFairleadSetupState
     $openSetup = $false

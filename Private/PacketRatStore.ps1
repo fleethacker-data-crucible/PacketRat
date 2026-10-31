@@ -1,15 +1,28 @@
 # PacketRat - local persistent store (checklist + false-positive dismissals)
 #requires -Version 5.1
 
+function Get-PacketRatDataDir {
+    # Where PacketRat keeps its data (the action queue, rules, dismissals, counts and packetrat.log): Logs\ under the app
+    # folder, or the full path in PACKETRAT_DATA_DIR, so a demo or a test can run on a fresh, throwaway folder. Process
+    # files (the running server's runtime file, the cancel flag) stay in Logs\. A relative path is refused: it would
+    # depend on where the command was started.
+    param([string]$Root)
+    $custom = ([string][Environment]::GetEnvironmentVariable('PACKETRAT_DATA_DIR')).Trim()
+    if ($custom) {
+        if (-not [IO.Path]::IsPathRooted($custom)) { throw 'PACKETRAT_DATA_DIR must be a full path, for example C:\Demo\PacketRatData.' }
+        $dir = [IO.Path]::GetFullPath($custom)
+    } else {
+        if (-not $Root) { $Root = $PSScriptRoot }
+        if ((Split-Path $Root -Leaf) -eq 'Private') { $Root = Split-Path $Root -Parent }
+        $dir = Join-Path $Root 'Logs'
+    }
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    return $dir
+}
+
 function Get-PacketRatStorePath {
     param([string]$Root)
-    if (-not $Root) { $Root = $PSScriptRoot }
-    # Private\ -> project root
-    if ((Split-Path $Root -Leaf) -eq 'Private') {
-        $Root = Split-Path $Root -Parent
-    }
-    $dir = Join-Path $Root 'Logs'
-    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $dir = Get-PacketRatDataDir -Root $Root
     $path = Join-Path $dir 'packetrat-store.json'
     return $path
 }

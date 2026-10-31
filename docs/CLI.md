@@ -14,6 +14,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | Command | What it does | Options |
 |---|---|---|
 | `app health` | Check that PacketRat answers. | |
+| `app authority` | The human-authority statement: approval points, what PacketRat never does, how to monitor and stop it. Same content as [HUMAN-AUTHORITY.md](HUMAN-AUTHORITY.md); the browser server answers it at `GET /api/authority`. | |
 | `queue show` | The action queue, dismissals, rules, credential status and the last report. | |
 | `inbox analyze` | Read recent Outlook mail (or exported `.eml`/`.msg` files) and build the report and action queue (no mail is changed or sent). | `--profile` `--provider` (COM, Graph or Files), `--folder` (Files: folder of `.eml`/`.msg` files, default `PACKETRAT_MAIL_FOLDER`), `--max-emails` `--days-back` (not used by Files), `--classification` (Single or Batch) |
 | `report generate` | Ask the AI for a brief, actions, risks or an explanation of the current report. | `--mode` (required), `--section-id`, `--profile` |
@@ -27,13 +28,14 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `item move` | Move the original to an existing Outlook folder (inbox subfolder or sibling). Needs `--yes`. COM only. | `--key`, `--folder` (both required) |
 | `item categorize` | Add an Outlook category to the original (existing categories are kept). COM only. | `--key`, `--category` (both required) |
 | `item mark-read` | Mark the original read, or unread with `--unread`. COM only. | `--key` (required), `--unread` |
+| `item handoff` | Write a tracked action as a Halyard backlog item candidate in `Logs/handoff/` (subject, recommended action and urgency; no sender, body or Outlook id). Nothing is sent. See [HALYARD-HANDOFF.md](HALYARD-HANDOFF.md). | `--key` (required) |
 | `priority set` | Override an action's priority. | `--key` `--urgency` (both required) |
 | `priority reset` | Return an action to its triaged priority. | `--key` (required) |
 | `rules set` | Replace the triage rules with the ones in a JSON file. **Needs `--yes`.** | `--file` (required) |
 | `draft create` | Draft a reply with the AI for review (nothing is sent). | `--key` (required), `--instruction`, `--profile` |
 | `draft open` | Open an Outlook reply with reviewed text above your signature (never sent). | `--key` `--body-file` (required), `--subject`, `--apply-subject` |
 | `stats show` (or just `stats`) | Estimated minutes saved: a total and a per-action breakdown. An estimate, not a measurement and not a score for anyone. | |
-| `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. | |
+| `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. Format: [COUNTS-EXPORT.md](COUNTS-EXPORT.md). | |
 | `stats reset` | Zero the counters and start a new count. | needs `--yes` |
 | `burden show` | The measured-burden record: per task, the baseline entered once and the times of later runs, with mean, median and change. A record only; see [BURDEN-RECORD.md](BURDEN-RECORD.md). | |
 | `burden baseline` | Enter a task's before time in seconds. Entered once; a second entry is refused unless `--replace true`. | `--task` `--seconds` (both required), `--replace` |
@@ -52,7 +54,7 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 
 - `--json` prints one JSON document: `{"schema":"packetrat.result/1","command":...,"ok":...,"result":...}`, or `error` and `errorType` (`usage` or `failed`) when it fails.
 - `--out FILE` writes that document to FILE as UTF-8 without a BOM.
-- `--yes` is required by commands that overwrite saved data (`rules set`).
+- `--yes` is required by commands that overwrite or move saved data (`rules set`, `item archive`, `item move`, `stats reset`).
 - `--dry-run` checks the command and its options and shows the route and body it would send, without running it. Tokens are never shown.
 - `--analyze` runs `inbox analyze` first, for the commands that work on an analysis (`report generate`, `report track`, `draft create`). Each CLI run is its own process, so without it those commands report that there is no analysis yet.
 - Exit codes: `0` success, `1` the command failed, `2` a usage error. Nothing waits on a dialog.
@@ -67,4 +69,4 @@ The CLI calls the same core (`Private/PacketRatApi.ps1`) as the browser, so it k
 
 ## Tests
 
-`tests/Test-PacketRatCommands.ps1` (in CI) fails if a browser or dispatcher route has no command, if a command names a route the dispatcher doesn't have, or if the CLI's schema, exit codes, `--yes` check or BOM-free `--out` change.
+`tests/Test-PacketRatCommands.ps1` (in CI) fails if a browser or dispatcher route has no command, if a command names a route the dispatcher doesn't have, or if the CLI's schema, exit codes, `--yes` check or BOM-free `--out` change. `tests/Test-PacketRatAuthority.ps1` keeps [HUMAN-AUTHORITY.md](HUMAN-AUTHORITY.md) in step with the command list: every command that needs `--yes` must be in its approval table.

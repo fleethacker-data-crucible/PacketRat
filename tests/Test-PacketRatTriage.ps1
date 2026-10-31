@@ -55,8 +55,9 @@ try {
     Assert-PacketRat ((ConvertTo-PacketRatLlmProfile -Profile 'grok') -eq 'Grok') 'profile names are case-insensitive'
     $threw=$false;try{$null=ConvertTo-PacketRatLlmProfile -Profile 'Nope'}catch{$threw=$true}
     Assert-PacketRat $threw 'unknown profile rejected'
-    $envNames=@('LLM_URL','LLM_MODEL','PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_GROK_URL','PACKETRAT_LAZARETTE_ITEM_AiEndpoint','DATABRICKS_TOKEN','LLM_TOKEN')+@($script:PacketRatLlmTokenEnv.AiEndpoint)+@($script:PacketRatLlmVaultItems.AiEndpoint.EnvKeys)
+    $envNames=@('PACKETRAT_ROUTER','LLM_URL','LLM_MODEL','PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_GROK_URL','PACKETRAT_LAZARETTE_ITEM_AiEndpoint','DATABRICKS_TOKEN','LLM_TOKEN')+@($script:PacketRatLlmTokenEnv.AiEndpoint)+@($script:PacketRatLlmVaultItems.AiEndpoint.EnvKeys)
     $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
+    $env:PACKETRAT_ROUTER='direct'   # these checks are about the direct profile endpoints; Fairlead as the default is tested in Test-PacketRatFairleadDefault.ps1
     try{
         # Default: the local phoenix-lai API on loopback, with its loaded-model name.
         $cfg=Get-PacketRatLlmConfig -Profile AiEndpoint
