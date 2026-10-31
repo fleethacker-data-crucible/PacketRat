@@ -26,7 +26,7 @@ The screenshots use the offline demo's sample mail. PacketRat follows the Window
 ## Launchers
 
 - **`Launch-PacketRat.bat`** — opens the modern browser GUI, the default.
-- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile AiEndpoint` or `-Profile Grok`). It also runs any browser action by name, for scripts and agents: `PacketRat-CLI.bat commands` lists them, and [`docs/CLI.md`](docs/CLI.md) covers the flags, JSON output and exit codes.
+- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile AiEndpoint` or `-Profile Grok`). It also runs any browser action by name, for scripts and agents: `PacketRat-CLI.bat commands` lists them, and [`docs/CLI.md`](docs/CLI.md) covers the flags, JSON output and exit codes. [`docs/HUMAN-AUTHORITY.md`](docs/HUMAN-AUTHORITY.md) (also `app authority`) says where PacketRat waits for a person, what it never does, and how to monitor and stop it.
 
 The browser launcher also supports optional commands from an existing CMD prompt:
 

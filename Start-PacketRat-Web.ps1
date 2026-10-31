@@ -169,7 +169,7 @@ try {
           Send-PacketRatText $stream 403 '{"ok":false,"error":"Invalid host"}';continue
       }
       if($path -match '^/api/'){
-          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/stats','/api/stats/export','/api/assist/brief','/api/voice/status')){
+          if($method -eq 'GET' -and $path -notin @('/api/state','/api/health','/api/credentials/status','/api/commands','/api/authority','/api/stats','/api/stats/export','/api/assist/brief','/api/voice/status')){
               Send-PacketRatText $stream 405 '{"ok":false,"error":"POST required"}';continue
           }
           if($method -eq 'POST'){
