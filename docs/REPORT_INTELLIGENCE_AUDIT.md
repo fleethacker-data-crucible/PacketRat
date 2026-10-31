@@ -1,4 +1,6 @@
 # PacketRat Full Intelligence Report — Engineering Audit
+> **Historical record (October 22, 2026).** The proposed branch named below has since been merged; later changes (batch classification, streaming, Files provider) are not reflected here. See the README for current behavior.
+
 **Audit scope:** PacketRat `main` report pipeline as inspected October 22, 2026, and the proposed fixes in `feat/report-actionability-and-cleanup`.
 
 **Evidence limitation:** An actual raw AI model report from the user's workstation was **not** supplied. This audit examines the full implementation path and uses synthetic reproductions of typical formatting problems. It does not assert that every reported artifact is reproducible from the user's exact provider response.
