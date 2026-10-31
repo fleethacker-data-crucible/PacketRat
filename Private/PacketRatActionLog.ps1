@@ -13,7 +13,7 @@ $script:PacketRatActionLogGenesis = ('0' * 64)
 $script:PacketRatLoggedRoutes = @(
     '/api/analyze', '/api/cancel', '/api/report/generate', '/api/report/track', '/api/status', '/api/priority', '/api/priority/reset',
     '/api/rules', '/api/dismiss', '/api/restore', '/api/open', '/api/draft', '/api/open-draft', '/api/item/archive', '/api/item/move',
-    '/api/item/categorize', '/api/item/mark-read', '/api/stats/reset', '/api/assist/ask', '/api/credentials', '/api/credentials/check',
+    '/api/item/categorize', '/api/item/mark-read', '/api/item/handoff', '/api/stats/reset', '/api/assist/ask', '/api/credentials', '/api/credentials/check',
     '/api/credentials/clear'
 )
 

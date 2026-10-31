@@ -177,7 +177,7 @@ function Get-PacketRatAuthority {
             'Accept a token on a command line or return one from an API.'
             'Send usage data anywhere; message text goes only to the AI endpoint the person configured, when they run an analysis, report or draft.'
         )
-        monitor        = @('queue show', 'stats show', 'credentials status', 'Logs/packetrat.log', '--dry-run on any command')
+        monitor        = @('queue show', 'stats show', 'credentials status', 'log show', 'log verify', 'Logs/packetrat.log', '--dry-run on any command')
         stop           = @('Close the browser tab or choose End session', 'Stop-PacketRat.ps1', 'inbox cancel', 'Ctrl+C in a console run')
     }
 }
