@@ -8,6 +8,8 @@ foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','Pa
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
 function Assert-Usage([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Usage test failed: '+$Message)}}
+# Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
+function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
 
 $tmp=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-usage-'+[guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path (Join-Path $tmp 'Config') -Force)
@@ -62,7 +64,7 @@ try{
     Assert-Usage ((Get-PacketRatUsageStats -Root $tmp).actions[0].count -eq 0) 'a negative stored count reads as zero'
 
     # --- API routes: counting happens where the action happens ---------------------------------------------------------------
-    $null=Invoke-PacketRatApi -Route '/api/stats/reset' -Data ([pscustomobject]@{}) -Root $tmp
+    $null=Invoke-ApiAt $tmp '/api/stats/reset' ([pscustomobject]@{})
     $mail=[pscustomobject]@{Index=1;Fingerprint='id:e1';EntryID='E1';Subject='Synthetic';FromName='A';FromEmail='a@example.test';UserDismissed=$false;IsSensitive=$false;InternetMessageId=''}
     function Invoke-PacketRatInboxAnalysis { param($Profile,$Provider,$MaxEmails,$DaysBack,$Root,$Classification)
         [pscustomobject]@{Success=$true;AnalyzedCount=7;Provider='COM';Report='r';Summary=[pscustomobject]@{Emails=@($mail)};ReportItems=@([pscustomobject]@{Key="id:e1"});MustReply=@();ResponseProtocol='X'} }
@@ -73,7 +75,7 @@ try{
     function Set-PacketRatMailCategory { param($EntryID,$Category) }
     function Move-PacketRatMailToFolder { param($EntryID,$FolderName) }
     function Move-PacketRatMailToArchive { param($EntryID) }
-    $call={param($route,$data) Invoke-PacketRatApi -Route $route -Data ([pscustomobject]$data) -Root $tmp}
+    $call={param($route,$data) Invoke-ApiAt $tmp $route ([pscustomobject]$data)}
     $null=& $call '/api/analyze' @{provider='COM';maxEmails=40;daysBack=14;profile='AiEndpoint'}
     $null=& $call '/api/report/generate' @{mode='Brief'}
     $null=& $call '/api/draft' @{key='id:e1'}
@@ -96,7 +98,7 @@ try{
     # --- CLI parity --------------------------------------------------------------------------------------------------
     foreach($n in 'stats show','stats export','stats reset'){ Assert-Usage ($null -ne (Find-PacketRatCommand $n)) "command '$n' exists" }
     Assert-Usage ((Find-PacketRatCommand 'stats reset').Destructive) 'stats reset needs --yes'
-    $cli=Join-Path $Root 'Invoke-PacketRatCli.ps1'
+    $cli=Join-Path $PSScriptRoot '..' | Join-Path -ChildPath 'Invoke-PacketRatCli.ps1'
     $ErrorActionPreference='Continue'
     $out=& powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass -File $cli stats --dry-run --json 2>$null
     $ErrorActionPreference='Stop'
