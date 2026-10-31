@@ -33,7 +33,7 @@ foreach($option in @($Rest)){
         default {if($option){Write-Warning "Ignoring unknown option $option"}}
     }
 }
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
+foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatRouter','PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -45,6 +45,12 @@ if(Test-Path $envFile){
             [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2].Trim().Trim('"').Trim("'"),'Process')
         }
     }
+}
+# Fairlead (opt-in router): make sure it is running. Headless starts (-NoBrowser) and demo mode never show a dialog or start it.
+if(-not $Demo -and (Test-PacketRatFairleadEnabled)){
+    $fl=Ensure-PacketRatFairlead -Root $Root -Interactive:([Environment]::UserInteractive -and -not $NoBrowser)
+    $flColor=if(@('Failed','NotFound') -contains $fl.State){'Yellow'}else{'DarkGray'}
+    if($fl.State -ne 'Skipped'){Write-Host ('Fairlead: '+$fl.Message) -ForegroundColor $flColor}
 }
 # One instance: a running server holds the store and Outlook session; offer to replace it.
 $running=@(Get-PacketRatProcesses -Root $Root)
