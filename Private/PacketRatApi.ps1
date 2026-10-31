@@ -274,6 +274,10 @@ function Invoke-PacketRatApi {
           $null=Add-PacketRatUsage -Action markedRead -Root $Root
           return @{ok=$true;store=$store}
       }
+      '/api/item/handoff' {
+          $handoff=New-PacketRatHalyardHandoff -Store $store -Key ([string]$Data.key) -Root $Root
+          return @{ok=$true;handoff=$handoff.Document;file=$handoff.File;note='Written locally only. A person reviews it before Halyard uses it.'}
+      }
       '/api/stats' { return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
       '/api/stats/export' { return @{ok=$true;usage=(Get-PacketRatUsageExport -Root $Root)} }
       '/api/stats/reset' { Reset-PacketRatUsage -Root $Root; return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }

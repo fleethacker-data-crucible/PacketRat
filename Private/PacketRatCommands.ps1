@@ -103,6 +103,9 @@ $script:PacketRatCommands = @(
         Inputs = @(
             (New-PacketRatInput 'key' 'key' 'string' $true 'The action key.')
             (New-PacketRatInput 'unread' 'unread' 'bool' $false 'Pass true to mark unread instead.')) }
+    [pscustomobject]@{ Name = 'packetrat item handoff'; Route = '/api/item/handoff'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'Write a tracked action as a Halyard backlog item candidate (Logs\handoff\halyard-<ref>.json): subject, recommended action and urgency only, no sender, body or Outlook id. Nothing is sent; see docs\HALYARD-HANDOFF.md.'
+        Inputs = @((New-PacketRatInput 'key' 'key' 'string' $true 'The action key (a tracked, not dismissed action).')) }
     [pscustomobject]@{ Name = 'packetrat stats show'; Route = '/api/stats'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Estimated minutes saved: counts of actions PacketRat performed or prepared times the minutes assumed in Config\minutes-saved.json. An estimate, not a measurement and not a score for anyone. "stats" alone does the same.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat stats export'; Route = '/api/stats/export'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
