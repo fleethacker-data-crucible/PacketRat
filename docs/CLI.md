@@ -37,6 +37,9 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `stats show` (or just `stats`) | Estimated minutes saved: a total and a per-action breakdown. An estimate, not a measurement and not a score for anyone. | |
 | `stats export` | The raw action counts as JSON (`packetrat.usage-counts/1`) for another tool; add `--out file.json` to write it. Format: [COUNTS-EXPORT.md](COUNTS-EXPORT.md). | |
 | `stats reset` | Zero the counters and start a new count. | needs `--yes` |
+| `burden show` | The measured-burden record: per task, the baseline entered once and the times of later runs, with mean, median and change. A record only; see [BURDEN-RECORD.md](BURDEN-RECORD.md). | |
+| `burden baseline` | Enter a task's before time in seconds. Entered once; a second entry is refused unless `--replace true`. | `--task` `--seconds` (both required), `--replace` |
+| `burden record` | Record one timed run of a task, in seconds. | `--task` `--seconds` (both required) |
 | `log show` | The newest lines of the tamper-evident action log (route, outcome, a short hash of the item key; never mail content) and the chain head. See [ACTION-LOG.md](ACTION-LOG.md). | |
 | `log verify` | Check the action log hash chain. Exits 1 and names the first broken line if the log was edited, reordered or cut in the middle. | |
 | `assist brief` | A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice). | |

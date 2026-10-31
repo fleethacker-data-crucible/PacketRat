@@ -84,3 +84,4 @@ jobs:
           .\tests\Test-PacketRatRouter.ps1
           .\tests\Test-PacketRatAssistant.ps1
           .\tests\Test-PacketRatVoiceAssets.ps1
+          .\tests\Test-PacketRatBurden.ps1

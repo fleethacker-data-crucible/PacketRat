@@ -11,6 +11,7 @@ $script:PacketRatActionLogFile = 'packetrat-actions.jsonl'
 $script:PacketRatActionLogGenesis = ('0' * 64)
 # Routes that do something (change data, call the AI, open Outlook, change credentials). Read-only routes are not logged.
 $script:PacketRatLoggedRoutes = @(
+    '/api/burden/baseline', '/api/burden/record',
     '/api/analyze', '/api/cancel', '/api/report/generate', '/api/report/track', '/api/status', '/api/priority', '/api/priority/reset',
     '/api/rules', '/api/dismiss', '/api/restore', '/api/open', '/api/draft', '/api/open-draft', '/api/item/archive', '/api/item/move',
     '/api/item/categorize', '/api/item/mark-read', '/api/item/handoff', '/api/stats/reset', '/api/assist/ask', '/api/credentials', '/api/credentials/check',

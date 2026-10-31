@@ -43,6 +43,9 @@ function Invoke-PacketRatApiCore {
         return @{ok=$true;stopping=$true}
     }
     if($Route -eq '/api/health') {return @{ok=$true;service='PacketRat';mode='local';version='2.0'}}
+    if($Route -eq '/api/burden') {return @{ok=$true;burden=(Get-PacketRatBurdenView -Root $Root)}}
+    if($Route -eq '/api/burden/baseline') {return @{ok=$true;burden=(Set-PacketRatBurdenBaseline -Task ([string]$Data.task) -Seconds ([string]$Data.seconds) -Replace:([bool]$Data.replace) -Root $Root)}}
+    if($Route -eq '/api/burden/record') {return @{ok=$true;burden=(Add-PacketRatBurdenRun -Task ([string]$Data.task) -Seconds ([string]$Data.seconds) -Root $Root)}}
     if($Route -eq '/api/log') {return @{ok=$true;log=(Get-PacketRatActionLogView -Root $Root)}}
     if($Route -eq '/api/log/verify') {$v=Test-PacketRatActionLog -Root $Root;return @{ok=[bool]$v.Valid;verify=$v}}
     if($Route -eq '/api/commands') {return @{ok=$true;schema='packetrat.commands/1';commands=@(Get-PacketRatCommandList)}}
