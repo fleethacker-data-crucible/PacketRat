@@ -26,6 +26,7 @@ jobs:
           node tests/test_intelligence.js
           node tests/test_voice.js
           node tests/test_voice_input.js
+          node tests/test_voice_piper.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install development browser dependencies
         run: |

@@ -20,3 +20,5 @@ Config/*.local
 Thumbs.db
 .DS_Store
 __pycache__/
+
+Web/vendor/voice/

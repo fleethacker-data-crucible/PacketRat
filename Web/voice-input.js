@@ -24,6 +24,12 @@
     return { woke: false, standDown: false, command: '' };
   }
 
+  // Spoken shortcuts that need no AI: "brief me", "status report", ... -> the local briefing.
+  function intent(text) {
+    var n = normalize(text);
+    return /^(brief me|briefing|give me a briefing|status report|report|read my queue|read the queue|what needs me|what do i have)$/.test(n) ? 'brief' : null;
+  }
+
   function downsample(input, inRate, outRate) {
     outRate = outRate || 16000;
     if (!input || !input.length) return new Float32Array(0);
@@ -65,7 +71,7 @@
     };
   }
 
-  var api = { normalize: normalize, matchWake: matchWake, downsample: downsample, createVad: createVad, WAKE: WAKE.slice() };
+  var api = { normalize: normalize, intent: intent, matchWake: matchWake, downsample: downsample, createVad: createVad, WAKE: WAKE.slice() };
 
   // ---- Browser controller (not exercised by the node tests) ----
   if (typeof root.document !== 'undefined') {
@@ -115,11 +121,13 @@
     function handleUtterance(audio) {
       busy = true;
       transcribe(audio).then(function (text) {
+        if (api.onHeard) api.onHeard(text);
         var m = matchWake(text);
         if (m.standDown) { api.setHail(false); if (api.onStandDown) api.onStandDown(); }
         else if (m.woke && hail) hail(m.command);
       }).catch(function (e) { if (api.onError) api.onError(e); }).then(function () { busy = false; });
     }
+    api.preload = function () { return loadWorker(); };
     api.startTalk = function () {
       if (talking) return Promise.resolve();
       talking = true; talkChunks = [];
