@@ -154,7 +154,7 @@ The HTTP service binds to local loopback only. POST requests require same-origin
 
 ## Privacy and data
 
-PacketRat reads mail through Outlook on this PC; the action queue, rules and logs stay in `Logs/`. When an AI endpoint is configured, the sender, subject and message text of the mail being triaged or drafted from are sent to it. Use only an endpoint your organization has approved for email content; that provider's terms apply. Demo mode sends nothing. PacketRat sends no usage data anywhere.
+PacketRat reads mail through Outlook on this PC, or from `.eml`/`.msg` files in a folder you choose (Files provider, no Outlook needed); the action queue, rules, logs and the minutes-saved counts (an estimate, see `Config/minutes-saved.json`) stay in `Logs/`. When an AI endpoint is configured, the sender, subject and message text of the mail being triaged or drafted from are sent to it. Use only an endpoint your organization has approved for email content; that provider's terms apply. Demo mode sends nothing. PacketRat sends no usage data anywhere.
 
 ## Project layout
 
