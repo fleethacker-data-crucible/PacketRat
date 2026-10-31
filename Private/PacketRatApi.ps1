@@ -44,6 +44,7 @@ function Invoke-PacketRatApi {
     }
     if($Route -eq '/api/health') {return @{ok=$true;service='PacketRat';mode='local';version='2.0'}}
     if($Route -eq '/api/commands') {return @{ok=$true;schema='packetrat.commands/1';commands=@(Get-PacketRatCommandList)}}
+    if($Route -eq '/api/authority') {return @{ok=$true;authority=(Get-PacketRatAuthority)}}
     if($Route -eq '/api/credentials/status') {return @{ok=$true;credentials=(Get-PacketRatCredentialStatus)}}
     $store=Get-PacketRatStore -Root $Root
     switch($Route){

@@ -19,6 +19,8 @@ function New-PacketRatInput([string]$Flag, [string]$Field, [string]$Type, [bool]
 $script:PacketRatCommands = @(
     [pscustomobject]@{ Name = 'packetrat app health'; Route = '/api/health'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Check that PacketRat answers.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat app authority'; Route = '/api/authority'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'The human-authority statement: where PacketRat waits for approval, what it never does, how to monitor it and how to stop it (docs\HUMAN-AUTHORITY.md).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat queue show'; Route = '/api/state'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'The action queue, dismissals, rules, credential status and the last report.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat inbox analyze'; Route = '/api/analyze'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
@@ -143,6 +145,33 @@ function Get-PacketRatCommandList {
             needsAnalysis = [bool]$c.NeedsAnalysis
             inputs        = @($c.Inputs | ForEach-Object { [ordered]@{ flag = '--' + $_.Flag; field = $_.Field; type = $_.Type; required = [bool]$_.Required; description = $_.Description; allowed = @($_.Allowed) } })
         }
+    }
+}
+
+# The human-authority statement (docs\HUMAN-AUTHORITY.md). needsYes is read from the registry, so it cannot drift from it;
+# tests\Test-PacketRatAuthority.ps1 keeps the document in step with the same list.
+function Get-PacketRatAuthority {
+    $needsYes = @($script:PacketRatCommands | Where-Object { $_.Destructive } | ForEach-Object { $_.Name -replace '^packetrat ', '' })
+    return [ordered]@{
+        schema         = 'packetrat.authority/1'
+        statement      = 'PacketRat reads mail and proposes work. A person decides: it changes mail or saved data only on a named command, and it never sends or deletes mail.'
+        document       = 'docs/HUMAN-AUTHORITY.md'
+        needsYes       = $needsYes
+        approvalPoints = @(
+            'Commands that overwrite or move something need --yes: ' + ($needsYes -join ', ') + '.'
+            'Replies are drafts for review; PacketRat opens the Outlook reply and the person sends it.'
+            'AI proposals from assist ask are suggestions with the exact command to confirm; nothing runs until the person runs it.'
+            'Analysis, reports and drafts run only when a person starts them; nothing runs in the background.'
+        )
+        neverDoes      = @(
+            'Send mail.'
+            'Delete mail (archive and move keep the message in Outlook).'
+            'Run an AI proposal by itself.'
+            'Accept a token on a command line or return one from an API.'
+            'Send usage data anywhere; message text goes only to the AI endpoint the person configured, when they run an analysis, report or draft.'
+        )
+        monitor        = @('queue show', 'stats show', 'credentials status', 'Logs/packetrat.log', '--dry-run on any command')
+        stop           = @('Close the browser tab or choose End session', 'Stop-PacketRat.ps1', 'inbox cancel', 'Ctrl+C in a console run')
     }
 }
 
