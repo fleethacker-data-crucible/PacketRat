@@ -66,7 +66,20 @@ def run():
                 assert page.locator('.sidebar [data-view="triage"] svg.fl-icon').count() == 1, 'Lucide nav icons rendered'
                 assert page.locator('#engineWord').inner_text() == 'Demo'
                 page.screenshot(path=str(Path(tempfile.gettempdir())/'packetrat-overview-smoke.png'),full_page=True)
-                page.locator('#priorityList .item-title').first.click()
+                # Each overview signal has one native primary action: no row role, tab stop or nested button semantics.
+                signals = page.locator('#priorityList .signal-item')
+                assert signals.count() >= 1
+                for i in range(signals.count()):
+                    row = signals.nth(i)
+                    assert row.get_attribute('role') is None and row.get_attribute('tabindex') is None, 'signal row is not a button or a tab stop'
+                    assert row.locator('button, [role="button"], a[href], [tabindex]').count() == 1, 'one interactive element per signal'
+                    assert row.locator('button.item-title').get_attribute('aria-label').startswith('Open '), 'the one button is named for opening the message'
+                assert page.locator('#priorityList [role="button"]').count() == 0, 'no nested button semantics in the overview'
+                page.locator('#priorityList .item-title').first.focus()
+                page.keyboard.press('Enter')
+                page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode')")
+                page.evaluate("document.getElementById('notice').textContent = ''")
+                page.locator('#priorityList .signal-item small').first.click()   # the rest of the row still opens it for the mouse
                 page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode')")
                 page.locator('[data-metric="high"]').click()
                 assert page.locator('#triage').is_visible()
