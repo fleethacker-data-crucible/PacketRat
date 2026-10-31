@@ -277,6 +277,11 @@ function Invoke-PacketRatApi {
       '/api/stats/export' { return @{ok=$true;usage=(Get-PacketRatUsageExport -Root $Root)} }
       '/api/stats/reset' { Reset-PacketRatUsage -Root $Root; return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
       '/api/assist/brief' { return @{ok=$true;briefing=(Get-PacketRatSpokenBriefing -Store $store)} }
+      '/api/assist/ask' {
+          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
+          $answer=Invoke-PacketRatAssistAsk -Store $store -Question ([string]$Data.question) -Profile $profile
+          return @{ok=$true;say=$answer.Say;proposals=@($answer.Proposals);profile=$answer.Profile;model=$answer.Model;note='Proposals are suggestions only; nothing was changed.'}
+      }
       default {throw 'Unknown API route'}
     }
 }
