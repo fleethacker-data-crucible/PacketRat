@@ -6,6 +6,8 @@ foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','Pa
     . (Join-Path $Root "Private\$name.ps1")
 }
 function Assert-Bridge([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Bridge test failed: '+$Message)}}
+# Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
+function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
 function New-Item1([string]$Key,[string]$Urgency,[string]$Subject,[string]$From,[string]$Status='open'){[pscustomobject]@{Key=$Key;Urgency=$Urgency;Subject=$Subject;From=$From;Status=$Status}}
 
 $empty=Get-PacketRatSpokenBriefing -Store ([pscustomobject]@{Checklist=@()})
@@ -32,7 +34,7 @@ $tmp=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-bridge-'+[guid]::NewGuid()
 [void](New-Item -ItemType Directory $tmp)
 try{
     Save-PacketRatStore -Store (Get-PacketRatStore -Root $tmp) -Root $tmp
-    $r=Invoke-PacketRatApi -Route '/api/assist/brief' -Data $null -Root $tmp
+    $r=Invoke-ApiAt $tmp '/api/assist/brief' $null
     Assert-Bridge ($r.ok -and $r.briefing.say -match 'all quiet') 'the API route returns the briefing'
 }finally{Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue}
 # --- assist ask: strict envelope, allowlisted proposals, nothing is run -----------------------------------------------------
@@ -78,7 +80,7 @@ $tmp2=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-bridge-'+[guid]::NewGuid(
 try{
     Save-PacketRatStore -Store (Get-PacketRatStore -Root $tmp2) -Root $tmp2
     $script:ChatReply=New-Env '{"version":"PACKETRAT_ASSIST_V1","say":"All quiet.","proposals":[]}'
-    $r=Invoke-PacketRatApi -Route '/api/assist/ask' -Data ([pscustomobject]@{question='Anything?';profile='AiEndpoint'}) -Root $tmp2
+    $r=Invoke-ApiAt $tmp2 '/api/assist/ask' ([pscustomobject]@{question='Anything?';profile='AiEndpoint'})
     Assert-Bridge ($r.ok -and $r.say -eq 'All quiet.' -and $r.note -match 'nothing was changed') 'the API route returns the answer'
 }finally{Remove-Item -LiteralPath $tmp2 -Recurse -Force -ErrorAction SilentlyContinue}
 'Bridge tests passed.'
