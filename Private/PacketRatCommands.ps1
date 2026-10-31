@@ -107,6 +107,8 @@ $script:PacketRatCommands = @(
         Summary = 'The raw action counts as JSON (schema packetrat.usage-counts/1) for another tool; add --out to write a file.'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat stats reset'; Route = '/api/stats/reset'; Method = 'POST'; Destructive = $true; NeedsAnalysis = $false
         Summary = 'Zero the minutes-saved counters and start a new count.'; Inputs = @() }
+    [pscustomobject]@{ Name = 'packetrat assist brief'; Route = '/api/assist/brief'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
+        Summary = 'A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials status'; Route = '/api/credentials/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Which AI credential source is set (tokens are never shown).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials set'; Route = '/api/credentials'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
