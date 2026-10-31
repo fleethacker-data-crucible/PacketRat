@@ -18,7 +18,7 @@ A sender merely using **your organization domain** does *not* imply action is re
 
 **Organization domain:** set `PACKETRAT_ORG_DOMAIN` in `Config/packetrat.env` to your mail domain (or several, comma-separated; a domain suffix also works). Rules 2 and **Any sender from your organization domain** never match while it is unset. Rules saved under the former rule match names are read and saved under the new names.
 
-**Direct recipient detection:** In Outlook COM mode, the tool checks the To field against the current Outlook user identity (SMTP address or display name). You can specify `PACKETRAT_USER_EMAIL` if your organization uses an alias the resolver cannot identify. In Graph mode, the tool uses the authorized signed-in account or that explicitly configured email and checks `toRecipients`. If PacketRat cannot verify direct delivery, `IsDirect` is false; it should not guess and promote a message. CC-only and group traffic do not automatically count as direct.
+**Direct recipient detection:** In Outlook COM mode, the tool checks the To field against the current Outlook user identity (SMTP address or display name). You can specify `PACKETRAT_USER_EMAIL` if your organization uses an alias the resolver cannot identify. In Files mode (exported `.eml`/`.msg`), the tool compares the To addresses in each file with `PACKETRAT_USER_EMAIL`; without it, nothing is marked direct. In Graph mode, the tool uses the authorized signed-in account or that explicitly configured email and checks `toRecipients`. If PacketRat cannot verify direct delivery, `IsDirect` is false; it should not guess and promote a message. CC-only and group traffic do not automatically count as direct.
 
 ## Rules in the GUI
 

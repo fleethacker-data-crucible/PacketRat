@@ -21,7 +21,7 @@ Requirement words: **MUST** is required to call an app aligned. **SHOULD** is ex
 | Shellback | Shellback | Synapse | Workforce capability discovery | React 19 + Tailwind 4 | 8771 |
 | SnapShackle | SnapShackle | CutterMk, Lasso, SnipHero | Screenshot and annotation studio | Plain HTML/JS | 8768 |
 | Gangplank | Gangplank | Keystone | Git-free development workspace | Plain HTML/JS | 8769 |
-| PacketRat | PacketRat | MailHawk | Outlook triage queue | Plain HTML/JS | 8766 |
+| PacketRat | PacketRat | (previous name) | Outlook triage queue | Plain HTML/JS | 8766 |
 | Eight Bells | Eight-Bells | LogHawk | Watchstanding log intelligence | Plain JS | 8774 |
 | Capstan | Capstan | — | Screen recorder and video editor | React | 8772 |
 | Bowerbird | bowerbird | — | File intelligence and renaming | Plain HTML/JS | 8767 |
