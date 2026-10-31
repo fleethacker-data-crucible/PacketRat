@@ -11,6 +11,39 @@ function Assert-Usage([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Usage
 # Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
 function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
 
+# The counts export is documented in docs\COUNTS-EXPORT.md; the real export is checked against that page (fields, types, actions).
+$exportDoc=[IO.File]::ReadAllText((Join-Path $Root 'docs\COUNTS-EXPORT.md'))
+function Get-DocTableRows([string]$Heading){
+    $m=[regex]::Match($exportDoc,'(?ms)^## '+[regex]::Escape($Heading)+'\s*$(.*?)(?=^## |\z)')
+    Assert-Usage $m.Success "docs\COUNTS-EXPORT.md has a '$Heading' section"
+    @([regex]::Matches($m.Groups[1].Value,'(?m)^\| `([A-Za-z]+)` \| (.+?) \|\s*$') | ForEach-Object { [pscustomobject]@{Name=$_.Groups[1].Value;Text=$_.Groups[2].Value} })
+}
+function Assert-ExportMatchesDoc($Export,[string]$Where){
+    $fields=Get-DocTableRows 'Fields'
+    Assert-Usage ($fields.Count -eq 5) 'the documented fields are listed'
+    $keys=@($Export.Keys)
+    Assert-Usage ((@($keys | Sort-Object) -join ',') -eq (@($fields.Name | Sort-Object) -join ',')) "$Where has exactly the documented fields"
+    foreach($f in $fields){
+        $type=($f.Text -split ' \| ')[0]
+        $v=$Export[$f.Name]
+        $ok=switch($type){ 'string'{$v -is [string]} 'boolean'{$v -is [bool]} 'object'{$v -is [System.Collections.IDictionary] -or $v -is [pscustomobject]} default{$false} }
+        Assert-Usage $ok "$Where field '$($f.Name)' is documented as $type"
+    }
+    Assert-Usage ($Export.schema -eq 'packetrat.usage-counts/1' -and $Export.estimate -eq $true) "$Where carries the documented schema and estimate flag"
+    foreach($t in 'since','exportedAt'){
+        $d=[datetimeoffset]::MinValue
+        Assert-Usage (($t -eq 'since' -and $Export.since -eq '') -or [datetimeoffset]::TryParse([string]$Export[$t],[ref]$d)) "$Where $t is an ISO 8601 time"
+    }
+    $actions=Get-DocTableRows 'Counts'
+    $names=@($Export.counts.Keys); if(-not $names){$names=@($Export.counts.PSObject.Properties.Name)}
+    Assert-Usage ((@($names | Sort-Object) -join ',') -eq (@($actions.Name | Sort-Object) -join ',')) "$Where counts hold exactly the documented actions"
+    foreach($a in $actions){
+        Assert-Usage ($script:PacketRatUsageActions[$a.Name] -eq $a.Text) "documented label for '$($a.Name)' matches the app"
+        $n=$Export.counts[$a.Name]; if($null -eq $n){$n=$Export.counts.PSObject.Properties[$a.Name].Value}
+        Assert-Usage (($n -is [int]) -and $n -ge 0) "$Where count '$($a.Name)' is a whole number of 0 or more"
+    }
+}
+
 $tmp=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-usage-'+[guid]::NewGuid().ToString('N'))
 [void](New-Item -ItemType Directory -Path (Join-Path $tmp 'Config') -Force)
 try{
@@ -59,6 +92,16 @@ try{
     Assert-Usage ($x.schema -eq 'packetrat.usage-counts/1' -and $x.counts.triaged -eq 12 -and $x.counts.markedRead -eq 4) 'export carries the raw counts'
     Assert-Usage ($json -notmatch 'minutes' -and $json -notmatch '@') 'export holds no minutes and no message data'
 
+    # --- The export matches the documented format ------------------------------------------------------------------------
+    Assert-ExportMatchesDoc $x 'the export'
+    $ex=[regex]::Match($exportDoc,'(?s)```json\r?\n(.*?)```').Groups[1].Value | ConvertFrom-Json
+    Assert-Usage ($null -ne $ex.counts) 'the documented example parses'
+    Assert-ExportMatchesDoc ([ordered]@{schema=$ex.schema;estimate=$ex.estimate;since=$ex.since;exportedAt=$ex.exportedAt;counts=$ex.counts}) 'the documented example'
+    $fresh=Join-Path $tmp 'fresh'; [void](New-Item -ItemType Directory -Path $fresh -Force)
+    $x0=Get-PacketRatUsageExport -Root $fresh
+    Assert-Usage ($x0.since -eq '') 'an export before anything is counted has an empty since'
+    Assert-ExportMatchesDoc $x0 'a fresh-store export'
+
     # --- Corrupt counts do not break stats -------------------------------------------------------------------------------
     $store=Get-PacketRatStore -Root $tmp; $store.Usage.Counts.triaged=-7; Save-PacketRatStore -Store $store -Root $tmp
     Assert-Usage ((Get-PacketRatUsageStats -Root $tmp).actions[0].count -eq 0) 'a negative stored count reads as zero'
@@ -87,6 +130,7 @@ try{
     Assert-Usage ($c.triaged -eq 7) 'analysis counts the messages triaged'
     Assert-Usage ($c.reports -eq 2) 'the analysis report and a generated brief are both counted'
     Assert-Usage ($c.drafts -eq 1 -and $c.markedRead -eq 1 -and $c.categorized -eq 1 -and $c.moved -eq 1 -and $c.archived -eq 1) 'draft and each inbox action are counted once'
+    Assert-ExportMatchesDoc (& $call '/api/stats/export' @{}).usage 'the API route'
     $failed=$false
     try{ $null=& $call '/api/item/mark-read' @{key='id:unknown'} }catch{ $failed=$true }
     Assert-Usage ($failed -and (& $call '/api/stats/export' @{}).usage.counts.markedRead -eq 1) 'an action that fails is not counted'
