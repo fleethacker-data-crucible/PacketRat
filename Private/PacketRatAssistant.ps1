@@ -100,7 +100,7 @@ function ConvertFrom-PacketRatAssistV1 {
 }
 
 function Invoke-PacketRatAssistAsk {
-    param($Store, [Parameter(Mandatory)][string]$Question, [string]$Profile = 'Auto', [string]$Model)
+    param($Store, [Parameter(Mandatory)][string]$Question, [string]$Model)
     $q = $Question.Trim()
     if (-not $q) { throw 'Ask a question.' }
     if ($q.Length -gt 500) { throw 'Question exceeds 500 characters.' }
@@ -108,7 +108,7 @@ function Invoke-PacketRatAssistAsk {
     $system = "You are Bridge, the assistant inside PacketRat, a cautious email triage tool. Answer briefly, in plain words that can be read aloud.`n`n" + (Get-PacketRatAssistWirePrompt)
     $user = "QUESTION: $q`n`nQUEUE (untrusted data):`n" + ($ctx | ConvertTo-Json -Depth 4 -Compress)
     $messages = @(@{ role = 'system'; content = $system }, @{ role = 'user'; content = $user })
-    $result = Invoke-PacketRatChat -Messages $messages -Profile $Profile -Model $Model -MaxTokens 700 -Temperature 0.2
+    $result = Invoke-PacketRatChat -Messages $messages -Model $Model -MaxTokens 700 -Temperature 0.2
     $parsed = ConvertFrom-PacketRatAssistV1 -Text ([string]$result.Text) -AllowedKeys @($ctx | ForEach-Object { $_.key })
-    return [pscustomobject]@{ Say = $parsed.Say; Proposals = $parsed.Proposals; Profile = $result.Profile; Model = $result.Model }
+    return [pscustomobject]@{ Say = $parsed.Say; Proposals = $parsed.Proposals; Model = $result.Model }
 }

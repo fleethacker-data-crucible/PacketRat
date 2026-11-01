@@ -3,7 +3,7 @@
 # no real model, no credentials, nothing leaves this PC.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatLlm','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+foreach($name in @('PacketRatLogging','PacketRatLifecycle','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatLlm','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 function Assert-Stream([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Streaming test failed: '+$Message)}}
@@ -95,30 +95,31 @@ function Stop-FakeEndpoint($Ep){
     try{$Ep.PS.Dispose()}catch{}
 }
 
-$envNames=@('LLM_URL','LLM_MODEL','LLM_TOKEN','PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_LLM_STREAM')+@($script:PacketRatLlmTokenEnv.AiEndpoint)
+$envNames=@('PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_MODEL','PACKETRAT_FAIRLEAD_PRIVACY','PACKETRAT_LLM_STREAM')
 $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
 $msgs=@(@{role='user';content='Say something synthetic.'})
+Set-PacketRatCredentialReader { param([string]$Target) 'fl-synthetic-key' }
 try{
     # Streaming end to end, including a character split across network writes.
     $ep=Start-FakeEndpoint 'normal'
     try{
-        $env:LLM_URL=$ep.Url
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
         $pieces=New-Object System.Collections.ArrayList
-        $r=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -Stream -OnToken { param($t) [void]$pieces.Add($t) } -TimeoutSec 20
+        $r=Invoke-PacketRatChat -Messages $msgs -Stream -OnToken { param($t) [void]$pieces.Add($t) } -TimeoutSec 20
         Assert-Stream ($r.Text -eq "Stream costs 5 $([char]0x20AC)") "streamed text is joined and the split character survives (got '$($r.Text)')"
         Assert-Stream ($r.Streamed) 'result is marked streamed'
         Assert-Stream (@($pieces).Count -ge 2) 'tokens arrived piece by piece'
         $sent=$ep.Shared['body'] | ConvertFrom-Json
         Assert-Stream ($sent.stream -eq $true) 'the request asked for stream=true'
         Assert-Stream ($ep.Shared['head'] -match '(?im)^accept:\s*text/event-stream') 'the request accepts an event stream'
-        Assert-Stream ($ep.Shared['head'] -notmatch '(?im)^authorization:') 'no Authorization header without a token (loopback)'
+        Assert-Stream ($ep.Shared['head'] -match '(?im)^authorization:\s*Bearer fl-synthetic-key' -and $ep.Shared['head'] -match '(?im)^x-fairlead-label:\s*PacketRat') 'the Fairlead key and the app label are sent on a streamed call'
     }finally{ Stop-FakeEndpoint $ep }
 
     # The environment switch turns streaming on without -Stream.
     $ep=Start-FakeEndpoint 'normal'
     try{
-        $env:LLM_URL=$ep.Url; $env:PACKETRAT_LLM_STREAM='1'
-        $r=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -TimeoutSec 20
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url; $env:PACKETRAT_LLM_STREAM='1'
+        $r=Invoke-PacketRatChat -Messages $msgs -TimeoutSec 20
         Assert-Stream ($r.Streamed -and $r.Text.StartsWith('Stream costs')) 'PACKETRAT_LLM_STREAM=1 streams'
         $env:PACKETRAT_LLM_STREAM=$null
     }finally{ Stop-FakeEndpoint $ep }
@@ -126,10 +127,10 @@ try{
     # Cancel by callback while the endpoint goes quiet.
     $ep=Start-FakeEndpoint 'slow'
     try{
-        $env:LLM_URL=$ep.Url
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
         $script:got=0
         $clock=[Diagnostics.Stopwatch]::StartNew()
-        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -Stream -TimeoutSec 30 -OnToken { param($t) $script:got++ } -ShouldCancel { $script:got -ge 1 } } 'cancelled' 'a stalled generation is cancelled from the callback'
+        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 30 -OnToken { param($t) $script:got++ } -ShouldCancel { $script:got -ge 1 } } 'cancelled' 'a stalled generation is cancelled from the callback'
         Assert-Stream ($clock.Elapsed.TotalSeconds -lt 8) 'cancel returns promptly, not after the 20 s stall'
         Assert-Stream ($script:got -eq 1) 'the text before the cancel was delivered'
     }finally{ Stop-FakeEndpoint $ep }
@@ -137,9 +138,9 @@ try{
     # Cancel by flag file (what "inbox cancel" writes), raised from the token callback.
     $ep=Start-FakeEndpoint 'slow'
     try{
-        $env:LLM_URL=$ep.Url
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
         Clear-PacketRatCancel
-        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -Stream -TimeoutSec 30 -OnToken { param($t) $null=Request-PacketRatCancel } } 'cancelled' 'the cancel flag file stops a running generation'
+        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 30 -OnToken { param($t) $null=Request-PacketRatCancel } } 'cancelled' 'the cancel flag file stops a running generation'
         Assert-Stream (Test-PacketRatCancelRequested) 'the flag stays until the next run clears it'
         Clear-PacketRatCancel
         Assert-Stream (-not (Test-PacketRatCancelRequested)) 'Clear-PacketRatCancel removes it'
@@ -148,46 +149,34 @@ try{
     # A stale flag does not kill the next run.
     $ep=Start-FakeEndpoint 'normal'
     try{
-        $env:LLM_URL=$ep.Url
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
         $null=Request-PacketRatCancel
-        $r=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -Stream -TimeoutSec 20
+        $r=Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 20
         Assert-Stream ($r.Text.StartsWith('Stream costs')) 'a flag left from an earlier run is cleared at the start of a new one'
     }finally{ Stop-FakeEndpoint $ep; Clear-PacketRatCancel }
 
     # Cancel while waiting for the first byte.
     $ep=Start-FakeEndpoint 'hang'
     try{
-        $env:LLM_URL=$ep.Url
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
         $script:polls=0
         $clock=[Diagnostics.Stopwatch]::StartNew()
-        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -Stream -TimeoutSec 30 -ShouldCancel { $script:polls++; $script:polls -ge 3 } } 'cancelled' 'cancel works before the endpoint answers'
+        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 30 -ShouldCancel { $script:polls++; $script:polls -ge 3 } } 'cancelled' 'cancel works before the endpoint answers'
         Assert-Stream ($clock.Elapsed.TotalSeconds -lt 8) 'cancel while waiting returns promptly'
     }finally{ Stop-FakeEndpoint $ep }
 
     # An HTTP error is explained.
     $ep=Start-FakeEndpoint 'error'
     try{
-        $env:LLM_URL=$ep.Url
-        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint -Stream -TimeoutSec 20 } 'refused the request \(HTTP 500\)' 'an HTTP 500 is reported with its status'
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
+        Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 20 } 'refused the request \(HTTP 500\)' 'an HTTP 500 is reported with its status'
     }finally{ Stop-FakeEndpoint $ep }
-
-    # Grok / serving-endpoints keep the non-streaming shape even when asked to stream.
-    $env:PACKETRAT_GROK_URL='https://databricks.example.org/serving-endpoints/x/invocations'
-    $global:grokBody=$null
-    function global:Invoke-RestMethod { param($Uri,$Method,$Headers,$Body,$ContentType,$TimeoutSec) $global:grokBody=[Text.Encoding]::UTF8.GetString($Body); [pscustomobject]@{choices=@([pscustomobject]@{message=[pscustomobject]@{content='ok'}})} }
-    $env:DATABRICKS_TOKEN='synthetic-test-token'
-    $env:LLM_URL=$null
-    try{
-        $r=Invoke-PacketRatChat -Messages $msgs -Profile Grok -Stream
-        Assert-Stream ($r.Text -eq 'ok' -and -not $r.Streamed) 'Grok profile falls back to the normal call'
-        Assert-Stream ($global:grokBody -notmatch '"stream"') 'the Grok payload never carries stream'
-    }finally{ Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue; $env:DATABRICKS_TOKEN=$null; $env:PACKETRAT_GROK_URL=$null }
 
     # Default stays non-streaming with stream=false.
     $global:plainBody=$null
     function global:Invoke-RestMethod { param($Uri,$Method,$Headers,$Body,$ContentType,$TimeoutSec) $global:plainBody=[Text.Encoding]::UTF8.GetString($Body); [pscustomobject]@{choices=@([pscustomobject]@{message=[pscustomobject]@{content='ok'}})} }
     try{
-        $null=Invoke-PacketRatChat -Messages $msgs -Profile AiEndpoint
+        $null=Invoke-PacketRatChat -Messages $msgs
         Assert-Stream (($global:plainBody | ConvertFrom-Json).stream -eq $false) 'streaming is off by default (stream=false)'
     }finally{ Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
 }finally{

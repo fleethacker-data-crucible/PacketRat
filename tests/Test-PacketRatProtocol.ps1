@@ -64,9 +64,9 @@ Assert-Protocol ($joined.Contains($signature.Substring($signature.IndexOf('<div 
 Assert-Protocol (([regex]::Matches($joined,'id="signature"').Count) -eq 1) 'Signature not duplicated'
 Assert-Protocol ($joined.IndexOf('Review &lt;this&gt;') -lt $joined.IndexOf('Authorized Outlook signature')) 'Message before Outlook signature'
 function Invoke-PacketRatChat {
-    param($Messages,[string]$Profile,[string]$Model,[int]$MaxTokens,[double]$Temperature)
+    param($Messages,[string]$Model,[int]$MaxTokens,[double]$Temperature)
     if($Messages[0].content -notmatch 'DRAFT V1'){throw 'Missing protocol instruction'}
-    return [pscustomobject]@{Text=$validDraft;Profile='Test';Model='TestModel'}
+    return [pscustomobject]@{Text=$validDraft;Model='TestModel'}
 }
 $mail=[pscustomobject]@{EntryID='example';FromName='Reviewer';FromEmail='reviewer@example.test';Received='2026-10-22';Subject='Access workflow';BodyPreview='Request an update'}
 $created=New-PacketRatDraftReply -Email $mail

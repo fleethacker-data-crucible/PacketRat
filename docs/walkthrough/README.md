@@ -53,7 +53,7 @@ Select a section and generate an **Action plan**, **Leadership briefing**, **Ris
 
 **Configuration** shows the session settings. Credentials stay on the PowerShell side.
 
-![PacketRat Engine configuration page for the demo session: Auto AI profile, Desktop Outlook, 40 emails over 14 days, with no credentials shown.](../assets/walkthrough/07-configuration.png)
+![PacketRat Engine configuration page for the demo session: Desktop Outlook, 40 emails over 14 days, with no credentials shown.](../assets/walkthrough/07-configuration.png)
 
 ## About these images
 

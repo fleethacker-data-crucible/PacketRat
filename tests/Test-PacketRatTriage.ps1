@@ -1,12 +1,11 @@
 #requires -Version 5.1
-# Local deterministic tests: do not contact Outlook, Lazarette or an LLM.
+# Local deterministic tests: do not contact Outlook or an LLM.
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'Private/PacketRatStore.ps1')
 . (Join-Path $root 'Private/PacketRatRules.ps1')
 . (Join-Path $root 'Private/PacketRatProtocol.ps1')
 . (Join-Path $root 'Private/PacketRatDraft.ps1')
-. (Join-Path $root 'Private/LazaretteBridge.ps1')
 . (Join-Path $root 'Private/PacketRatLlm.ps1')
 
 function Assert-PacketRat($Condition,[string]$Message) {
@@ -50,68 +49,17 @@ try {
     ) -Root $testRoot
     $saved=@((Get-PacketRatStore -Root $testRoot).Rules)
     Assert-PacketRat ($saved.Count -eq 2) 'custom rules persisted'
-    # AI profile names, endpoint configuration and vault item names (no network, no real vault).
-    Assert-PacketRat ((ConvertTo-PacketRatLlmProfile -Profile 'AiEndpoint') -eq 'AiEndpoint') 'AiEndpoint profile accepted'
-    Assert-PacketRat ((ConvertTo-PacketRatLlmProfile -Profile 'grok') -eq 'Grok') 'profile names are case-insensitive'
-    $threw=$false;try{$null=ConvertTo-PacketRatLlmProfile -Profile 'Nope'}catch{$threw=$true}
-    Assert-PacketRat $threw 'unknown profile rejected'
-    $envNames=@('PACKETRAT_ROUTER','LLM_URL','LLM_MODEL','PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_GROK_URL','PACKETRAT_LAZARETTE_ITEM_AiEndpoint','DATABRICKS_TOKEN','LLM_TOKEN')+@($script:PacketRatLlmTokenEnv.AiEndpoint)+@($script:PacketRatLlmVaultItems.AiEndpoint.EnvKeys)
+    # The AI client talks only to Fairlead on this PC (no network here; the full checks are in Test-PacketRatFairlead.ps1).
+    $envNames=@('PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_MODEL','PACKETRAT_FAIRLEAD_PRIVACY')
     $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
-    $env:PACKETRAT_ROUTER='direct'   # these checks are about the direct profile endpoints; Fairlead as the default is tested in Test-PacketRatFairleadDefault.ps1
     try{
-        # Default: the local phoenix-lai API on loopback, with its loaded-model name.
-        $cfg=Get-PacketRatLlmConfig -Profile AiEndpoint
-        Assert-PacketRat ($cfg.Profile -eq 'AiEndpoint' -and $cfg.Url -eq 'http://127.0.0.1:1234/v1/chat/completions') 'AiEndpoint defaults to local phoenix-lai'
-        Assert-PacketRat ($cfg.DefaultUrl -and $cfg.Model -eq 'phoenixlai') 'local default uses the loaded phoenix-lai model'
-        Assert-PacketRat (Test-PacketRatLoopbackUrl -Url $cfg.Url) 'default endpoint is loopback'
-        Assert-PacketRat (-not (Test-PacketRatLoopbackUrl -Url 'https://ai.example.org/v1/chat/completions')) 'remote URL is not loopback'
-        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Auto).Url -eq $cfg.Url) 'Auto with no tokens uses the local default'
-        Assert-PacketRat ($null -eq (Get-PacketRatLlmAuthToken -Config $cfg)) 'no token needed for the local default'
-        # No token: the request goes out with no Authorization header (never an empty Bearer).
-        $global:sentHeaders=$null;$global:sentUri=$null
-        function global:Invoke-RestMethod { param($Uri,$Method,$Headers,$Body,$ContentType,$TimeoutSec) $global:sentUri=$Uri;$global:sentHeaders=$Headers;return [pscustomobject]@{choices=@([pscustomobject]@{message=[pscustomobject]@{content='ok'}})} }
-        try{
-            $reply=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile AiEndpoint
-            Assert-PacketRat ($reply.Text -eq 'ok' -and $global:sentUri -eq 'http://127.0.0.1:1234/v1/chat/completions') 'chat posts to the local default'
-            Assert-PacketRat (-not $global:sentHeaders.ContainsKey('Authorization')) 'no Authorization header without a token'
-            $env:LLM_TOKEN='local-key'
-            $null=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile AiEndpoint
-            Assert-PacketRat ($global:sentHeaders['Authorization'] -eq 'Bearer local-key') 'optional token sent to the local endpoint when set'
-            $env:LLM_TOKEN=$null
-        }finally{ Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
-        # Overrides: the profile variable replaces the default; the shared LLM_URL wins over both.
-        $env:PACKETRAT_AI_ENDPOINT_URL='https://ai.example.org/v1/chat/completions/'
-        $cfg=Get-PacketRatLlmConfig -Profile AiEndpoint
-        Assert-PacketRat ($cfg.Url -eq 'https://ai.example.org/v1/chat/completions' -and -not $cfg.DefaultUrl -and $cfg.Model -ne 'phoenixlai') 'PACKETRAT_AI_ENDPOINT_URL overrides the default'
-        $env:LLM_URL='http://localhost:5000/v1/chat/completions'
-        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile AiEndpoint).Url -eq $env:LLM_URL) 'LLM_URL overrides every profile'
-        $env:LLM_URL=$null;$env:PACKETRAT_AI_ENDPOINT_URL=$null
-        # Grok is an outside provider: no built-in URL, explained before any token or network use.
-        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Grok).Url -eq '') 'no Grok URL is built in'
-        $threw='';try{$null=Invoke-PacketRatChat -Messages @(@{role='user';content='x'}) -Profile Grok}catch{$threw=$_.Exception.Message}
-        Assert-PacketRat ($threw -match 'PACKETRAT_GROK_URL') 'missing Grok URL explained before any token or network use'
-        $env:PACKETRAT_GROK_URL='https://databricks.example.org/serving-endpoints/x/invocations'
-        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Grok).Url -eq $env:PACKETRAT_GROK_URL) 'Grok URL read from configuration'
-        # Token environment: AI_ENDPOINT_TOKEN is the AiEndpoint variable.
-        $env:AI_ENDPOINT_TOKEN='current-value'
-        Assert-PacketRat ((Get-PacketRatLlmToken -ForProfile AiEndpoint) -eq 'current-value') 'AI_ENDPOINT_TOKEN read'
-        Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Auto).Profile -eq 'AiEndpoint') 'Auto resolves to AiEndpoint when its token is set'
-        # Vault items: names emitted and read.
-        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint) -eq 'ai-endpoint-api') 'AI endpoint item name'
-        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile Grok) -eq 'grok-api') 'Grok item name'
-        $env:PACKETRAT_LAZARETTE_ITEM_AiEndpoint='new-override'
-        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint) -eq 'new-override') 'item override read'
-        $script:fakeVault=@{}
-        foreach($spec in $script:PacketRatLlmVaultItems.Values){$script:fakeVault[$spec.Name]='secret-'+$spec.Name}
-        function global:Get-LazaretteSecret { param([string]$Service) if($script:fakeVault.ContainsKey($Service)){return $script:fakeVault[$Service]}; throw 'not found' }
-        function global:Test-LazaretteVaultUnlocked { $true }
-        try{
-            Assert-PacketRat ((Get-PacketRatLazaretteSecretByName -ServiceName 'ai-endpoint-api') -eq 'secret-ai-endpoint-api') 'AI endpoint item read from the vault'
-            Assert-PacketRat ((Get-PacketRatLazaretteSecretByName -ServiceName 'grok-api') -eq 'secret-grok-api') 'Grok item read from the vault'
-            Assert-PacketRat ($null -eq (Get-PacketRatLazaretteSecretByName -ServiceName 'custom-item')) 'an unknown item name returns nothing'
-        }finally{
-            Remove-Item Function:\Get-LazaretteSecret,Function:\Test-LazaretteVaultUnlocked -ErrorAction SilentlyContinue
-        }
+        $cfg=Get-PacketRatFairleadConfig
+        Assert-PacketRat ($cfg.Url -eq 'http://127.0.0.1:8776/v1/chat/completions' -and $cfg.Model -eq 'auto') 'the AI client defaults to Fairlead on this PC with the auto route'
+        Assert-PacketRat (Test-PacketRatLoopbackUrl -Url $cfg.Url) 'the default address is loopback'
+        Assert-PacketRat (-not (Test-PacketRatLoopbackUrl -Url 'https://ai.example.org/v1/chat/completions')) 'a remote URL is not loopback'
+        $env:PACKETRAT_FAIRLEAD_URL='https://ai.example.org/v1/chat/completions'
+        $threw='';try{$null=Get-PacketRatFairleadConfig}catch{$threw=$_.Exception.Message}
+        Assert-PacketRat ($threw -match 'on this PC') 'a Fairlead address that is not on this PC is refused'
     }finally{
         foreach($n in $savedEnv.Keys){[Environment]::SetEnvironmentVariable($n,$savedEnv[$n])}
     }

@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
   Safe workstation startup preflight: read-only checks plus ephemeral TCP bind.
-  Does not load Lazarette, connect to Outlook, query email, or change security policy.
+  Does not read the Fairlead key, connect to Outlook, query email, or change security policy.
 #>
 [CmdletBinding()]
 param()
@@ -26,7 +26,7 @@ $required=@(
   'Web/index.html','Web/app.js','Web/style.css',
   'Web/shell.js','Web/icons.js','Web/vendor/fleet/fleet.css',
   'Web/brand/mark.svg','Web/brand/emblem-dark.png','Web/brand/emblem-light.png','Web/brand/icon-256.png','Web/brand/favicon.ico',
-  'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1',
+  'Private/PacketRatLlm.ps1',
   'Private/PacketRatStore.ps1','Private/Get-OutlookMailSummary.ps1',
   'Private/PacketRatDraft.ps1','Private/PacketRatGraph.ps1',
   'Private/PacketRatLogging.ps1','Private/PacketRatApi.ps1','Private/PacketRatCommands.ps1',
@@ -37,7 +37,7 @@ foreach($relative in $required) {
   if(-not (Test-Path -LiteralPath $path -PathType Leaf)){$failures.Add('Missing file: '+$relative)}
 }
 foreach($relative in @('Start-PacketRat-Web.ps1','Stop-PacketRat.ps1','Private/PacketRatLifecycle.ps1','tools/Test-PacketRatStartup.ps1',
-  'Private/LazaretteBridge.ps1','Private/PacketRatLlm.ps1','Private/PacketRatStore.ps1',
+  'Private/PacketRatLlm.ps1','Private/PacketRatStore.ps1',
   'Private/Get-OutlookMailSummary.ps1','Private/PacketRatDraft.ps1',
   'Private/PacketRatGraph.ps1','Private/PacketRatLogging.ps1',
   'Public/Invoke-PacketRatInboxAnalysis.ps1')) {
@@ -65,5 +65,5 @@ if($failures.Count -gt 0){
   foreach($entry in $failures){Write-Host (' - '+$entry) -ForegroundColor Red}
   exit 1
 }
-Write-Host 'Preflight OK. Real Outlook, AI provider and Lazarette credentials were not tested.' -ForegroundColor Green
+Write-Host 'Preflight OK. Real Outlook and a live Fairlead run were not tested.' -ForegroundColor Green
 exit 0

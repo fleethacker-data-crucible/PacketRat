@@ -19,7 +19,7 @@ The browser asks before archiving. Other points where a person stays in charge:
 - `assist ask` may propose actions. A proposal is a suggestion with the exact command to confirm; nothing runs until you run it.
 - Analysis, reports and drafts run only when you start them. There is no schedule and nothing runs in the background.
 - Mail read from files or Graph cannot be changed by PacketRat at all.
-- AI credentials are chosen by you. A manual token lives for one session and is never saved.
+- PacketRat's only AI credential is its Fairlead key, which you install from Fairlead. PacketRat never shows it, saves a pasted token or reads a vault.
 
 Everything above can be checked in the command list: `PacketRat-CLI.bat commands --json` marks each command that needs `--yes` as `destructive`.
 

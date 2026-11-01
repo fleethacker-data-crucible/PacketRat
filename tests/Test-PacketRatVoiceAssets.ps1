@@ -2,7 +2,7 @@
 # Offline tests for the hash-checked local speech-input assets. Synthetic stand-in files only; no model is used.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatAssistant','PacketRatVoiceAssets','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+foreach($name in @('PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatAssistant','PacketRatVoiceAssets','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 function Assert-Voice([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Voice assets test failed: '+$Message)}}

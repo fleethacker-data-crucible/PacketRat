@@ -3,10 +3,11 @@
 # API routes. Outlook and the AI are faked; a temp root is used so the real store is never touched. Synthetic data only.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+foreach($name in @('PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
+Set-PacketRatCredentialReader { param([string]$Target) 'fl-test-key' }   # the analyze preflight checks that the Fairlead key is installed
 function Assert-Usage([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Usage test failed: '+$Message)}}
 # Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
 function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
@@ -109,11 +110,11 @@ try{
     # --- API routes: counting happens where the action happens ---------------------------------------------------------------
     $null=Invoke-ApiAt $tmp '/api/stats/reset' ([pscustomobject]@{})
     $mail=[pscustomobject]@{Index=1;Fingerprint='id:e1';EntryID='E1';Subject='Synthetic';FromName='A';FromEmail='a@example.test';UserDismissed=$false;IsSensitive=$false;InternetMessageId=''}
-    function Invoke-PacketRatInboxAnalysis { param($Profile,$Provider,$MaxEmails,$DaysBack,$Root,$Classification)
+    function Invoke-PacketRatInboxAnalysis { param($Provider,$MaxEmails,$DaysBack,$Root,$Classification)
         [pscustomobject]@{Success=$true;AnalyzedCount=7;Provider='COM';Report='r';Summary=[pscustomobject]@{Emails=@($mail)};ReportItems=@([pscustomobject]@{Key="id:e1"});MustReply=@();ResponseProtocol='X'} }
     function Get-PacketRatLlmAuthToken { param($Config) return '' }
-    function Invoke-PacketRatReportFollowup { param($Analysis,$Mode,$SectionId,$Profile) return [pscustomobject]@{Text='generated'} }
-    function New-PacketRatDraftReply { param($Email,$Profile,$ExtraInstruction) return [pscustomobject]@{Subject='s';Body='b'} }
+    function Invoke-PacketRatReportFollowup { param($Analysis,$Mode,$SectionId) return [pscustomobject]@{Text='generated'} }
+    function New-PacketRatDraftReply { param($Email,$ExtraInstruction) return [pscustomobject]@{Subject='s';Body='b'} }
     function Set-PacketRatMailRead { param($EntryID,[switch]$Unread) }
     function Set-PacketRatMailCategory { param($EntryID,$Category) }
     function Move-PacketRatMailToFolder { param($EntryID,$FolderName) }

@@ -15,7 +15,7 @@ No Python or Node.js installation is required on the target workstation.
 
 Packet ships carried the mail on scheduled routes, and the sailors aboard were called packet rats. PacketRat makes the same run through your Outlook inbox and sorts it into a human-reviewed action queue.
 
-> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, Lazarette/smart card, AI provider connectivity, and operational workstation execution need validation in the approved environment. Not accredited or production-ready.
+> **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, a live run through Fairlead, and operational workstation execution need validation in the approved environment. Not accredited or production-ready.
 
 | Night watch (dark) | Chart room (light) |
 | --- | --- |
@@ -26,7 +26,7 @@ The screenshots use the offline demo's sample mail. PacketRat follows the Window
 ## Launchers
 
 - **`Launch-PacketRat.bat`** — opens the modern browser GUI, the default.
-- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (`-Profile AiEndpoint` or `-Profile Grok`). It also runs any browser action by name, for scripts and agents: `PacketRat-CLI.bat commands` lists them, and [`docs/CLI.md`](docs/CLI.md) covers the flags, JSON output and exit codes. [`docs/HUMAN-AUTHORITY.md`](docs/HUMAN-AUTHORITY.md) (also `app authority`) says where PacketRat waits for a person, what it never does, and how to monitor and stop it.
+- **`PacketRat-CLI.bat`** — runs console-only inbox analysis (AI calls go through Fairlead). It also runs any browser action by name, for scripts and agents: `PacketRat-CLI.bat commands` lists them, and [`docs/CLI.md`](docs/CLI.md) covers the flags, JSON output and exit codes. [`docs/HUMAN-AUTHORITY.md`](docs/HUMAN-AUTHORITY.md) (also `app authority`) says where PacketRat waits for a person, what it never does, and how to monitor and stop it.
 
 The browser launcher also supports optional commands from an existing CMD prompt:
 
@@ -39,7 +39,7 @@ Launch-PacketRat.bat -Port 8766
 Launch-PacketRat.bat --replace
 Launch-PacketRat.bat --stay
 Launch-PacketRat.bat stop
-PacketRat-CLI.bat -Profile AiEndpoint
+PacketRat-CLI.bat
 PacketRat-CLI.bat commands
 PacketRat-CLI.bat queue show --json
 ```
@@ -101,30 +101,27 @@ See [AI Wire Protocol v1](docs/AI_WIRE_PROTOCOL_V1.md) for delimiters, schemas, 
 
 The default organization-domain rule requires a **verified direct recipient and actionable language**, and only applies when `PACKETRAT_ORG_DOMAIN` is set in `Config/packetrat.env`. A sender from your organization domain alone does not create a mandatory task. See [Triage Rules and Drafts](docs/TRIAGE_RULES_AND_DRAFTS.md).
 
-## Choosing an AI token source
+## AI through Fairlead
 
-> **Intelligence router:** the AI endpoint and its token will move behind the Fleet intelligence router, [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), so PacketRat defaults to the router instead of a fixed endpoint. Fairlead is now the default: AI calls go to `127.0.0.1:8776` unless you set an exact endpoint (`LLM_URL`, `PACKETRAT_AI_ENDPOINT_URL` or `PACKETRAT_GROK_URL`, which keep the call direct) or opt out with `PACKETRAT_ROUTER=direct` in `Config/packetrat.env`. The settings below describe the direct path. See [TechStack](TechStack), "Intelligence router".
+PacketRat sends every AI request to [Fairlead](https://github.com/fleethacker-data-crucible/Fairlead), the Fleet model router on this PC (`http://127.0.0.1:8776`). Fairlead owns the endpoints, models and provider keys; PacketRat holds none of them. The only credential PacketRat has is its own Fairlead key, stored in Windows Credential Manager as the generic credential `Fairlead/PacketRat`.
 
-Open **Configuration → Credentials & connections** in the GUI.
+1. Start Fairlead (PacketRat starts it for you if it is next to PacketRat or `FAIRLEAD_DIR` names it, and never stops it).
+2. In Fairlead, open **Clients** and install a key for **PacketRat**. Fairlead writes it to Credential Manager and never shows it.
+3. In PacketRat, open **Configuration → Fairlead connection** and select **Check Fairlead key**. This is a local check only: it does not contact Fairlead or read mail.
 
-1. Select **Lazarette / configured environment** to use the existing approved Lazarette bridge (AI endpoint item `ai-endpoint-api` or Grok item `grok-api`; override names in `Config/packetrat.env` if needed).
-2. Or select **Manual · current session**, select AI endpoint or Grok, paste a token for an **approved** provider, then select **Apply credential source**. Repeat for another provider if needed.
-3. Select **Check available token** to verify that the selected provider's token resolves locally. This does **not** contact an AI endpoint or scan your inbox.
-4. Select **Forget manual tokens** to erase manual credential references held in the current PowerShell process.
+If the key is missing, **Analyze inbox** stops before reading any message and says: *Open Fairlead and install a key for PacketRat.* There is no environment-variable, vault or pasted-token fallback.
 
-Manual credentials are **not saved to disk, environment files, localStorage, or GitHub** by PacketRat. They are held only in the PowerShell service process while it runs and are cleared on service exit or when switching back to Lazarette. A local process/browser is not an enterprise credential vault; only use this option if permitted under your organization's token-handling policy. Never use unapproved AI endpoints for sensitive or official mail.
+Each request carries `Authorization: Bearer <key>` and `X-Fairlead-Label: PacketRat`, and asks for the route `auto`.
 
-**Why “no LLM token” happened:** Earlier browser releases silently searched environment variables/Lazarette without user-configurable source selection. Now the selected source is explicit, errors include useful setup instructions, and **Analyze inbox checks token availability before reading messages**.
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `PACKETRAT_FAIRLEAD_URL` | `http://127.0.0.1:8776/v1/chat/completions` | Another address **on this PC** (a different port). Anything else is refused. |
+| `PACKETRAT_FAIRLEAD_MODEL` | `auto` | The Fairlead route name to ask for. |
+| `PACKETRAT_FAIRLEAD_PRIVACY` | unset | `local` adds `X-Fairlead-Privacy: local` so prompts stay on local models. |
+| `PACKETRAT_FAIRLEAD_AUTOSTART` | on | `off` stops PacketRat starting Fairlead when nothing answers. |
+| `FAIRLEAD_DIR` | a `Fairlead` folder next to PacketRat | Where to find Fairlead when it is elsewhere. |
 
-`Config/packetrat.env.example` contains optional Lazarette discovery, service names, and provider configuration. By default the `AiEndpoint` profile uses the local phoenix-lai server's OpenAI-compatible API on this PC, `http://127.0.0.1:1234/v1/chat/completions`, with model `phoenixlai` (whichever model phoenix-lai has loaded). Do not commit real token values.
-
-| Variable | Profile | Default | Notes |
-| --- | --- | --- | --- |
-| `PACKETRAT_AI_ENDPOINT_URL` | AiEndpoint | `http://127.0.0.1:1234/v1/chat/completions` (local phoenix-lai) | Full chat-completions URL. Overrides the default when set. |
-| `PACKETRAT_GROK_URL` | Grok | none | Outside provider, so no URL is built in. Required for the Grok profile. |
-| `LLM_URL` | any | none | Shared override: wins over both variables above. |
-| `LLM_MODEL` | any | `phoenixlai` on the local default, otherwise the profile's model | Set it when an override URL needs a specific model name. |
-| `AI_ENDPOINT_TOKEN` / `LLM_TOKEN` | AiEndpoint / any | none | Optional for a local (loopback) endpoint: phoenix-lai's API key is off by default, and no `Authorization` header is sent without a token. Required for a remote endpoint. |
+`Config/packetrat.env.example` lists these. Do not commit real values.
 
 ## What works and what still needs verification
 
@@ -134,7 +131,6 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Offline demonstration (`Launch-PacketRat.bat demo`) | No Outlook or LLM connection |
 | Inbox actions on the original message: archive, move to a folder, categorize, mark read (queue buttons and `item archive/move/categorize/mark-read`) | Code, UI and offline tests with a fake Outlook; a live check in classic Outlook is still pending. Classic Outlook (COM) only |
 | Outlook COM analysis, draft-opening and reply detection | Implementation present; target Windows validation required |
-| Lazarette managed credential integration | Implementation present; requires Lazarette unlock/session test |
 | Manual credential configuration | Session-only implementation; network/API testing required |
 | Microsoft Graph | Requires organization-authorized Graph configuration. Offline tests cover the mapping, sensitivity skip and dismissals against a fake Graph; no live sign-in has been tried |
 | Files provider: read exported `.eml` and `.msg` files with no Outlook (`inbox analyze --provider Files --folder <path>`, or `PACKETRAT_MAIL_FOLDER`) | Text and HTML bodies, attachment names only, malformed files listed as errors. `.msg` is parsed by C# source compiled with `Add-Type` (no DLL). Each record keeps its file path and byte offset or line. Offline tests with synthetic files only; not tried on real exports. Inbox actions, open-in-Outlook and reply drafts need classic Outlook, so they are refused for file mail. `--days-back` does not apply to files |
@@ -145,10 +141,10 @@ Manual credentials are **not saved to disk, environment files, localStorage, or 
 | Counts export as a data source (`stats export`, `tools/Export-PacketRatCountsCsv.ps1`) | The raw action counts (`packetrat.usage-counts/1`) as JSON, plus a converter to a flat CSV that Semaphore's CSV import or a spreadsheet can load. Documented in [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md); a test keeps the documented example identical in shape to the real export. The counts are tallies; minutes saved stays an estimate. Not tried inside a running Semaphore |
 | Open or reply to a Graph-read message in classic Outlook | Looks the message up in classic Outlook by its Internet message id (read-only) and opens that copy; offline tests with a fake Outlook, live check pending. Fails with a clear message if classic Outlook does not hold the message |
 | Fairlead starts on demand (whenever the router is on, which is the default) | If nothing answers on Fairlead's address, PacketRat starts it hidden from the Fairlead folder next to it (or `FAIRLEAD_DIR`) and never stops it. Not set up yet: its setup page opens once. Already set up and PacketRat is launched from its window: a small dialog asks to use the previous setup or reconfigure; the CLI and headless starts just use the previous setup. Already running: nothing happens. `PACKETRAT_FAIRLEAD_AUTOSTART=off` turns it off. Offline tests with fakes; one real start with Fairlead stopped checked on this PC (the dialog and the first-run browser page were not shown for real) |
-| Fairlead router (default; `PACKETRAT_ROUTER=direct` opts out) | The default intelligence endpoint. An exact endpoint variable still wins. Offline tests, including a fake Fairlead on a real loopback socket (`tests/Test-PacketRatFairleadDefault.ps1`). Not tried against a running Fairlead |
+| Fairlead (the only AI path) | Every AI call goes to Fairlead with the key from Credential Manager (`Fairlead/PacketRat`). Offline tests, including a fake Fairlead on a real loopback socket (`tests/Test-PacketRatFairleadDefault.ps1`). Not tried against a running Fairlead |
 | Schema-first batch classification (`PACKETRAT_CLASSIFY=batch`) | Opt-in, off by default; strict per-batch records and a compiled report; offline tests with a fake model, quality on a real model not measured |
 | Live AI provider calls | Depends on valid credentials, endpoint permissions, and network |
-| Streaming and cancel of AI generations | Opt-in (`PACKETRAT_LLM_STREAM=1`, or `-Stream`): reads the endpoint's event stream and can be cancelled between chunks with `PacketRat-CLI.bat inbox cancel` from a second console. Off by default; OpenAI-style endpoints only (the Grok shape stays non-streaming). Tested against a fake endpoint; not tried on a live model. The browser has no cancel button, because the server handles one request at a time |
+| Streaming and cancel of AI generations | Opt-in (`PACKETRAT_LLM_STREAM=1`, or `-Stream`): reads Fairlead's event stream and can be cancelled between chunks with `PacketRat-CLI.bat inbox cancel` from a second console. Off by default. Tested against a fake Fairlead; not tried on a live model. The browser has no cancel button, because the server handles one request at a time |
 | Edit/sort triage rules, manual priority overrides and suppression review | Implemented; target workstation validation pending |
 | Polished report renderer and draft option parsing | Implemented; test coverage added |
 | Automatic sending | Not implemented and deliberately disabled |
@@ -168,14 +164,10 @@ PacketRat reads mail through Outlook on this PC, or from `.eml`/`.msg` files in 
 - `Stop-PacketRat.ps1` — stops every running PacketRat browser service (`Launch-PacketRat.bat stop`).
 - `Start-PacketRat.ps1` — console-mode engine used by `PacketRat-CLI.bat`.
 - `Web/` — browser application, styling, and logo assets.
-- `Private/`, `Public/` — Outlook, Lazarette, AI, persistence and analysis modules.
+- `Private/`, `Public/` — Outlook, AI, persistence and analysis modules.
 - `tools/Test-PacketRatStartup.ps1` — noninvasive diagnostics invoked by `Launch-PacketRat.bat diagnostics`.
 - `tests/` — development-only source/browser tests.
 
 **Browser demo:** `Launch-PacketRat.bat demo` loads hard-coded test messages and does not touch Outlook or LLM endpoints. Real API keys must not be entered in demo mode.
 
-See [`docs/WORKSTATION_LAUNCH_STANDARD.md`](docs/WORKSTATION_LAUNCH_STANDARD.md) for the Lazarette/Halyard launch convention and security constraints.
-
-## Lazarette bridge
-
-A folder counts as Lazarette when it contains `lib\Lazarette.ps1`. PacketRat loads that file once, unlocks with `Unlock-LazaretteVaultInteractive` in the console when the vault is locked, and reads items with `Get-LazaretteSecret`. The folder is found through `LAZARETTE_PATH`, then a `Lazarette` folder next to this repo, then `%USERPROFILE%\Projects\Lazarette`. The vault item names are `ai-endpoint-api` and `grok-api`.
+See [`docs/WORKSTATION_LAUNCH_STANDARD.md`](docs/WORKSTATION_LAUNCH_STANDARD.md) for the Fleet launch convention and security constraints.

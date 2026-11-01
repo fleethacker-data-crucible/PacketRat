@@ -91,13 +91,13 @@ async function api(route,data){
   if(route==='voice/status'){try{const r=await fetch('/api/voice/status',{cache:'no-store'});if(r.ok)return await r.json()}catch{}return {ok:true,voice:{installed:false}}}
   if(route==='assist/ask')return {ok:true,say:'In the sample data, the budget approval is most urgent.',proposals:[]};
   if(route==='assist/brief')return {ok:true,briefing:{say:'Bridge, you have 4 open actions in the sample data, 1 high priority.',openCount:4,highCount:1,items:[]}};
-  if(route==='credentials/status')return {ok:true,credentials:{source:'Lazarette',manual:{AiEndpoint:false,Grok:false},lazaretteDetected:false,lazaretteItems:{AiEndpoint:'ai-endpoint-api',Grok:'grok-api'}}};
-   if(route==='credentials'||route==='credentials/clear')return {ok:true,credentials:{source:data?.source||'Lazarette',manual:{AiEndpoint:false,Grok:false},lazaretteDetected:false,lazaretteItems:{AiEndpoint:'ai-endpoint-api',Grok:'grok-api'}}};
+  if(route==='credentials/status')return {ok:true,credentials:{router:'Fairlead',url:'http://127.0.0.1:8776/v1/chat/completions',model:'auto',keyInstalled:false,message:'Demo mode: no AI calls are made.'}};
+  if(route==='credentials/check')return {ok:true,credentialAvailable:false,router:'Fairlead',note:'Demo mode: no AI calls are made.'};
    if(route==='analyze'){store=demoStore();demoPersist();return {ok:true,store,report:demoReport,reportStructure:demoStructuredReport(),responseProtocol:'PACKETRAT_REPORT_V1',reportItems:demoReportItems(),reportSections:reportUI.deriveSections(demoReport),reportQuality:{Warnings:[],VerifiedSources:4,HasStructuredReferences:true},summary:{AnalyzedCount:4,Provider:'DEMO'},metadata:{profile:'Demo',model:'Sample'}}}
   const key=String(data?.key||''),item=store.Checklist.find(x=>x.Key===key);
   if(route==='report/generate'){
    const modes={Brief:'Leadership briefing',Actions:'Prioritized action plan',Risks:'Risk and uncertainty review',Explain:'Plain-language explanation'};
-   return {ok:true,generated:{Mode:data.mode,Section:data.sectionId==='all'?'Full report':'Selected section',Content:'## '+(modes[data.mode]||'Summary')+'\n\n- Verify [Email #1] in Outlook.\n- Confirm [Email #2] timing.\n- This is simulated analysis. No AI or email account was contacted.',Profile:'Demo',Model:'Sample'}};
+   return {ok:true,generated:{Mode:data.mode,Section:data.sectionId==='all'?'Full report':'Selected section',Content:'## '+(modes[data.mode]||'Summary')+'\n\n- Verify [Email #1] in Outlook.\n- Confirm [Email #2] timing.\n- This is simulated analysis. No AI or email account was contacted.',Model:'demo',Model:'Sample'}};
   }
   if(route==='report/track'){const source=demoReportItems().find(x=>x.Key===String(data.key));if(!source)throw Error('Unknown demo source');if(!item){store.Checklist.push({Key:source.Key,EntryID:'',Subject:source.Subject,From:source.From,Why:source.Reason,Urgency:data.urgency||'Medium',Status:'open',PriorityOverride:true,TriageSource:'Manual'})}demoPersist();return {ok:true,store}}
   if(route==='priority'){if(!item)throw Error('Unknown demo item');item.Urgency=data.urgency;item.PriorityOverride=true;item.TriageSource='Manual';item.RuleSuppressed=false;demoPersist();return {ok:true,store}}
@@ -110,7 +110,7 @@ async function api(route,data){
     Version:'PACKETRAT_DRAFT_V1',Subject:'RE: '+String(item?.Subject||'Request'),
     Body:'Thank you for the update. I will review the details and follow up with you shortly. Please let me know if there is a deadline I should prioritize.',
     Draft:'Thank you for the update. I will review the details and follow up with you shortly.',
-    SignatureSource:'OutlookReply',Profile:'Demo',OutputTokenBudget:20000
+    SignatureSource:'OutlookReply',Model:'demo',OutputTokenBudget:20000
    }}}
   if(route==='item/archive'){if(!item)throw Error('Unknown demo item');item.Status='dismissed';store.Dismissals=[...store.Dismissals.filter(x=>x.Key!==key),{Key:key,Subject:item.Subject,From:item.From,Reason:'Archived'}];demoPersist();return {ok:true,store,demoOnly:true}}
   if(route==='item/move'||route==='item/categorize'||route==='item/mark-read')return {ok:true,store,demoOnly:true};
@@ -175,7 +175,7 @@ async function generateReportFrom(sectionId){
  const btn=$('generateReport');btn.disabled=true;btn.textContent='Generating…';
  notify('Generating a new '+mode.toLowerCase()+' from '+(scope==='all'?'the full report':'the selected report section')+'. This will not modify Outlook.');
  try{
-  const result=await api('report/generate',{mode,sectionId:scope,profile:$('profile').value});
+  const result=await api('report/generate',{mode,sectionId:scope});
   generatedReportText=String(result.generated?.Content||'');
   if(!generatedReportText.trim())throw Error('The AI returned an empty follow-up.');
   $('reportGeneratedHeading').textContent=(result.generated?.Mode||mode)+' — '+(result.generated?.Section||'Report');
@@ -215,38 +215,13 @@ async function handleReportSourceAction(type,key){
 function render(){const items=store.Checklist||[],dismissed=store.Dismissals||[],suppressed=items.filter(x=>x.RuleSuppressed),visible=items.filter(x=>!x.RuleSuppressed),active=visible.filter(x=>x.Status==='open'||x.Status==='in_progress');$('mOpen').textContent=active.length;$('mHigh').textContent=active.filter(x=>x.Urgency==='High').length;$('mDone').textContent=visible.filter(x=>x.Status==='done').length;$('mDismiss').textContent=dismissed.length+suppressed.length;$('navCount').textContent=active.length;
  $('priorityList').innerHTML=active.length?active.slice().sort((a,b)=>({High:0,Medium:1,Low:2}[a.Urgency]??3)-({High:0,Medium:1,Low:2}[b.Urgency]??3)).slice(0,4).map(x=>itemRow(x)).join(''):empty('Your radar is clear. Run an inbox analysis to discover new actions.');const results=filteredQueue();$('queueTotal').textContent=`${results.length} item${results.length===1?'':'s'}`;$('queue').innerHTML=results.length?results.map(x=>itemRow(x,true)).join(''):empty('No actions match these filters.');$('dismissList').innerHTML=dismissed.length?dismissed.map(x=>`<article class="item"><span class="priority low">Filtered</span><div class="item-body"><strong>${escapeHtml(x.Subject)}</strong><small>${escapeHtml(x.From)} · ${escapeHtml(x.Reason)}</small></div><div class="item-actions"><button data-act="restore" data-key="${escapeHtml(x.Key)}">Restore</button></div></article>`).join(''):empty('No dismissed items. You can dismiss false positives from the action queue.');$('ruleFilteredList').innerHTML=suppressed.length?suppressed.map(x=>
  '<article class="item"><span class="priority low">Rule filter</span><div class="item-body"><strong>'+escapeHtml(x.Subject||'(No subject)')+'</strong><small>'+escapeHtml(x.From||'')+' · '+escapeHtml(x.RuleSuppressedBy||'Matched an exclusion rule')+'</small></div><div class="item-actions"><button data-act="unfilter" data-key="'+escapeHtml(x.Key)+'">Keep in queue</button></div></article>'
- ).join(''):empty('No rule-filtered items in the current action history.');$('reportText').innerHTML=renderIntelligence(report);renderReportExtras();$('brief').textContent=report?report.replace(/^[\s>]+/gm,'').replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportProfile').textContent=lastRun?.Profile||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
-function updateCredentialPanel(){
- const source=$('credentialSource').value;
- $('manualTokenFields').classList.toggle('hidden',source!=='Manual');
-}
+ ).join(''):empty('No rule-filtered items in the current action history.');$('reportText').innerHTML=renderIntelligence(report);renderReportExtras();$('brief').textContent=report?report.replace(/^[\s>]+/gm,'').replace(/[#*|]/g,' ').replace(/\s+/g,' ').trim().slice(0,260)+(report.length>260?'…':''):'Run an inbox analysis to generate an actionable briefing using your approved AI provider.';$('lastRun').textContent=lastRun?.GeneratedAt?'Last analyzed '+new Date(lastRun.GeneratedAt).toLocaleString():demo?'Sample data loaded':'Not analyzed yet';$('reportProvider').textContent=lastRun?.Provider||'—';$('reportModel').textContent=lastRun?.Model||'—';$('reportCount').textContent=lastRun?.AnalyzedCount??'—';$('engineStatus').textContent=demo?'Sample data, no service':lastRun?'Last analysis available':'Waiting for analysis';}
 function renderCredentialStatus(state){
  if(!state)return;
  credentialDetails=state;
- $('credentialSource').value=state.source==='Manual'?'Manual':'Lazarette';
- updateCredentialPanel();
- const manual=state.manual||{},items=state.lazaretteItems||{};
- const gen=manual.AiEndpoint?'set':'missing',grok=manual.Grok?'set':'missing';
- const line=state.source==='Manual'
-   ?'Manual session · AI endpoint '+gen+' · Grok '+grok
-   :'Lazarette '+(state.lazaretteDetected?'found':'not detected')+' · AI endpoint: '+(items.AiEndpoint||'ai-endpoint-api')+' · Grok: '+(items.Grok||'grok-api');
- $('credentialStatus').textContent=demo?'Demo mode: no credentials accepted or stored.':line;
- setSession(demo?'Sample data':state.source==='Manual'?'Manual token · this session':'Lazarette credentials');
-}
-async function applyCredentialSource(){
- if(demo){$('credentialToken').value='';notify('Demo mode never accepts real credentials.',true);return;}
- const source=$('credentialSource').value;
- const profile=$('credentialProfile').value;
- const plain=$('credentialToken').value;
- if(source==='Manual'&&!plain&&!(credentialDetails?.source==='Manual'&&credentialDetails?.manual?.[profile])){
-   notify('Enter an approved '+profile+' token before selecting manual mode.',true);return;
- }
- try{
-   const result=await api('credentials',{source,profile,token:source==='Manual'?plain:''});
-   renderCredentialStatus(result.credentials);
-   notify(source==='Manual'?'Manual credential retained in PowerShell memory until exit or removal.':'Managed credential mode selected. Manual tokens cleared.');
- }catch(error){notify(error.message,true);}
- finally{$('credentialToken').value='';}
+ const line=demo?'Demo mode: no AI calls are made.':(state.keyInstalled?'Fairlead key found for PacketRat · route '+(state.model||'auto')+' · '+(state.url||''):(state.message||'Open Fairlead and install a key for PacketRat.'));
+ $('credentialStatus').textContent=line;
+ setSession(demo?'Sample data':state.keyInstalled?'Fairlead key installed':'Fairlead key missing');
 }
 const ruleConditions=[
  ['SecurityAction','Security / mandatory action'],
@@ -316,8 +291,8 @@ async function saveTriageRules(){
   notify('Rules saved. Existing manual priorities are preserved.');
  }catch(error){notify(error.message,true)}
 }
-function saveSettings(){const cfg={profile:$('profile').value,provider:$('provider').value,folder:$('mailFolder').value.trim(),maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
-function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['profile','provider','mailFolder','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
+function saveSettings(){const cfg={provider:$('provider').value,folder:$('mailFolder').value.trim(),maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
+function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['provider','mailFolder','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
 function bridgePref(){try{return localStorage.getItem('packetrat-bridge-speak')==='1'}catch{return false}}
 function bridgeStatus(msg,err){const el=$('bridgeStatus');if(!el)return;el.textContent=msg||'';el.classList.toggle('err',!!err)}
 function bridgeMicHelp(error){const n=String((error&&error.name)||'');if(n==='NotAllowedError'||n==='SecurityError')return 'The browser blocked the microphone. Click the permissions icon in the address bar, allow Microphone for this site, then try again.';if(n==='NotFoundError')return 'No microphone was found on this PC.';if(n==='NotReadableError')return 'The microphone is in use by another app.';return (error&&error.message)||'Microphone error.'}
@@ -327,7 +302,7 @@ async function initListen(){const L=window.PacketRatListen;const talk=$('bridgeT
 function initBridge(){const panel=$('bridgePanel');if(!panel)return;const v=window.PacketRatVoice;if(window.PacketRatPiper)window.PacketRatPiper.onStatus=m=>bridgeStatus(m);const can=!!(v&&v.available());$('bridgeSpeak').checked=can&&bridgePref();$('bridgeSpeak').disabled=!can;$('bridgeNote').textContent=can?'Reads with a voice installed on this PC. Cloud voices are never used.':'No speech output is available in this browser, so replies show as text only.';$('bridgeSpeak').addEventListener('change',e=>{try{localStorage.setItem('packetrat-bridge-speak',e.target.checked?'1':'0')}catch{}});$('bridgeAsk').addEventListener('click',()=>bridgeAsk($('bridgeQuestion').value));$('bridgeQuestion').addEventListener('keydown',e=>{if(e.key==='Enter')bridgeAsk(e.target.value)});$('bridgeStop').addEventListener('click',()=>v&&v.stop());$('bridgeBrief').addEventListener('click',async()=>{bridgeStatus('Getting the briefing...');try{const x=await api('assist/brief');await bridgeSayText(x.briefing.say)}catch(error){bridgeStatus(error.message,true)}})}
 let statsBusy=false;
 async function loadStats(){const panel=$('statsPanel');if(!panel)return;if(demo){panel.classList.add('hidden');return}if(statsBusy)return;statsBusy=true;try{const s=(await api('stats')).stats;$('statsTotal').textContent='≈ '+s.totalMinutes+' min (estimate)';$('statsNote').textContent='Rough estimate: counts of what PacketRat did or prepared, times the minutes assumed in Config/minutes-saved.json. Stored on this PC only; not a score for anyone.';$('statsList').innerHTML=s.actions.map(a=>`<li><span>${escapeHtml(a.label)}</span><span>${a.count} × ${a.minutesEach} min ≈ ${a.minutes} min</span></li>`).join('');panel.classList.remove('hidden')}catch{panel.classList.add('hidden')}finally{statsBusy=false}}
-async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Profile:'Demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{AiEndpoint:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();loadStats();setEngine(demo?'demo':'running');}catch(error){notify(error.message,true);render()}}
+async function load(){try{const x=await api('state');store=x.store||{Checklist:[],Dismissals:[]};report=x.report||'';lastRun=x.lastRun||x.summary||null;reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;if(demo){lastRun={AnalyzedCount:4,Provider:'DEMO',Model:'demo'}}renderCredentialStatus(x.credentials||{source:'Lazarette',lazaretteDetected:false,manual:{AiEndpoint:false,Grok:false},lazaretteItems:{}});ruleDraft=(store.Rules||defaultRules).map(r=>({...r}));renderRules();render();loadStats();setEngine(demo?'demo':'running');}catch(error){notify(error.message,true);render()}}
 function setQueueFilter(next){
  filter=next;
  document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
@@ -380,7 +355,7 @@ document.addEventListener('change',async event=>{
 
 $('analyze').addEventListener('click',async()=>{if(busy)return;let cfg;try{cfg=saveSettings()}catch(error){notify(error.message,true);show('settings');return}setBusy(true,'Scanning inbox');notify(demo?'Running sample analysis. No real email is accessed.':'Analyzing Outlook and calling the configured AI provider. The local engine will be busy until this operation completes.');try{const x=await api('analyze',cfg);store=x.store||store;report=x.report||'';reportItems=Array.isArray(x.reportItems)?x.reportItems:[];reportStructure=Array.isArray(x.reportStructure)?x.reportStructure:[];reportSections=Array.isArray(x.reportSections)?x.reportSections:reportUI.deriveSections(report);reportQuality=x.reportQuality||null;generatedReportText='';$('reportGenerated').classList.add('hidden');lastRun={...(x.summary||{}),...(x.metadata||{}),GeneratedAt:new Date().toISOString()};if(demo)demoPersist();render();loadStats();show('report');notify('Analysis complete. Review suggested actions before acting.')}catch(error){notify(error.message,true)}finally{setBusy(false)}});
 document.addEventListener('click',async event=>{const button=event.target.closest('[data-act]');if(!button||busy)return;const key=button.dataset.key,act=button.dataset.act;try{if(act==='draft'){openDraftForKey(key);return}button.disabled=true;if(act==='dismiss'){const reason=window.prompt('Why should this message be excluded from future action queues?','No action required / false positive');if(reason===null)return;store=(await api('dismiss',{key,reason:reason.trim().slice(0,300)})).store}else if(act==='restore')store=(await api('restore',{key})).store;else if(act==='unfilter'){const original=store.Checklist.find(x=>x.Key===key);store=(await api('priority',{key,urgency:original?.Urgency||'Medium'})).store;}else if(act==='resetpriority')store=(await api('priority/reset',{key})).store;else if(['done','progress','openstatus'].includes(act))store=(await api('status',{key,status:act==='done'?'done':act==='progress'?'in_progress':'open'})).store;else if(act==='archive'){if(!window.confirm('Move this message to the Outlook archive folder and remove it from the queue? You can move it back in Outlook.'))return;const r=await api('item/archive',{key});store=r.store||store;render();notify(r.demoOnly?'Demo mode: nothing was moved in Outlook.':'Message archived in Outlook.');return}else if(act==='markread'){const r=await api('item/mark-read',{key,unread:false});notify(r.demoOnly?'Demo mode: nothing was changed in Outlook.':'Message marked read in Outlook.');return}else if(act==='categorize'){const category=window.prompt('Outlook category to add to this message (no semicolons):','PacketRat');if(category===null)return;const r=await api('item/categorize',{key,category:category.trim().slice(0,255)});notify(r.demoOnly?'Demo mode: nothing was changed in Outlook.':'Category added in Outlook.');return}else if(act==='move'){const folder=window.prompt('Name of an existing Outlook folder to move this message to:','');if(folder===null||!folder.trim())return;if(!window.confirm('Move this message to the Outlook folder "'+folder.trim()+'"? You can move it back in Outlook.'))return;const r=await api('item/move',{key,folder:folder.trim().slice(0,256)});notify(r.demoOnly?'Demo mode: nothing was moved in Outlook.':'Message moved in Outlook.');return}else if(act==='open'){const result=await api('open',{key});notify(result.demoOnly?'Demo mode: no real Outlook message is available.':'Message opened in Outlook.');return}render();notify('Action updated.')}catch(error){notify(error.message,true)}finally{button.disabled=false}});
-$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,profile:$('profile').value,instruction:$('instruction').value.slice(0,2000)});initializeSingleDraft(x.draft);notify('One draft is ready. Outlook will insert its configured reply signature; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.innerHTML=icon('intelligence')+' Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body,subject:$('draftSubjectSuggested').value.trim(),applySubject:$('draftApplySubject').checked});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
+$('closeDialog').addEventListener('click',()=>$('draftDialog').close());$('generateDraft').addEventListener('click',async()=>{const button=$('generateDraft');button.disabled=true;button.textContent='Generating…';try{const x=await api('draft',{key:draftKey,instruction:$('instruction').value.slice(0,2000)});initializeSingleDraft(x.draft);notify('One draft is ready. Outlook will insert its configured reply signature; nothing has been sent.')}catch(error){notify(error.message,true)}finally{button.disabled=false;button.innerHTML=icon('intelligence')+' Generate draft'}});async function copy(text){try{await navigator.clipboard.writeText(text);notify('Copied to clipboard.')}catch{notify('Clipboard unavailable. Select and copy the text manually.',true)}}$('copyDraft').addEventListener('click',()=>copy($('draftBody').value));$('copyReport').addEventListener('click',()=>copy(reportUI.normalizeText(report)));$('openDraft').addEventListener('click',async()=>{const body=$('draftBody').value.trim();if(!body)return notify('Enter or generate a draft first.',true);try{const x=await api('open-draft',{key:draftKey,body,subject:$('draftSubjectSuggested').value.trim(),applySubject:$('draftApplySubject').checked});notify(x.demoOnly?'Demo mode: no Outlook message was opened.':'Reply opened in Outlook. You must manually review and send it.')}catch(error){notify(error.message,true)}});
 $('addRule').addEventListener('click',addCustomRule);
 $('resetRules').addEventListener('click',()=>{ruleDraft=defaultRules.map(r=>({...r}));renderRules();noteRules('Suggested defaults restored in editor; click Save rules to apply.')});
 $('saveRules').addEventListener('click',saveTriageRules);
@@ -394,23 +369,11 @@ document.addEventListener('click',e=>{
   [ruleDraft[i],ruleDraft[j]]=[ruleDraft[j],ruleDraft[i]];renderRules();noteRules('Rule order changed; save to activate.');
  }
 });
-$('credentialSource').addEventListener('change',updateCredentialPanel);
-$('applyCredentials').addEventListener('click',applyCredentialSource);
 $('checkCredentials').addEventListener('click',async()=>{
- if(demo){notify('Demo mode uses sample data and does not test credentials.');return;}
+ if(demo){notify('Demo mode uses sample data and makes no AI calls.');return;}
  try{
-  const profile=$('credentialProfile').value;
-  const result=await api('credentials/check',{profile});
-  notify(result.credentialAvailable===false?result.profile+': '+result.note:result.profile+' token was resolved locally. Provider connectivity is not yet verified.');
- }catch(error){notify(error.message,true);}
-});
-$('clearCredentials').addEventListener('click',async()=>{
- if(demo){notify('Demo mode does not store credentials.');return;}
- try{
-   const result=await api('credentials/clear',{});
-   renderCredentialStatus(result.credentials);
-   $('credentialToken').value='';
-   notify('Manual credentials cleared from this PowerShell session.');
+  const result=await api('credentials/check',{});
+  notify(result.credentialAvailable?'Fairlead key found for PacketRat. Fairlead itself was not contacted.':result.note,!result.credentialAvailable);
  }catch(error){notify(error.message,true);}
 });
 $('saveSettings').addEventListener('click',()=>{try{saveSettings();notify('Preferences saved in this browser.')}catch(error){notify(error.message,true)}});$('exitDemo').addEventListener('click',()=>{location.href=location.pathname});

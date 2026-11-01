@@ -2,7 +2,7 @@
 // and the walkthrough screenshots (docs/assets/walkthrough/, Night watch theme).
 // Mock data only: serves the shipped Web/ files from a throwaway 127.0.0.1 static server and opens
 // the built-in offline demo (?demo=1, the sample mail in Web/app.js). No PowerShell service runs,
-// so Outlook, Graph, Lazarette and AI providers are never contacted.
+// so Outlook, Graph and Fairlead are never contacted.
 //
 //   PACKETRAT_PLAYWRIGHT=<path to playwright package> node tools/capture-screenshots.mjs
 //

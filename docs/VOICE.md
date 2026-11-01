@@ -16,7 +16,7 @@ Bridge is PacketRat's voice layer. Everything stays on this PC: no audio, text o
 - Live check: in headless Chromium, TalkForge's engine loaded in about 1.5 s and spoke two sentences (about 9 s including playback) with `en_US-lessac-high`.
 
 ## Ask (text, and spoken when Speak replies is on)
-- **Ask** (Overview > Bridge) and `assist ask --question "..."` send your question plus the open queue to your configured AI profile (a local endpoint by default). The model answers in a strict `PACKETRAT_ASSIST_V1` envelope; anything else is rejected.
+- **Ask** (Overview > Bridge) and `assist ask --question "..."` send your question plus the open queue to Fairlead (your configured route; `auto` by default). The model answers in a strict `PACKETRAT_ASSIST_V1` envelope; anything else is rejected.
 - It may **propose** `dismiss`, `status` or `priority` changes for items in the queue. Proposals are never run: the browser shows a **Confirm** button per proposal and the CLI prints the exact command to run yourself. Unknown actions, unknown keys and bad values are rejected. It cannot send, archive, move or delete mail.
 - Queue text comes from email, so the model is told to treat it as untrusted data.
 

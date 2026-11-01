@@ -7,7 +7,7 @@ PacketRat-CLI.bat commands
 PacketRat-CLI.bat <noun> <verb> [--option value ...] [--json] [--out <file>] [--yes] [--dry-run] [--analyze]
 ```
 
-When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), or there is none, `PacketRat-CLI.bat` still runs the console inbox analysis as before.
+When the first argument is an option (for example `PacketRat-CLI.bat -MaxEmails 20`), or there is none, `PacketRat-CLI.bat` still runs the console inbox analysis as before.
 
 ## Commands
 
@@ -45,10 +45,8 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 | `assist brief` | A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice). | |
 | `assist ask` | Ask about the queue. The AI answers from the queue only and may propose actions (dismiss, status, priority); nothing is run, and each proposal comes with the exact command to confirm. | `--question` (required), `--profile` |
 | `voice status` | Whether the local speech-input assets listed in `Config/voice-assets.json` are present and match their SHA-256. Nothing is downloaded or sent. | |
-| `credentials status` | Which AI credential source is set (tokens are never shown). | |
-| `credentials set` | Choose Lazarette or a manual session token. | `--source` `--profile` (required), `--token-env` |
-| `credentials check` | Check locally that a credential resolves (no AI call, no mail read). | `--profile` |
-| `credentials clear` | Forget manual session tokens. | |
+| `credentials status` | Where AI calls go (Fairlead) and whether PacketRat's Fairlead key is installed (the key is never shown). | |
+| `credentials check` | Check locally that the Fairlead key for PacketRat is installed (no AI call, no mail read). | |
 
 `PacketRat-CLI.bat commands --json` prints the same list as JSON (schema `packetrat.commands/1`), with every option's type, whether it is required, and its allowed values. The browser server answers the same document at `GET /api/commands`.
 
@@ -63,11 +61,11 @@ When the first argument is an option (`PacketRat-CLI.bat -Profile AiEndpoint`), 
 
 ## Tokens
 
-The CLI never takes a token on the command line, where it would land in shell history. `credentials set --source manual --token-env NAME` reads it from the environment variable `NAME`, and it lasts for that one run, the same as a manual token in the browser lasts for that session. Lazarette and approved environment variables work as they do in the browser.
+The CLI never takes a key on the command line, where it would land in shell history. It reads PacketRat's Fairlead key from Windows Credential Manager (`Fairlead/PacketRat`), the same as the browser; install it from Fairlead's Clients page.
 
 ## Safety
 
-The CLI calls the same core (`Private/PacketRatApi.ps1`) as the browser, so it keeps the same safeguards: no mail is changed or sent, drafts open for review only, and manual tokens are never saved or returned. The browser server's API stays locked to the local user: a per-session nonce, Host and Origin checks, and no CORS.
+The CLI calls the same core (`Private/PacketRatApi.ps1`) as the browser, so it keeps the same safeguards: no mail is changed or sent, drafts open for review only, and the Fairlead key is never shown or returned. The browser server's API stays locked to the local user: a per-session nonce, Host and Origin checks, and no CORS.
 
 ## Tests
 

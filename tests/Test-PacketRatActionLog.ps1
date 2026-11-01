@@ -4,7 +4,7 @@
 # Synthetic data only.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatActionLog','PacketRatApi','PacketRatCommands')){
+foreach($name in @('PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatActionLog','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -25,7 +25,7 @@ try{
     # --- Routes write lines; reads do not -----------------------------------------------------------------------------------
     $secret='id:Synthetic subject: payroll secret'
     $null=Invoke-ApiAt $tmp '/api/stats/reset' ([pscustomobject]@{})
-    $null=Invoke-ApiAt $tmp '/api/credentials/clear' ([pscustomobject]@{})
+    $null=Invoke-ApiAt $tmp '/api/stats/reset' ([pscustomobject]@{})
     $failed=$false
     try{ $null=Invoke-ApiAt $tmp '/api/item/mark-read' ([pscustomobject]@{key=$secret}) }catch{ $failed=$true }
     Assert-Log $failed 'an unknown item still fails as before'
@@ -77,7 +77,7 @@ try{
     Assert-Log ((Test-PacketRatActionLog -Root $tmp).Valid) 'the chain is intact after appending'
     $blocked=Join-Path $tmp 'blocked'; [void](New-Item -ItemType Directory -Path (Join-Path $blocked 'Logs\packetrat-actions.jsonl') -Force)   # a folder where the log file should be
     Assert-Log (-not (Add-PacketRatActionLog -Route '/api/stats/reset' -Root $blocked 3>$null)) 'a log that cannot be written returns false instead of throwing'
-    $res=Invoke-ApiAt $blocked '/api/credentials/clear' ([pscustomobject]@{}) 3>$null
+    $res=Invoke-ApiAt $blocked '/api/stats/reset' ([pscustomobject]@{}) 3>$null
     Assert-Log ($res.ok -eq $true) 'an action still succeeds when its log line cannot be written'
 
     # --- Routes and commands --------------------------------------------------------------------------------------------------

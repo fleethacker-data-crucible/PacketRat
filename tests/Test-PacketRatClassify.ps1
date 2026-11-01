@@ -3,7 +3,7 @@
 # The AI endpoint and Outlook are faked; synthetic data only.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+foreach($name in @('PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatDraft','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -79,21 +79,21 @@ Assert-Classify (@($empty.Sections).Count -eq 6 -and @($empty.MustReply).Count -
 $script:Calls=New-Object System.Collections.ArrayList
 $script:Scenario='good'
 function Invoke-PacketRatChat {
-    param([object[]]$Messages,[string]$Profile,[string]$Model,[int]$MaxTokens,[double]$Temperature)
+    param([object[]]$Messages,[string]$Model,[int]$MaxTokens,[double]$Temperature)
     $user=[string]$Messages[1].content
     [void]$script:Calls.Add($user)
-    if($Messages[0].content -notmatch 'CLASSIFY V1'){ return [pscustomobject]@{Text='not a classify call';Profile='Test';Model='TestModel'} }
+    if($Messages[0].content -notmatch 'CLASSIFY V1'){ return [pscustomobject]@{Text='not a classify call';Model='TestModel'} }
     $json=$user.Substring($user.IndexOf('EMAIL DATA (JSON):')+18).Trim()
     $rows=@(ConvertFrom-Json -InputObject $json | ForEach-Object { $_ })  # Windows PowerShell 5.1 returns a JSON array as one object
     $first=[int]$rows[0].Index
-    if($script:Scenario -eq 'garbage-second' -and $first -gt 5){ return [pscustomobject]@{Text='I cannot do that.';Profile='Test';Model='TestModel'} }
+    if($script:Scenario -eq 'garbage-second' -and $first -gt 5){ return [pscustomobject]@{Text='I cannot do that.';Model='TestModel'} }
     if($script:Scenario -eq 'down'){ throw 'The remote server returned an error: (401) Unauthorized.' }
     $recs=foreach($row in $rows){
         $i=[int]$row.Index
         if($i -eq 7){ continue }  # the model skips one message
         switch($i){ 1 {New-Rec 1 'must_reply' 'High' '2026-11-05'} 2 {New-Rec 2 'must_reply' 'Medium'} 3 {New-Rec 3 'already_replied' 'Low'} 4 {New-Rec 4 'no_action' 'Low' '' 'low'} 5 {New-Rec 5 'caution' 'Medium'} default {New-Rec $i 'no_action' 'Low'} }
     }
-    return [pscustomobject]@{Text=(New-Doc @($recs));Profile='Test';Model='TestModel'}
+    return [pscustomobject]@{Text=(New-Doc @($recs));Model='TestModel'}
 }
 $summary=[pscustomobject]@{Provider='COM';AnalyzedCount=9;SkippedCount=1;GeneratedAt=(Get-Date).ToString('o');Emails=@($emails+@((New-Mail 9 'g@example.test'))+@())}
 $secret=New-Mail 10 'h@example.test' -Sensitive
@@ -114,9 +114,9 @@ try{
 
     # Full analysis in batch mode (opt-in).
     $script:Calls.Clear(); $script:Scenario='good'
-    $r=Invoke-PacketRatInboxAnalysis -Classification Batch -Root $testRoot -Profile AiEndpoint
+    $r=Invoke-PacketRatInboxAnalysis -Classification Batch -Root $testRoot
     Assert-Classify ($r.Success -and $r.ResponseProtocol -eq 'PACKETRAT_CLASSIFY_V1') 'batch analysis succeeds and says which protocol made the report'
-    Assert-Classify ($r.Profile -eq 'Test' -and $r.Model -eq 'TestModel') 'profile and model come from the batch calls'
+    Assert-Classify ($r.Model -eq 'TestModel') 'the model comes from the batch calls'
     Assert-Classify (@($r.MustReply | Where-Object Key -eq 'id:e1').Count -eq 1 -and @($r.MustReply | Where-Object Key -eq 'id:e2').Count -eq 1) 'must-reply records reach the action queue'
     Assert-Classify (@($r.MustReply | Where-Object Key -eq 'id:e3').Count -eq 0) 'already-replied records do not become actions'
     Assert-Classify ($r.Report -match '## Must Reply' -and $r.Report -match 'Deadline stated: 2026-11-05') 'the visible report is compiled from the records'
@@ -127,13 +127,13 @@ try{
     # Environment opt-in.
     $script:Calls.Clear()
     $env:PACKETRAT_CLASSIFY='batch'
-    $r=Invoke-PacketRatInboxAnalysis -Root $testRoot -Profile AiEndpoint
+    $r=Invoke-PacketRatInboxAnalysis -Root $testRoot
     Assert-Classify ($r.ResponseProtocol -eq 'PACKETRAT_CLASSIFY_V1') 'PACKETRAT_CLASSIFY=batch turns it on'
     $env:PACKETRAT_CLASSIFY=$null
 
     # A batch that stays malformed is left unclassified and reported; the rest of the run stands.
     $script:Scenario='garbage-second'; $script:Calls.Clear()
-    $r=Invoke-PacketRatInboxAnalysis -Classification Batch -Root $testRoot -Profile AiEndpoint
+    $r=Invoke-PacketRatInboxAnalysis -Classification Batch -Root $testRoot
     Assert-Classify ($r.Success) 'one bad batch does not fail the run'
     Assert-Classify ($script:Calls.Count -eq 3) 'the bad batch was retried once'
     Assert-Classify (@($r.ReportQuality.Warnings | Where-Object { $_ -match 'was not classified' }).Count -eq 1) 'the failed batch is a visible warning'
@@ -141,11 +141,11 @@ try{
 
     # A transport or credential failure stops the run instead of producing an empty report.
     $script:Scenario='down'
-    Assert-Throws { Invoke-PacketRatInboxAnalysis -Classification Batch -Root $testRoot -Profile AiEndpoint } 'Unauthorized' 'an endpoint failure is raised, not hidden'
+    Assert-Throws { Invoke-PacketRatInboxAnalysis -Classification Batch -Root $testRoot } 'Unauthorized' 'an endpoint failure is raised, not hidden'
 
     # Default stays the one-shot report.
     $script:Scenario='good'; $script:Calls.Clear()
-    Assert-Throws { Invoke-PacketRatInboxAnalysis -Root $testRoot -Profile AiEndpoint } 'Report protocol' 'without the opt-in the one-shot REPORT_V1 path runs'
+    Assert-Throws { Invoke-PacketRatInboxAnalysis -Root $testRoot } 'Report protocol' 'without the opt-in the one-shot REPORT_V1 path runs'
     Assert-Classify ($script:Calls.Count -eq 1) 'one call in the default mode'
 }finally{
     foreach($n in $savedEnv.Keys){[Environment]::SetEnvironmentVariable($n,$savedEnv[$n])}

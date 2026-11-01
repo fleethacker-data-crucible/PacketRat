@@ -143,13 +143,9 @@ def run():
                 page.locator('#saveRules').click()
                 page.wait_for_function("document.getElementById('rulesStatus').textContent.includes('Saved')")
                 assert page.locator('#rulesList .rule-row').count() == 6
-                assert page.locator('#credentialSource').is_visible()
-                assert not page.locator('#manualTokenFields').is_visible()
-                page.locator('#credentialSource').select_option('Manual')
-                assert page.locator('#manualTokenFields').is_visible()
-                page.locator('#credentialToken').fill('TEST-ONLY-DO-NOT-USE')
-                page.locator('#applyCredentials').click()
-                assert page.locator('#credentialToken').input_value() == ''
+                assert page.locator('#checkCredentials').is_visible()
+                assert page.locator('#credentialToken').count() == 0
+                page.locator('#checkCredentials').click()
                 assert 'Demo mode' in page.locator('#notice').inner_text()
                 page.locator('[data-view="report"]').click()
                 assert page.locator('#reportText h2').count() >= 3
@@ -189,7 +185,7 @@ def run_lifecycle():
             body = request.post_data or ''
             calls.append({'path': path, 'method': request.method, 'headers': request.headers, 'body': json.loads(body) if body else None})
             if path == '/api/state':
-                payload = {'ok': True, 'store': {'Checklist': [], 'Dismissals': []}, 'credentials': {'source': 'Lazarette', 'manual': {'AiEndpoint': False, 'Grok': False}, 'lazaretteDetected': False, 'lazaretteItems': {}}}
+                payload = {'ok': True, 'store': {'Checklist': [], 'Dismissals': []}, 'credentials': {'router': 'Fairlead', 'url': 'http://127.0.0.1:8776/v1/chat/completions', 'model': 'auto', 'keyInstalled': True, 'message': ''}}
             else:
                 payload = {'ok': True}
             return route.fulfill(status=200, content_type='application/json', body=json.dumps(payload))
