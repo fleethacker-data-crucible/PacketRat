@@ -44,14 +44,14 @@ assert 'PacketRatManualTokens' in LLM and "PacketRatCredentialSource" in LLM
 assert 'Write-PacketRatLog' not in LLM, 'No credential logging in LLM bridge'
 assert (ROOT/'Launch-PacketRat.bat').exists() and (ROOT/'PacketRat-CLI.bat').exists()
 BRIDGE=(ROOT/'Private/LazaretteBridge.ps1').read_text()
-# Lazarette consumer contract: discovery order, engine entry files, canonical vault item names.
-order=['$env:LAZARETTE_PATH',"'Config\\packetrat.env'","'Lazarette')"]
+# Lazarette consumer contract: discovery order, engine entry file, current function names, item names.
+order=['$env:LAZARETTE_PATH',"(Join-Path $parent 'Lazarette')",r"'Projects\Lazarette'"]
 positions=[BRIDGE.index(x) for x in order]
-assert positions==sorted(positions), 'Lazarette env override, then packetrat.env, then install folders'
-assert "'Get-LazaretteSecret', 'Get-ArcSecret'" in BRIDGE
-assert "'Lazarette.ps1', 'Arc.ps1'" in BRIDGE, 'Discovery by lib\\Lazarette.ps1 / lib\\Arc.ps1'
-assert "'Unlock-LazaretteVaultInteractive', 'Unlock-ArcVaultInteractive'" in BRIDGE
-assert "Name    = 'ai-endpoint-api'" in BRIDGE and "Name    = 'grok-api'" in BRIDGE, 'Canonical vault item names'
+assert positions==sorted(positions), 'LAZARETTE_PATH, then a sibling Lazarette folder, then Projects/Lazarette'
+assert "'Lazarette.ps1'" in BRIDGE and 'Get-LazaretteSecret -Service' in BRIDGE and 'Unlock-LazaretteVaultInteractive' in BRIDGE
+assert 'packetrat.env' not in BRIDGE, 'Lazarette is not discovered through packetrat.env'
+assert not re.search(r'Arc|Legacy|legacy|Get-LiveVault|Ensure-VaultUnlocked', BRIDGE), 'No old names or aliases in the Lazarette bridge'
+assert "Name    = 'ai-endpoint-api'" in BRIDGE and "Name    = 'grok-api'" in BRIDGE, 'Vault item names'
 LLMSRC=(ROOT/'Private/PacketRatLlm.ps1').read_text()
 assert 'https://' not in LLMSRC, 'No organization endpoint is hard-coded'
 assert "AiEndpointUrl     = 'http://127.0.0.1:1234/v1/chat/completions'" in LLMSRC, 'AiEndpoint defaults to local phoenix-lai'

@@ -18,3 +18,7 @@ Every browser action has a named command in `Private/PacketRatCommands.ps1`, run
 Before modifying prompts, parsers, drafting or report UI, read `docs/AI_WIRE_PROTOCOL_V1.md`. Model outputs must use strict, versioned envelopes: exactly one `PACKETRAT_DRAFT_V1` subject/body reply, one `PACKETRAT_REPORT_V1` JSON report with deterministic sections, and `PACKETRAT_INSIGHT_V1` for follow-up report generations. Reject malformed or truncated envelopes instead of dumping raw model text. Never trust model-provided Outlook message IDs or execute HTML from report fields.
 
 Outlook's existing authenticated account reply signature must be preserved after displaying the reply inspector, with reviewed AI text inserted *before* that content. The model never authors or duplicates the user's signature. The original reply subject stays unchanged unless the user explicitly elects an override. No automatic sending. Add Windows PowerShell 5.1 and browser regression tests for protocol changes.
+
+## No compatibility aliases
+
+When a name changes, the old name is removed, never kept for compatibility. Don't add fallbacks to retired item names, environment variables or Lazarette function names. Use only the names in Lazarette `docs/INTEGRATION.md` and `docs/FLEET-ITEMS.md`.

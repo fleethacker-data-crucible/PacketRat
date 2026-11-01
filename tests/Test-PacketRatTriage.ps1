@@ -96,9 +96,9 @@ try {
         $env:AI_ENDPOINT_TOKEN='current-value'
         Assert-PacketRat ((Get-PacketRatLlmToken -ForProfile AiEndpoint) -eq 'current-value') 'AI_ENDPOINT_TOKEN read'
         Assert-PacketRat ((Get-PacketRatLlmConfig -Profile Auto).Profile -eq 'AiEndpoint') 'Auto resolves to AiEndpoint when its token is set'
-        # Vault items: canonical names emitted and read.
-        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint) -eq 'ai-endpoint-api') 'canonical AI endpoint item'
-        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile Grok) -eq 'grok-api') 'canonical Grok item'
+        # Vault items: names emitted and read.
+        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint) -eq 'ai-endpoint-api') 'AI endpoint item name'
+        Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile Grok) -eq 'grok-api') 'Grok item name'
         $env:PACKETRAT_LAZARETTE_ITEM_AiEndpoint='new-override'
         Assert-PacketRat ((Resolve-PacketRatLazaretteServiceName -Profile AiEndpoint) -eq 'new-override') 'item override read'
         $script:fakeVault=@{}
@@ -108,7 +108,7 @@ try {
         try{
             Assert-PacketRat ((Get-PacketRatLazaretteSecretByName -ServiceName 'ai-endpoint-api') -eq 'secret-ai-endpoint-api') 'AI endpoint item read from the vault'
             Assert-PacketRat ((Get-PacketRatLazaretteSecretByName -ServiceName 'grok-api') -eq 'secret-grok-api') 'Grok item read from the vault'
-            Assert-PacketRat ($null -eq (Get-PacketRatLazaretteSecretByName -ServiceName 'custom-item')) 'custom names get no matchers'
+            Assert-PacketRat ($null -eq (Get-PacketRatLazaretteSecretByName -ServiceName 'custom-item')) 'an unknown item name returns nothing'
         }finally{
             Remove-Item Function:\Get-LazaretteSecret,Function:\Test-LazaretteVaultUnlocked -ErrorAction SilentlyContinue
         }
