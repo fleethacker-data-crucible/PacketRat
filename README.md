@@ -19,7 +19,9 @@ Packet ships carried the mail on scheduled routes, and the sailors aboard were c
 
 ## Demo preview
 
-![PacketRat demo: the overview and high-priority action queue, using synthetic sample mail](docs/demo/PacketRat-demo-preview.gif)
+<p align="center">
+  <img src="docs/demo/PacketRat-demo-preview.gif" width="720" alt="PacketRat demo: the overview and high-priority action queue, using synthetic sample mail">
+</p>
 
 A short, silent README preview using the built-in demo mode: synthetic mail only, with no Outlook or AI connection. Full narrated demos are produced by [Signal-Gun](https://github.com/fleethacker-data-crucible/Signal-Gun/blob/main/docs/RENDER.md).
 
