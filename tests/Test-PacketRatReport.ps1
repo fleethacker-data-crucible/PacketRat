@@ -1,5 +1,5 @@
 #requires -Version 5.1
-# Offline report parsing and identity tests; no Outlook, Lazarette or LLM network access.
+# Offline report parsing and identity tests; no Outlook or LLM network access.
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'Private/PacketRatProtocol.ps1')
@@ -59,12 +59,12 @@ Assert-ReportTest ((ConvertTo-PacketRatLlmText -Value $gemini) -eq 'Gemini repor
 
 # Stub approved service call; ensure follow-up is scoped and read-only.
 function Invoke-PacketRatChat {
-    param([object[]]$Messages,[string]$Profile,[int]$MaxTokens,[double]$Temperature)
+    param([object[]]$Messages,[int]$MaxTokens,[double]$Temperature)
     if($Messages[1].content -notmatch 'Scope: 3. Must Reply'){throw 'Wrong section scope'}
     return [pscustomobject]@{Text='<<<PACKETRAT_INSIGHT_V1>>>'+[char]10+'{"version":"PACKETRAT_INSIGHT_V1","title":"Suggested next steps","summary":"Confirm the deadline against the source.","items":[{"email_index":1,"text":"Review the actual email."}]}' +[char]10+'<<<END_PACKETRAT_INSIGHT_V1>>>';Profile='Demo';Model='Fake'}
 }
 $run=[pscustomobject]@{Report=$markdown;ReportItems=$items}
-$generated=Invoke-PacketRatReportFollowup -Analysis $run -Mode Actions -SectionId 'section-0' -Profile Auto
+$generated=Invoke-PacketRatReportFollowup -Analysis $run -Mode Actions -SectionId 'section-0'
 Assert-ReportTest ($generated.Content -match 'Suggested next steps') 'Scoped follow-up returned'
 Assert-ReportTest ($generated.Section -eq '3. Must Reply') 'Correct section selected'
 Assert-ReportTest ($generated.Version -eq 'PACKETRAT_INSIGHT_V1') 'Structured generated report contract'

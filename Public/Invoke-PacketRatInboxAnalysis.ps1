@@ -101,7 +101,6 @@ function Invoke-PacketRatBatchClassification {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][array]$Emails,
-        [string]$Profile = 'Auto',
         [string]$Model,
         [int]$BatchSize = 20,
         [int]$MaxRetries = 1
@@ -118,7 +117,7 @@ A sender from the user's own organization domain alone is not high priority.
     $records = New-Object System.Collections.Generic.List[object]
     $unclassified = New-Object System.Collections.Generic.List[int]
     $warnings = New-Object System.Collections.Generic.List[string]
-    $used = @{ Profile = $Profile; Model = $Model }
+    $used = @{ Model = $Model }
     $batches = [Math]::Ceiling($eligible.Count / [double]$BatchSize)
     for ($b = 0; $b -lt $batches; $b++) {
         $slice = @($eligible | Select-Object -Skip ($b * $BatchSize) -First $BatchSize)
@@ -135,8 +134,8 @@ A sender from the user's own organization domain alone is not high priority.
         $parsed = $null
         $lastError = ''
         for ($attempt = 0; $attempt -le $MaxRetries -and $null -eq $parsed; $attempt++) {
-            $ai = Invoke-PacketRatChat -Messages @(@{ role = 'system'; content = $system }, @{ role = 'user'; content = $user }) -Profile $Profile -Model $Model -MaxTokens 3000 -Temperature 0.1
-            $used.Profile = $ai.Profile; $used.Model = $ai.Model
+            $ai = Invoke-PacketRatChat -Messages @(@{ role = 'system'; content = $system }, @{ role = 'user'; content = $user }) -Model $Model -MaxTokens 3000 -Temperature 0.1
+            $used.Model = $ai.Model
             try { $parsed = ConvertFrom-PacketRatClassifyV1 -Text ([string]$ai.Text) -AllowedIndexes $indexes }
             catch {
                 if ($_.Exception.Message -notmatch '^Classify protocol:') { throw }
@@ -153,14 +152,13 @@ A sender from the user's own organization domain alone is not high priority.
     }
     return [pscustomobject]@{
         Records = @($records.ToArray()); UnclassifiedIndexes = @($unclassified.ToArray()); Warnings = @($warnings.ToArray())
-        Profile = $used.Profile; Model = $used.Model; BatchCount = [int]$batches
+        Model = $used.Model; BatchCount = [int]$batches
     }
 }
 
 function Invoke-PacketRatInboxAnalysis {
     [CmdletBinding()]
     param(
-        [string]$Profile = 'Auto',
         [ValidateSet('COM', 'Graph', 'Files')]
         [string]$Provider = 'COM',
         # Files provider only: folder of .eml/.msg files (default PACKETRAT_MAIL_FOLDER).
@@ -179,8 +177,6 @@ function Invoke-PacketRatInboxAnalysis {
         $Classification = if (([string]$env:PACKETRAT_CLASSIFY).Trim() -ieq 'batch') { 'Batch' } else { 'Single' }
     }
 
-    # Auto | Grok | AiEndpoint; deprecated profile names are mapped, unknown names throw before Outlook is read.
-    $Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile
     if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
     $store = Get-PacketRatStore -Root $Root
 
@@ -216,12 +212,12 @@ function Invoke-PacketRatInboxAnalysis {
         $batchSize = 20
         $envSize = 0
         if ([int]::TryParse([string]$env:PACKETRAT_CLASSIFY_BATCH_SIZE, [ref]$envSize) -and $envSize -gt 0) { $batchSize = $envSize }
-        $batch = Invoke-PacketRatBatchClassification -Emails @($summary.Emails) -Profile $Profile -Model $Model -BatchSize $batchSize
+        $batch = Invoke-PacketRatBatchClassification -Emails @($summary.Emails) -Model $Model -BatchSize $batchSize
         if (@($batch.Records).Count -eq 0 -and @($batch.UnclassifiedIndexes).Count -gt 0) {
             throw ('No batch could be classified. ' + (@($batch.Warnings) -join ' '))
         }
         $protocol = ConvertTo-PacketRatReportEnvelopeFromClassification -Records @($batch.Records) -Emails @($summary.Emails) -UnclassifiedIndexes @($batch.UnclassifiedIndexes) -Warnings @($batch.Warnings)
-        $ai = [pscustomobject]@{ Profile = $batch.Profile; Model = $batch.Model }
+        $ai = [pscustomobject]@{ Model = $batch.Model }
         $batchWarnings = @($batch.Warnings)
         $responseProtocol = 'PACKETRAT_CLASSIFY_V1'
         Write-PacketRatLogSafe -Level INFO -Message ("CLASSIFY_V1 accepted: {0} records in {1} batches; {2} unclassified" -f @($batch.Records).Count, $batch.BatchCount, @($batch.UnclassifiedIndexes).Count) -Root $Root
@@ -273,7 +269,7 @@ $emailJson
 
     Write-PacketRatLogSafe -Level INFO -Message 'Calling AI endpoint' -Root $Root
     Write-Host '[*] Calling AI endpoint...' -ForegroundColor Cyan
-    $ai = Invoke-PacketRatChat -Messages $messages -Profile $Profile -Model $Model -MaxTokens 8192 -Temperature 0.1
+    $ai = Invoke-PacketRatChat -Messages $messages -Model $Model -MaxTokens 8192 -Temperature 0.1
     $rawText = [string]$ai.Text
 
     # Raw model responses may contain mail content; do not write them unless explicitly opted in.
@@ -389,7 +385,6 @@ $emailJson
     return [pscustomobject]@{
         Success        = $true
         GeneratedAt    = Get-Date -Format 'o'
-        Profile        = $ai.Profile
         Model          = $ai.Model
         Provider       = $summary.Provider
         AnalyzedCount  = $summary.AnalyzedCount

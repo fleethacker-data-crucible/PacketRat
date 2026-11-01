@@ -4,7 +4,6 @@ function New-PacketRatDraftReply {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Email,
-        [string]$Profile='Auto',
         [string]$Model,
         [AllowEmptyString()][string]$ExtraInstruction='',
         [ValidateRange(20000,32768)][int]$MaxTokens=20000
@@ -33,14 +32,14 @@ Additional user-provided writing guidance:
 $ExtraInstruction
 "@
     $messages=@(@{role='system';content=$system},@{role='user';content=$user})
-    $result=Invoke-PacketRatChat -Messages $messages -Profile $Profile -Model $Model -MaxTokens $MaxTokens -Temperature 0.2
+    $result=Invoke-PacketRatChat -Messages $messages -Model $Model -MaxTokens $MaxTokens -Temperature 0.2
     $parsed=ConvertFrom-PacketRatDraftV1 -Text ([string]$result.Text)
     return [pscustomobject]@{
         Version=$parsed.Version;EntryID=[string]$Email.EntryID
         OriginalSubject=[string]$Email.Subject
         Subject=$parsed.Subject;Body=$parsed.Body;Draft=$parsed.Body
         SignatureSource='OutlookReply'
-        Profile=$result.Profile;Model=$result.Model
+        Model=$result.Model
         OutputTokenBudget=$MaxTokens
     }
 }

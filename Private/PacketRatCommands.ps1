@@ -26,7 +26,6 @@ $script:PacketRatCommands = @(
     [pscustomobject]@{ Name = 'packetrat inbox analyze'; Route = '/api/analyze'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Read recent Outlook mail (or exported .eml/.msg files) and build the report and action queue (no mail is changed or sent).'
         Inputs = @(
-            (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile: Auto, AiEndpoint or Grok (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))
             (New-PacketRatInput 'provider' 'provider' 'string' $false 'Mail source: COM (classic Outlook), Graph, or Files (exported .eml/.msg, no Outlook; default COM).' @('COM', 'Graph', 'Files'))
             (New-PacketRatInput 'folder' 'folder' 'string' $false 'Files provider: folder of .eml and .msg files (default: PACKETRAT_MAIL_FOLDER). Subfolders are not read.')
             (New-PacketRatInput 'max-emails' 'maxEmails' 'int' $false 'Most messages to read, 1-150 (default 40).')
@@ -39,7 +38,7 @@ $script:PacketRatCommands = @(
         Inputs = @(
             (New-PacketRatInput 'mode' 'mode' 'string' $true 'What to generate.' @('Brief', 'Actions', 'Risks', 'Explain'))
             (New-PacketRatInput 'section-id' 'sectionId' 'string' $false 'all (default) or section-N.')
-            (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))) }
+) }
     [pscustomobject]@{ Name = 'packetrat report track'; Route = '/api/report/track'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $true
         Summary = 'Turn a verified report source message into an open action.'
         Inputs = @(
@@ -77,7 +76,7 @@ $script:PacketRatCommands = @(
         Inputs = @(
             (New-PacketRatInput 'key' 'key' 'string' $true 'The report message key.')
             (New-PacketRatInput 'instruction' 'instruction' 'string' $false 'Extra instruction, up to 2000 characters.')
-            (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))) }
+) }
     [pscustomobject]@{ Name = 'packetrat draft open'; Route = '/api/open-draft'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Open an Outlook reply with reviewed text above your signature (never sent automatically).'
         Inputs = @(
@@ -135,22 +134,13 @@ $script:PacketRatCommands = @(
         Summary = 'Ask a question about the action queue. The AI answers from the queue only and may propose actions (dismiss, status, priority); nothing is run, each proposal comes with the exact command to confirm.'
         Inputs = @(
             (New-PacketRatInput 'question' 'question' 'string' $true 'Your question, up to 500 characters.')
-            (New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile (default Auto).' @('Auto', 'AiEndpoint', 'Grok'))) }
+) }
     [pscustomobject]@{ Name = 'packetrat voice status'; Route = '/api/voice/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
         Summary = 'Whether the local speech-input assets listed in Config\voice-assets.json are present and match their SHA-256 (nothing is downloaded or sent).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials status'; Route = '/api/credentials/status'; Method = 'GET'; Destructive = $false; NeedsAnalysis = $false
-        Summary = 'Which AI credential source is set (tokens are never shown).'; Inputs = @() }
-    [pscustomobject]@{ Name = 'packetrat credentials set'; Route = '/api/credentials'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
-        Summary = 'Choose Lazarette or a manual session token (never saved; in the CLI it lasts for this one run).'
-        Inputs = @(
-            (New-PacketRatInput 'source' 'source' 'string' $true 'Lazarette or Manual.' @('Lazarette', 'Manual'))
-            (New-PacketRatInput 'profile' 'profile' 'string' $true 'AiEndpoint or Grok.' @('AiEndpoint', 'Grok'))
-            (New-PacketRatInput 'token-env' 'token' 'env' $false 'Name of an environment variable holding the manual token.')) }
+        Summary = 'Where PacketRat sends AI calls (Fairlead) and whether its Fairlead key is installed (the key is never shown).'; Inputs = @() }
     [pscustomobject]@{ Name = 'packetrat credentials check'; Route = '/api/credentials/check'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
-        Summary = 'Check locally that a credential resolves (no AI call, no mail read).'
-        Inputs = @((New-PacketRatInput 'profile' 'profile' 'string' $false 'AI profile (default AiEndpoint).' @('Auto', 'AiEndpoint', 'Grok'))) }
-    [pscustomobject]@{ Name = 'packetrat credentials clear'; Route = '/api/credentials/clear'; Method = 'POST'; Destructive = $false; NeedsAnalysis = $false
-        Summary = 'Forget manual session tokens.'; Inputs = @() }
+        Summary = 'Check locally that the Fairlead key for PacketRat is installed (no AI call, no mail read).'; Inputs = @() }
 )
 
 # The registry as plain data, for commands --json and GET /api/commands.

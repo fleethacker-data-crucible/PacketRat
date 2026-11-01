@@ -21,13 +21,13 @@ foreach($h in 'What it needs','What it touches','Where data can go','What is pro
 # --- Network clients: only the AI client and the optional Graph provider ----------------------------------------------------------
 $net=Get-FilesMatching '(?i)Invoke-RestMethod|Invoke-WebRequest|HttpWebRequest|WebClient|HttpClient|Net\.Http|Connect-MgGraph|Invoke-MgGraphRequest|Get-MgUserMessage'
 Assert-Fleet (($net -join ',') -eq 'PacketRatGraph.ps1,PacketRatLlm.ps1') ("network clients appear only in PacketRatLlm.ps1 and PacketRatGraph.ps1 (found: $($net -join ', '))")
-Assert-Fleet ($page.Contains('PacketRatLlm') -or ($page -match 'AI endpoint' -and $page -match 'Microsoft Graph')) 'the page names the AI endpoint and Microsoft Graph as the only destinations'
+Assert-Fleet ($page.Contains('PacketRatLlm') -or ($page -match 'AI router' -and $page -match 'Microsoft Graph')) 'the page names the AI router and Microsoft Graph as the only destinations'
 Assert-Fleet ($page -match 'Anywhere else \| Never') 'the page says nothing goes anywhere else'
 
 # --- The documented AI addresses are the ones in the code ----------------------------------------------------------------------------
-Assert-Fleet ($src['PacketRatLlm.ps1'].Contains('127.0.0.1:8776') -and $src['PacketRatLlm.ps1'].Contains('127.0.0.1:1234')) 'the Fairlead and phoenix-lai default addresses are in the code'
-Assert-Fleet ($page.Contains('127.0.0.1:8776') -and $page.Contains('127.0.0.1:1234')) 'and on the page'
-foreach($v in 'LLM_URL','PACKETRAT_AI_ENDPOINT_URL','PACKETRAT_GROK_URL'){ Assert-Fleet ($page.Contains($v)) "the page names $v" }
+Assert-Fleet ($src['PacketRatLlm.ps1'].Contains('127.0.0.1:8776') -and -not $src['PacketRatLlm.ps1'].Contains('127.0.0.1:1234')) 'Fairlead on this PC is the only AI address in the code'
+Assert-Fleet ($page.Contains('127.0.0.1:8776') -and -not $page.Contains('127.0.0.1:1234')) 'and the only one on the page'
+foreach($v in 'PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_PRIVACY'){ Assert-Fleet ($page.Contains($v)) "the page names $v" }
 Assert-Fleet ($src['PacketRatGraph.ps1'].Contains("'Mail.Read', 'Mail.ReadWrite', 'User.Read'") -and $page.Contains('Mail.Read, Mail.ReadWrite, User.Read')) 'the Graph scopes on the page are the ones requested'
 
 # --- The server listens on loopback only ---------------------------------------------------------------------------------------------------

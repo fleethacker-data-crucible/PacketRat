@@ -5,7 +5,6 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string]$Profile = 'Auto',   # Auto | Grok | AiEndpoint (validated once the modules load)
     [ValidateSet('COM', 'Graph')]
     [string]$Provider = 'COM',
     [switch]$ConsoleOnly,
@@ -24,7 +23,6 @@ if (-not $ConsoleOnly) {
     if ($apt -ne 'STA') {
         Write-Host "[!] ApartmentState=$apt - re-launching under powershell.exe -STA ..." -ForegroundColor Yellow
         $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoLogo', '-STA', '-File', $MyInvocation.MyCommand.Path)
-        if ($Profile) { $argList += @('-Profile', $Profile) }
         if ($Provider) { $argList += @('-Provider', $Provider) }
         if ($MaxEmails) { $argList += @('-MaxEmails', $MaxEmails) }
         if ($DaysBack) { $argList += @('-DaysBack', $DaysBack) }
@@ -48,7 +46,6 @@ if (Test-Path -LiteralPath $envFile) {
     Write-Host ('Loaded Config\' + (Split-Path $envFile -Leaf)) -ForegroundColor DarkGray
 }
 # --- modules ---
-. (Join-Path $Root 'Private\LazaretteBridge.ps1')
 . (Join-Path $Root 'Private\PacketRatLogging.ps1')
 . (Join-Path $Root 'Private\PacketRatLlm.ps1')
 . (Join-Path $Root 'Private\PacketRatStore.ps1')
@@ -60,8 +57,6 @@ if (Test-Path -LiteralPath $envFile) {
 . (Join-Path $Root 'Private\PacketRatDraft.ps1')
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
 
-if ($env:PACKETRAT_LLM_PROFILE -and $Profile -eq 'Auto') { $Profile = $env:PACKETRAT_LLM_PROFILE }
-$Profile = ConvertTo-PacketRatLlmProfile -Profile $Profile   # throws on an unknown name
 if ($env:PACKETRAT_PROVIDER) { $Provider = $env:PACKETRAT_PROVIDER }
 
 Write-Host '[*] PacketRat modules loaded' -ForegroundColor DarkGray
@@ -91,7 +86,7 @@ function Save-PacketRatReport {
 if ($ConsoleOnly) {
     Write-Host ''
     Write-Host '=== PacketRat (Console) ===' -ForegroundColor Cyan
-    $result = Invoke-PacketRatInboxAnalysis -Profile $Profile -Provider $Provider -MaxEmails $MaxEmails -DaysBack $DaysBack -Root $Root
+    $result = Invoke-PacketRatInboxAnalysis -Provider $Provider -MaxEmails $MaxEmails -DaysBack $DaysBack -Root $Root
     if (-not $result.Success) {
         Write-Host $result.Message -ForegroundColor Yellow
         return
@@ -197,25 +192,6 @@ $btnAnalyze.Text = 'Analyze Inbox'
 $btnAnalyze.SetBounds(10, 10, 120, 28)
 $btnAnalyze.BackColor = [System.Drawing.Color]::White
 $panelTop.Controls.Add($btnAnalyze)
-
-$lblProf = New-Object System.Windows.Forms.Label
-$lblProf.Text = 'LLM:'
-$lblProf.ForeColor = [System.Drawing.Color]::White
-$lblProf.SetBounds(145, 14, 40, 20)
-$panelTop.Controls.Add($lblProf)
-
-$cmbProfile = New-Object System.Windows.Forms.ComboBox
-$cmbProfile.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-[void]$cmbProfile.Items.Add('Auto')
-[void]$cmbProfile.Items.Add('AiEndpoint')
-[void]$cmbProfile.Items.Add('Grok')
-$cmbProfile.SelectedIndex = 0
-try {
-    $idx = $cmbProfile.Items.IndexOf($Profile)
-    if ($idx -ge 0) { $cmbProfile.SelectedIndex = $idx }
-} catch {}
-$cmbProfile.SetBounds(185, 11, 80, 24)
-$panelTop.Controls.Add($cmbProfile)
 
 $lblProv = New-Object System.Windows.Forms.Label
 $lblProv.Text = 'Provider:'
@@ -513,14 +489,12 @@ $btnAnalyze.Add_Click({
         [System.Windows.Forms.Application]::DoEvents()
         Write-PacketRatLog -Level INFO -Message 'Analyze button clicked' -Root $Root
 
-        $selectedProfile = 'Auto'
-        try { if ($cmbProfile.SelectedItem) { $selectedProfile = [string]$cmbProfile.SelectedItem } } catch {}
         $selectedProvider = 'COM'
         try { if ($cmbProvider.SelectedItem) { $selectedProvider = [string]$cmbProvider.SelectedItem } } catch {}
         $max = 40
         try { $max = [int]$numMax.Value } catch {}
 
-        $result = Invoke-PacketRatInboxAnalysis -Profile $selectedProfile -Provider $selectedProvider -MaxEmails $max -DaysBack $DaysBack -Root $Root
+        $result = Invoke-PacketRatInboxAnalysis -Provider $selectedProvider -MaxEmails $max -DaysBack $DaysBack -Root $Root
         $script:LastResult = $result
         if ($null -ne $result.Store) { $script:Store = $result.Store }
 
@@ -537,7 +511,7 @@ $btnAnalyze.Add_Click({
             $header = @"
 PacketRat Report
 Generated : $($result.GeneratedAt)
-Profile   : $($result.Profile)  |  Model: $($result.Model)  |  Provider: $($result.Provider)
+Model     : $($result.Model)  |  Provider: $($result.Provider)
 Analyzed  : $($result.AnalyzedCount) emails
 Skipped   : $($result.SkippedCount) (sensitive heuristic)
 Dismissed : $($result.DismissedCount) (user false-positive / no-action)
@@ -625,9 +599,7 @@ $btnDraftSel.Add_Click({
         }
         Safe-Status 'Drafting...'
         $form.Refresh()
-        $prof = 'Auto'
-        try { if ($cmbProfile.SelectedItem) { $prof = [string]$cmbProfile.SelectedItem } } catch {}
-        $draft = New-PacketRatDraftReply -Email $email -Profile $prof
+        $draft = New-PacketRatDraftReply -Email $email
         $txtDraft.Text = [string]$draft.Draft
         $txtDraftMeta.Text = "Draft for: $($sel.Subject)  |  From: $($sel.From)"
         $script:CurrentDraftEntryID = $sel.EntryID

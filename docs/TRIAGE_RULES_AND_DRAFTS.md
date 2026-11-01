@@ -44,6 +44,6 @@ The default prompt requests two distinct alternatives in JSON. If the provider r
 
 ## Limits
 
-- Real-world Outlook COM, Graph, Lazarette and approved AI connectivity still need testing on the target secured workstation.
+- Real-world Outlook COM, Graph and a live run through Fairlead still need testing on the target secured workstation.
 - Rule matching is heuristic, not authoritative; a false positive or negative can still happen. Users should review time-sensitive or security-sensitive messages.
 - No separate encrypted rules database, continuous scheduler, or live agent streaming has been implemented in this release.

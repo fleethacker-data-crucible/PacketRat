@@ -11,9 +11,9 @@ $tmp=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-router-'+[guid]::NewGuid()
 $fairlead=Join-Path $tmp 'Fairlead'; [void](New-Item -ItemType Directory -Path (Join-Path $fairlead 'scripts') -Force)
 [IO.File]::WriteAllText((Join-Path $fairlead 'scripts\Start-Fairlead.ps1'),'# stand-in')
 $cfgFile=Join-Path $tmp 'fairlead.json'
-$names='PACKETRAT_ROUTER','PACKETRAT_FAIRLEAD_AUTOSTART','PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_CONFIG','FAIRLEAD_DIR','FAIRLEAD_PATH'
+$names='PACKETRAT_FAIRLEAD_AUTOSTART','PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_CONFIG','FAIRLEAD_DIR','FAIRLEAD_PATH'
 $saved=@{};foreach($n in $names){$saved[$n]=[Environment]::GetEnvironmentVariable($n)}
-function Reset-Env { foreach($n in $names){[Environment]::SetEnvironmentVariable($n,$null)}; $env:PACKETRAT_ROUTER='fairlead'; $env:PACKETRAT_FAIRLEAD_CONFIG=$cfgFile; $env:FAIRLEAD_DIR=$fairlead; $script:Up=$false; $script:UpAfterStart=$true; $script:Started=@(); $script:Prompts=0; $script:Choice='use' }
+function Reset-Env { foreach($n in $names){[Environment]::SetEnvironmentVariable($n,$null)}; $env:PACKETRAT_FAIRLEAD_CONFIG=$cfgFile; $env:FAIRLEAD_DIR=$fairlead; $script:Up=$false; $script:UpAfterStart=$true; $script:Started=@(); $script:Prompts=0; $script:Choice='use' }
 # Fakes
 function Test-PacketRatFairleadUp { param([Uri]$Uri) return $script:Up }
 function Start-PacketRatFairleadProcess { param([string]$Dir,[switch]$OpenSetup) $script:Started+=,@{Dir=$Dir;Open=[bool]$OpenSetup}; if($script:UpAfterStart){$script:Up=$true} }
@@ -22,9 +22,6 @@ function Set-Setup([string]$state){ Remove-Item $cfgFile -ErrorAction SilentlyCo
 
 try{
     # --- off switches ---
-    Reset-Env; $env:PACKETRAT_ROUTER='direct'
-    $r=Ensure-PacketRatFairlead -Root $Root
-    Assert-Router ($r.State -eq 'Skipped' -and $script:Started.Count -eq 0) 'router off: nothing happens'
     Reset-Env; $env:PACKETRAT_FAIRLEAD_AUTOSTART='off'
     $r=Ensure-PacketRatFairlead -Root $Root
     Assert-Router ($r.State -eq 'Skipped' -and $script:Started.Count -eq 0) 'autostart off: nothing happens'

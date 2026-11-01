@@ -57,43 +57,22 @@ function Invoke-PacketRatApiCore {
           $summary=if($script:LastResult){$script:LastResult}else{$null}
           return @{ok=$true;store=$store;credentials=(Get-PacketRatCredentialStatus);report=if($summary){$summary.Report}else{$null};reportStructure=if($summary){@($summary.ReportStructure)}else{@()};responseProtocol=if($summary){[string]$summary.ResponseProtocol}else{''};reportItems=if($summary){@($summary.ReportItems)}else{@()};reportSections=if($summary){@($summary.ReportSections)}else{@()};reportQuality=if($summary){$summary.ReportQuality}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
       }
-      '/api/credentials' {
-          $source=[string]$Data.source
-          if($source -cnotin @('Lazarette','Manual')){throw 'Select Lazarette or Manual as the credential source.'}
-          $profile=[string]$Data.profile
-          try{$profile=ConvertTo-PacketRatLlmProfile -Profile $profile}catch{$profile=''}
-          if($profile -cnotin @('AiEndpoint','Grok')){throw 'Select AI endpoint or Grok for a manual token.'}
-          $tokenText=if($null -eq $Data.token){''}else{[string]$Data.token}
-          $status=Set-PacketRatCredentialConfiguration -Source $source -Profile $profile -Token $tokenText
-          return @{ok=$true;credentials=$status}
-      }
       '/api/credentials/check' {
-          $requested=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'AiEndpoint'}
-          if($requested -eq 'Auto'){$requested='AiEndpoint'}
-          # Resolve locally only. Never return token, contact an AI endpoint,
-          # or fetch user mailbox data from this diagnostic route.
-          $resolved=Get-PacketRatLlmConfig -Profile $requested
-          $found=Get-PacketRatLlmAuthToken -Config $resolved
-          if(-not $found){return @{ok=$true;profile=$resolved.Profile;credentialAvailable=$false;note='Local AI endpoint on this PC: no token needed unless its API key is turned on; endpoint not tested.'}}
-          return @{ok=$true;profile=$resolved.Profile;credentialAvailable=$true;note='Credential resolved locally; remote endpoint not tested.'}
-      }
-      '/api/credentials/clear' {
-          $status=Clear-PacketRatManualTokens
-          return @{ok=$true;credentials=$status}
+          # Local check only: is the Fairlead key for PacketRat in Windows Credential Manager? Never returns the key
+          # and never contacts Fairlead or reads mail.
+          $status=Get-PacketRatCredentialStatus
+          return @{ok=$true;credentialAvailable=[bool]$status.keyInstalled;router='Fairlead';note=[string]$status.message}
       }
       '/api/analyze' {
-          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
           $provider=if(@('COM','Graph','Files') -contains $Data.provider){$Data.provider}else{'COM'}
           $max=[Math]::Max(1,[Math]::Min(150,[int]$Data.maxEmails))
           $days=[Math]::Max(1,[Math]::Min(90,[int]$Data.daysBack))
-          # Fail before scanning Outlook if the chosen AI credential source is unusable.
-          # Profile Auto is resolved to the actual endpoint before checking its token.
-          # A local (loopback) endpoint needs no token; a remote one throws here when its token is missing.
-          $null=Get-PacketRatLlmAuthToken -Config (Get-PacketRatLlmConfig -Profile $profile)
+          # Fail before scanning Outlook if the Fairlead key for PacketRat is not installed.
+          $null=Get-PacketRatFairleadKey
           $extra=@{}
           if($provider -eq 'Files'){$extra.Folder=[string]$Data.folder}
           if(@('Single','Batch') -contains [string]$Data.classification){$extra.Classification=[string]$Data.classification}
-          $script:LastResult=Invoke-PacketRatInboxAnalysis -Profile $profile -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root @extra
+          $script:LastResult=Invoke-PacketRatInboxAnalysis -Provider $provider -MaxEmails $max -DaysBack $days -Root $Root @extra
           $run=$script:LastResult
           if($run.Success){$null=Add-PacketRatUsage -Action triaged -Count ([int]$run.AnalyzedCount) -Root $Root;$null=Add-PacketRatUsage -Action reports -Root $Root}
           return @{ok=[bool]$run.Success;message=$run.Message;report=$run.Report;reportStructure=@($run.ReportStructure);responseProtocol=[string]$run.ResponseProtocol;reportItems=@($run.ReportItems);reportSections=@($run.ReportSections);reportQuality=$run.ReportQuality;store=(Get-PacketRatStore -Root $Root);summary=@{AnalyzedCount=$run.AnalyzedCount;Provider=$run.Provider;Profile=$run.Profile;Model=$run.Model;GeneratedAt=$run.GeneratedAt}}
@@ -105,8 +84,7 @@ function Invoke-PacketRatApiCore {
           $sectionId=[string]$Data.sectionId
           if(-not $sectionId){$sectionId='all'}
           if($sectionId -cne 'all' -and $sectionId -notmatch '^section-\d{1,3}$'){throw 'Invalid report section.'}
-          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
-          $generated=Invoke-PacketRatReportFollowup -Analysis $script:LastResult -Mode $mode -SectionId $sectionId -Profile $profile
+          $generated=Invoke-PacketRatReportFollowup -Analysis $script:LastResult -Mode $mode -SectionId $sectionId
           $null=Add-PacketRatUsage -Action reports -Root $Root
           return @{ok=$true;generated=$generated}
       }
@@ -194,10 +172,9 @@ function Invoke-PacketRatApiCore {
           if(-not $script:LastResult){throw 'Run analysis in this session before drafting'}
           $email=Find-PacketRatReportSource $key
           if(-not $email){throw 'Email not available in current verified analysis'}
-          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
           $instruction=[string]$Data.instruction
           if($instruction.Length -gt 2000){throw 'Draft instruction exceeds limit'}
-          $draft=New-PacketRatDraftReply -Email $email -Profile $profile -ExtraInstruction $instruction
+          $draft=New-PacketRatDraftReply -Email $email -ExtraInstruction $instruction
           $null=Add-PacketRatUsage -Action drafts -Root $Root
           return @{ok=$true;draft=$draft}
       }
@@ -288,9 +265,8 @@ function Invoke-PacketRatApiCore {
       '/api/stats/reset' { Reset-PacketRatUsage -Root $Root; return @{ok=$true;stats=(Get-PacketRatUsageStats -Root $Root)} }
       '/api/assist/brief' { return @{ok=$true;briefing=(Get-PacketRatSpokenBriefing -Store $store)} }
       '/api/assist/ask' {
-          $profile=try{ConvertTo-PacketRatLlmProfile -Profile ([string]$Data.profile)}catch{'Auto'}
-          $answer=Invoke-PacketRatAssistAsk -Store $store -Question ([string]$Data.question) -Profile $profile
-          return @{ok=$true;say=$answer.Say;proposals=@($answer.Proposals);profile=$answer.Profile;model=$answer.Model;note='Proposals are suggestions only; nothing was changed.'}
+          $answer=Invoke-PacketRatAssistAsk -Store $store -Question ([string]$Data.question)
+          return @{ok=$true;say=$answer.Say;proposals=@($answer.Proposals);model=$answer.Model;note='Proposals are suggestions only; nothing was changed.'}
       }
       '/api/voice/status' { return @{ok=$true;voice=(Get-PacketRatVoiceStatus -Root $Root)} }
       default {throw 'Unknown API route'}

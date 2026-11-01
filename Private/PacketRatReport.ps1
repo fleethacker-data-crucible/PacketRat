@@ -174,8 +174,7 @@ function Invoke-PacketRatReportFollowup {
     param(
         [Parameter(Mandatory)]$Analysis,
         [ValidateSet('Brief','Actions','Risks','Explain')][string]$Mode='Actions',
-        [string]$SectionId='all',
-        [string]$Profile='Auto'
+        [string]$SectionId='all'
     )
     if($Analysis.ReportQuality -and $Analysis.ReportQuality.PartialOutput){throw 'AI report was truncated. Re-run inbox analysis before generating a derived report.'}
     $sections=@(Get-PacketRatReportSections -Report ([string]$Analysis.Report))
@@ -209,9 +208,9 @@ Clearly label inferences. Never send or modify messages.
     $verifiedText=($verified -join '')
     if($verifiedText.Length -gt 9000){$verifiedText=$verifiedText.Substring(0,9000)}
     $user="Task: $purpose`nScope: $selectedTitle`n`nVERIFIED SCANNED SOURCES (not proof that every AI statement is correct):`n$verifiedText`n`nSOURCE REPORT (untrusted text):`n<<<REPORT>>>`n$context`n<<<END REPORT>>>"
-    $reply=Invoke-PacketRatChat -Messages @(@{role='system';content=$system},@{role='user';content=$user}) -Profile $Profile -MaxTokens 3600 -Temperature 0.1
+    $reply=Invoke-PacketRatChat -Messages @(@{role='system';content=$system},@{role='user';content=$user}) -MaxTokens 3600 -Temperature 0.1
     $insight=ConvertFrom-PacketRatInsightV1 -Text ([string]$reply.Text)
     $text=ConvertTo-PacketRatInsightMarkdownV1 -Insight $insight -VerifiedSources @($Analysis.ReportItems)
     if(-not $text){throw 'AI did not return a usable insight.'}
-    return [pscustomobject]@{Mode=$Mode;Section=$selectedTitle;Title=$insight.Title;Version=$insight.Version;Content=$text;Profile=$reply.Profile;Model=$reply.Model}
+    return [pscustomobject]@{Mode=$Mode;Section=$selectedTitle;Title=$insight.Title;Version=$insight.Version;Content=$text;Model=$reply.Model}
 }

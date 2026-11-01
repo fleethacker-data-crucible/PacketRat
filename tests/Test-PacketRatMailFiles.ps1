@@ -3,10 +3,11 @@
 # tests\fixtures\mail; .msg files are built here by a tiny compound-file writer so no binary blobs are committed.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
-foreach($name in @('LazaretteBridge','PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')){
+foreach($name in @('PacketRatLogging','PacketRatLifecycle','PacketRatLlm','PacketRatStore','PacketRatUsage','PacketRatRules','PacketRatProtocol','PacketRatReport','Get-OutlookMailSummary','PacketRatGraph','PacketRatMailFiles','PacketRatDraft','PacketRatApi','PacketRatCommands')){
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
+Set-PacketRatCredentialReader { param([string]$Target) 'fl-test-key' }   # the analyze preflight checks that the Fairlead key is installed
 function Assert-Files([bool]$Pass,[string]$Message){if(-not $Pass){throw ('Mail files test failed: '+$Message)}}
 # Invoke-PacketRatApi has no -Root parameter: it reads $Root from the caller's scope, so scope it here (the repo's own Logs store is never touched).
 function Invoke-ApiAt([string]$Dir,[string]$Route,$Data){ $Root=$Dir; Invoke-PacketRatApi -Route $Route -Data $Data }
@@ -151,16 +152,16 @@ try{
 
     # --- End to end: analysis, AI stubbed ---------------------------------------------------------------------------
     function Invoke-PacketRatChat {
-        param([object[]]$Messages,[string]$Profile,[string]$Model,[int]$MaxTokens,[double]$Temperature)
+        param([object[]]$Messages,[string]$Model,[int]$MaxTokens,[double]$Temperature)
         $user=[string]$Messages[1].content
         $rows=@(ConvertFrom-Json -InputObject $user.Substring($user.IndexOf('EMAIL DATA (JSON):')+18).Trim() | ForEach-Object { $_ })
         $recs=foreach($row in $rows){
             $cat=if($row.Subject -match 'Approve'){'must_reply'}else{'no_action'}
             '{{"index":{0},"category":"{1}","urgency":"High","reason":"Reason {0}","requested_action":"Act","deadline":"","evidence":"e","confidence":"high"}}' -f $row.Index,$cat
         }
-        [pscustomobject]@{Text="<<<PACKETRAT_CLASSIFY_V1>>>`n{`"version`":`"PACKETRAT_CLASSIFY_V1`",`"records`":[$($recs -join ',')]}`n<<<END_PACKETRAT_CLASSIFY_V1>>>";Profile='Test';Model='TestModel'}
+        [pscustomobject]@{Text="<<<PACKETRAT_CLASSIFY_V1>>>`n{`"version`":`"PACKETRAT_CLASSIFY_V1`",`"records`":[$($recs -join ',')]}`n<<<END_PACKETRAT_CLASSIFY_V1>>>";Model='TestModel'}
     }
-    $r=Invoke-PacketRatInboxAnalysis -Provider Files -Folder $mailDir -Classification Batch -Root $tmp -Profile AiEndpoint
+    $r=Invoke-PacketRatInboxAnalysis -Provider Files -Folder $mailDir -Classification Batch -Root $tmp
     Assert-Files ($r.Success -and $r.Provider -eq 'Files' -and $r.AnalyzedCount -eq 5) 'files analysis succeeds without Outlook'
     Assert-Files (@($r.MustReply | Where-Object Subject -match 'Approve the synthetic').Count -eq 1) 'the budget mail reaches the action queue (local direct-request rule also queues the direct .msg)'
     Assert-Files ($r.Report -match '## Must Reply') 'the same report is produced'

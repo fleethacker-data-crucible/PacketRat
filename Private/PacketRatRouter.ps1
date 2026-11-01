@@ -1,6 +1,6 @@
 # PacketRat - make sure the Fairlead model router is running when PacketRat is set to use it
 #requires -Version 5.1
-# Only active with PACKETRAT_ROUTER=fairlead (opt-in). Fairlead is a shared background service for the Fleet tools, so
+# Fairlead is a shared background service for the Fleet tools, so
 # PacketRat starts it when nothing answers on its address and never stops it:
 #   running already          -> use it, no prompt
 #   not running, not set up  -> start it and open its setup page once (add keys, add a client)
@@ -70,7 +70,6 @@ function Start-PacketRatFairleadProcess {
 function Ensure-PacketRatFairlead {
     # Returns @{ State; Message }. State: Skipped | AlreadyRunning | Started | StartedForSetup | Declined | NotFound | Failed
     param([string]$Root, [switch]$Interactive, [int]$WaitSeconds = 40)
-    if (-not (Test-PacketRatFairleadEnabled)) { return @{ State = 'Skipped'; Message = 'Fairlead routing is off.' } }
     if (([string][Environment]::GetEnvironmentVariable('PACKETRAT_FAIRLEAD_AUTOSTART')).Trim() -match '^(?i:off|0|false|no)$') {
         return @{ State = 'Skipped'; Message = 'Fairlead autostart is off (PACKETRAT_FAIRLEAD_AUTOSTART).' }
     }
@@ -80,7 +79,7 @@ function Ensure-PacketRatFairlead {
     if (Test-PacketRatFairleadUp -Uri $uri) { return @{ State = 'AlreadyRunning'; Message = 'Fairlead is already running.' } }
 
     $dir = Get-PacketRatFairleadDir -Root $Root
-    if (-not $dir) { return @{ State = 'NotFound'; Message = 'Fairlead is not running and its folder was not found. Put it next to PacketRat or set FAIRLEAD_DIR. To use the profile endpoint instead, set PACKETRAT_ROUTER=direct.' } }
+    if (-not $dir) { return @{ State = 'NotFound'; Message = 'Fairlead is not running and its folder was not found. Put it next to PacketRat or set FAIRLEAD_DIR.' } }
 
     $setup = Get-PacketRatFairleadSetupState
     $openSetup = $false

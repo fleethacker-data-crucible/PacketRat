@@ -18,7 +18,7 @@ $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
 $cliArgs = @($args | ForEach-Object { [string]$_ })
 
-foreach ($name in @('LazaretteBridge', 'PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm','PacketRatRouter', 'PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph','PacketRatMailFiles', 'PacketRatDraft', 'PacketRatHandoff','PacketRatBurden','PacketRatActionLog','PacketRatApi', 'PacketRatCommands')) {
+foreach ($name in @('PacketRatLogging', 'PacketRatLifecycle', 'PacketRatLlm','PacketRatRouter', 'PacketRatStore','PacketRatAssistant','PacketRatVoiceAssets','PacketRatUsage', 'PacketRatRules', 'PacketRatProtocol', 'PacketRatReport', 'Get-OutlookMailSummary', 'PacketRatGraph','PacketRatMailFiles', 'PacketRatDraft', 'PacketRatHandoff','PacketRatBurden','PacketRatActionLog','PacketRatApi', 'PacketRatCommands')) {
     . (Join-Path $Root "Private\$name.ps1")
 }
 . (Join-Path $Root 'Public\Invoke-PacketRatInboxAnalysis.ps1')
@@ -104,15 +104,14 @@ if (Test-Path $envFile) {
         if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim().Trim('"').Trim("'"), 'Process') }
     }
 }
-# Commands that call the AI make sure Fairlead is running when it is the router (no dialog; the previous setup is used).
-if (@('packetrat inbox analyze', 'packetrat report generate', 'packetrat draft create', 'packetrat assist ask') -contains $command.Name -and (Test-PacketRatFairleadEnabled)) {
+# Commands that call the AI make sure Fairlead is running (no dialog; the previous setup is used).
+if (@('packetrat inbox analyze', 'packetrat report generate', 'packetrat draft create', 'packetrat assist ask') -contains $command.Name) {
     $fl = Ensure-PacketRatFairlead -Root $Root
     if ($fl.State -ne 'Skipped' -and $fl.State -ne 'AlreadyRunning') { [Console]::Error.WriteLine('Fairlead: ' + $fl.Message) }
 }
 try {
     if ($command.NeedsAnalysis -and $global.analyze) {
-        $prof = if ($body.PSObject.Properties['profile']) { $body.profile } else { 'Auto' }
-        $null = Invoke-PacketRatApi -Route '/api/analyze' -Data ([pscustomobject]@{ profile = $prof; provider = 'COM'; maxEmails = 40; daysBack = 14 })
+        $null = Invoke-PacketRatApi -Route '/api/analyze' -Data ([pscustomobject]@{ provider = 'COM'; maxEmails = 40; daysBack = 14 })
     }
     $data = if ($command.Method -eq 'GET') { $null } else { $body }
     $result = Invoke-PacketRatApi -Route $command.Route -Data $data

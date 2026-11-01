@@ -7,7 +7,7 @@ One page for a security or workstation reviewer: what PacketRat is, what it touc
 ## What it needs
 
 - Windows PowerShell 5.1 (built in) and Edge or Chrome. No installer, no administrator rights, no NuGet or third-party DLLs.
-- Optional: classic Outlook (COM provider), the Microsoft Graph PowerShell modules (Graph provider, off by default), an approved AI endpoint, Lazarette for credentials.
+- Optional: classic Outlook (COM provider), the Microsoft Graph PowerShell modules (Graph provider, off by default), Fairlead (the Fleet model router) for AI.
 
 ## What it touches
 
@@ -24,17 +24,17 @@ One page for a security or workstation reviewer: what PacketRat is, what it touc
 
 | Destination | When | What |
 |---|---|---|
-| The AI endpoint | Only when a person runs an analysis, report, draft or question | Sender, subject and message text of the mail involved. The endpoint is Fairlead (`127.0.0.1:8776`) when that router is on, otherwise the profile endpoint (local phoenix-lai at `127.0.0.1:1234` by default, or the address in `LLM_URL`, `PACKETRAT_AI_ENDPOINT_URL` or `PACKETRAT_GROK_URL`). Use only an endpoint your organization has approved for email content. |
+| The AI router (Fairlead) | Only when a person runs an analysis, report, draft or question | Sender, subject and message text of the mail involved. The only AI address is Fairlead on this PC (`127.0.0.1:8776`; a different port only if `PACKETRAT_FAIRLEAD_URL` says so, and never another host). Fairlead decides which model sees it: set `PACKETRAT_FAIRLEAD_PRIVACY=local` to keep prompts on local models. Use only a Fairlead route your organization has approved for email content. |
 | Microsoft Graph | Only with the Graph provider selected | Mail read through the signed-in account's Graph modules (scopes Mail.Read, Mail.ReadWrite, User.Read), which needs the organization's authorization. |
 | Anywhere else | Never | No telemetry, no usage data, no update check. The counts stay in the local store. |
 
-Credentials: a token is never taken on a command line, never saved from the browser and never returned by an API. Lazarette or an approved environment variable supplies it.
+Credentials: PacketRat holds one credential, its own Fairlead key, in Windows Credential Manager (`Fairlead/PacketRat`), which Fairlead writes. A key is never taken on a command line, never saved from the browser and never returned by an API.
 
 ## What is proven and what is not
 
 Proven by offline tests (run in CI on Windows PowerShell 5.1, with fakes for Outlook, Graph and the AI): triage rules and draft parsing, the strict AI wire protocol, the command and API parity, the inbox actions against a fake Outlook, the Files provider on invented mail, the counts export, the Fairlead router setting against a stub.
 
-Not proven, and needing a person on the target machine: classic Outlook on a managed workstation (COM analysis, draft opening, archive and move), a live run through Fairlead, the Lazarette bridge unlocked, Microsoft Graph sign-in, and the browser experience under the workstation's policies. The README's status table says the same.
+Not proven, and needing a person on the target machine: classic Outlook on a managed workstation (COM analysis, draft opening, archive and move), a live run through Fairlead, Microsoft Graph sign-in, and the browser experience under the workstation's policies. The README's status table says the same.
 
 ## Before a managed workstation runs it
 

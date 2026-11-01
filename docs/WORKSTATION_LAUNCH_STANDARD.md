@@ -16,7 +16,6 @@ Purpose: keep PowerShell/browser apps consistent with proven Lazarette and Halya
 ## Current comparison (2026-10-22)
 
 - Halyard (previous name) launcher: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...
-- Lazarette: integrators dot-source `lib\Lazarette.ps1` and call `Unlock-LazaretteVaultInteractive` / `Get-LazaretteSecret` (see Lazarette `docs/INTEGRATION.md`).
 - PacketRat's original Windows Forms launcher (retired): explicitly used -ExecutionPolicy Bypass -STA.
 - PacketRat's early web/demo batch scripts omitted the execution-policy argument. The current launchers match Halyard and retain STA.
 
@@ -28,4 +27,3 @@ Run Launch-PacketRat.bat diagnostics first. It reports policy context without mo
 
 The only user-facing Windows batch files are `Launch-PacketRat.bat` (browser GUI, `demo`, and `diagnostics` subcommands) and `PacketRat-CLI.bat` (console mode). Root `Start-PacketRat-*.bat` files have been removed. The `.ps1` PowerShell hosts remain internal application components.
 
-For Lazarette instability, the browser Configuration workspace supports explicit **Lazarette / configured environment** or **Manual · current session** token selection. The latter is memory-only in the running PowerShell process and must be authorized for the target workstation and data classification.
