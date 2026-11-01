@@ -17,6 +17,12 @@ Packet ships carried the mail on scheduled routes, and the sailors aboard were c
 
 > **Status:** Integrated prototype. Offline/browser functionality has been tested in development; real Outlook COM, Graph, a live run through Fairlead, and operational workstation execution need validation in the approved environment. Not accredited or production-ready.
 
+## Demo preview
+
+![PacketRat demo: the overview and high-priority action queue, using synthetic sample mail](docs/demo/PacketRat-demo-preview.gif)
+
+A short, silent README preview using the built-in demo mode: synthetic mail only, with no Outlook or AI connection. Full narrated demos are produced by [Signal-Gun](https://github.com/fleethacker-data-crucible/Signal-Gun/blob/main/docs/RENDER.md).
+
 | Night watch (dark) | Chart room (light) |
 | --- | --- |
 | ![PacketRat overview in the Night watch theme](docs/screenshots/overview-night-watch.png) | ![PacketRat overview in the Chart room theme](docs/screenshots/overview-chart-room.png) |
