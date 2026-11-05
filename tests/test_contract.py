@@ -61,4 +61,6 @@ assert "navigator.sendBeacon('/api/heartbeat'" in CLIENT and "'pagehide'" in CLI
 assert 'id="endSession"' in HTML
 assert (ROOT/'Stop-PacketRat.ps1').is_file()
 assert 'PACKETRAT_AUTO_STOP' in (ROOT/'Config/packetrat.env.example').read_text()
+# Saved preferences are written as {provider, folder, ...} and must be read back under the same names (the mail folder field is mailFolder).
+assert "[['provider','provider'],['mailFolder','folder'],['maxEmails','maxEmails'],['daysBack','daysBack']]" in CLIENT, 'loadSettings must read folder back into mailFolder'
 print('Source and asset contract checks passed')

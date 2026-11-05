@@ -292,7 +292,7 @@ async function saveTriageRules(){
  }catch(error){notify(error.message,true)}
 }
 function saveSettings(){const cfg={provider:$('provider').value,folder:$('mailFolder').value.trim(),maxEmails:Number($('maxEmails').value),daysBack:Number($('daysBack').value)};if(!Number.isInteger(cfg.maxEmails)||cfg.maxEmails<1||cfg.maxEmails>150||!Number.isInteger(cfg.daysBack)||cfg.daysBack<1||cfg.daysBack>90)throw Error('Choose 1–150 emails and 1–90 days.');try{localStorage.setItem('packetrat-prefs',JSON.stringify(cfg))}catch{}return cfg}
-function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const name of ['provider','mailFolder','maxEmails','daysBack'])if(cfg[name]!==undefined)$(name).value=cfg[name]}catch{}}
+function loadSettings(){try{const cfg=JSON.parse(localStorage.getItem('packetrat-prefs')||'{}');for(const [field,key] of [['provider','provider'],['mailFolder','folder'],['maxEmails','maxEmails'],['daysBack','daysBack']])if(cfg[key]!==undefined)$(field).value=cfg[key]}catch{}}
 function bridgePref(){try{return localStorage.getItem('packetrat-bridge-speak')==='1'}catch{return false}}
 function bridgeStatus(msg,err){const el=$('bridgeStatus');if(!el)return;el.textContent=msg||'';el.classList.toggle('err',!!err)}
 function bridgeMicHelp(error){const n=String((error&&error.name)||'');if(n==='NotAllowedError'||n==='SecurityError')return 'The browser blocked the microphone. Click the permissions icon in the address bar, allow Microphone for this site, then try again.';if(n==='NotFoundError')return 'No microphone was found on this PC.';if(n==='NotReadableError')return 'The microphone is in use by another app.';return (error&&error.message)||'Microphone error.'}
