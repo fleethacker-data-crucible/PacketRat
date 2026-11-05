@@ -95,6 +95,7 @@ def run():
                 page.locator('#queueSearch').fill('')
                 page.screenshot(path=str(Path(tempfile.gettempdir())/'packetrat-queue-smoke.png'),full_page=True)
                 page.once('dialog', lambda dialog: dialog.accept('Sample false positive'))
+                page.locator('#queue .more-actions summary').first.click()
                 page.locator('#queue [data-act="dismiss"]').first.click()
                 page.wait_for_function("document.getElementById('mDismiss').textContent === '1'")
                 page.get_by_role('button',name='Dismissal memory').click()
@@ -104,16 +105,20 @@ def run():
                 page.locator('.sidebar [data-view="triage"]').click()
                 # Inbox actions (demo mode: nothing is touched in Outlook, and the UI says so).
                 assert page.locator('#queue .inbox-actions').count()==4, 'every queue row has inbox actions'
+                page.locator('#queue .more-actions:not([open]) summary').first.click()
                 page.locator('#queue [data-act="markread"]').first.click()
                 page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode: nothing was changed in Outlook')")
                 page.once('dialog', lambda dialog: dialog.accept('Sample category'))
+                page.locator('#queue .more-actions:not([open]) summary').first.click()
                 page.locator('#queue [data-act="categorize"]').first.click()
                 page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode: nothing was changed')")
                 page.once('dialog', lambda dialog: dialog.dismiss())
                 before=page.locator('#queue .item').count()
+                page.locator('#queue .more-actions:not([open]) summary').first.click()
                 page.locator('#queue [data-act="archive"]').first.click()
                 assert page.locator('#queue .item').count()==before, 'declining the archive confirm changes nothing'
                 page.once('dialog', lambda dialog: dialog.accept())
+                page.locator('#queue .more-actions:not([open]) summary').first.click()
                 page.locator('#queue [data-act="archive"]').first.click()
                 page.wait_for_function("document.getElementById('mDismiss').textContent === '1'")
                 page.wait_for_function("document.getElementById('notice').textContent.includes('Demo mode: nothing was moved in Outlook')")
