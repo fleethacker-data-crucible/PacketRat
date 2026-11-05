@@ -130,6 +130,8 @@ function Invoke-PacketRatRuleTriage {
                 }
                 $items[$key]=$candidate
             }
+            # The built-in "direct request" rule means "at least Medium": it must not pull down a High the model already gave.
+            if($rule.Id -eq 'directask' -and $items.ContainsKey($key) -and [string]$candidate.Urgency -eq 'High'){break}
             $candidate | Add-Member -NotePropertyName Urgency -NotePropertyValue ([string]$rule.Effect) -Force
             $candidate | Add-Member -NotePropertyName TriageSource -NotePropertyValue 'Rule' -Force
             $candidate | Add-Member -NotePropertyName RuleName -NotePropertyValue ([string]$rule.Name) -Force

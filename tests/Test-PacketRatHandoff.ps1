@@ -36,14 +36,11 @@ try{
     Assert-Handoff (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB)) 'the file is UTF-8 without a BOM'
     $doc=$raw | ConvertFrom-Json
     $it=$doc.items[0]
-    Assert-Handoff ($doc.schema -eq 'packetrat.halyard-handoff/1' -and $doc.source -eq 'packetrat' -and @($doc.items).Count -eq 1) 'schema, source and one item'
-    Assert-Handoff ($it.sourceTitle -eq 'Renew the building badge' -and $it.title -eq 'STORY :: Renew the building badge') 'the subject is cleaned of line breaks and used in Halyard''s title pattern'
-    Assert-Handoff ($it.id -eq 'STORY-renew-the-building-badge' -and $it.meta.id -eq $it.id -and $it.type -eq 'STORY') 'the id follows Halyard''s STORY-slug pattern'
-    Assert-Handoff ($it.sourceKey -eq ('packetrat:'+$ref) -and $it.sourceRepository -eq 'packetrat') 'the source key is the short reference, not the message id'
-    Assert-Handoff ((@($it.labels) -join ',') -eq 'halyard,source::packetrat,type::story,urgency::high') 'labels carry the urgency'
-    Assert-Handoff ($it.narrative -match '## Purpose\s+Reply by Friday\.' -and $it.narrative -match '## Source') 'the narrative holds the recommended action'
-    Assert-Handoff ($it.closed -eq $false -and $it.meta.state -eq 'open' -and $null -eq $it.meta.parent -and $null -eq $it.meta.points -and $null -eq $it.meta.sprint) 'open, with the hierarchy fields left null'
-    Assert-Handoff ((@($it.gaps) -join ',') -eq 'parent,theme,area,points,sprint' -and $it.confidence -eq 'low') 'the gaps and low confidence say Halyard must still place it'
+    Assert-Handoff ($doc.format -eq 'fleet-handoff' -and $doc.version -eq 1 -and $doc.source.app -eq 'packetrat' -and @($doc.items).Count -eq 1) 'format, version, source app and one item'
+    Assert-Handoff ($it.title -eq 'Renew the building badge') 'the subject is cleaned of line breaks and is the title'
+    Assert-Handoff ($it.ref -eq ('packetrat-'+$ref)) 'the ref is the short reference, not the message id'
+    Assert-Handoff ((@($it.labels) -join ',') -eq 'urgency::high' -and $it.kind -eq 'story') 'the label carries the urgency and the kind is story'
+    Assert-Handoff ($it.body -match '^Reply by Friday\.' -and $it.body -match 'Tracked in PacketRat \(urgency: High\)') 'the body holds the recommended action'
 
     # --- What never leaves -------------------------------------------------------------------------------------------------------
     foreach($forbidden in 'Alice','alice@','example.test','ENTRY-ID-SYNTHETIC',$key){
@@ -52,12 +49,12 @@ try{
     $long=[pscustomobject]@{Key='id:long';Index=2;EntryID='E2';Subject=('S'*300);From='B';FromEmail='b@example.test';Why=('W'*900);Urgency='Low';TriageSource='Manual';RuleName=''}
     $store=Merge-PacketRatChecklist -Store (Get-PacketRatStore -Root $tmp) -Items @($long) -Root $tmp
     $l=(New-PacketRatHalyardHandoff -Store (Get-PacketRatStore -Root $tmp) -Key 'id:long' -Root $tmp).Document.items[0]
-    Assert-Handoff ($l.sourceTitle.Length -le 120 -and $l.narrative.Length -lt 800 -and $l.id.Length -le 46) 'long subjects and actions are cut'
+    Assert-Handoff ($l.title.Length -le 120 -and $l.body.Length -lt 800) 'long subjects and actions are cut'
 
     # --- Same action, same file; status carries over ----------------------------------------------------------------------------------
     $null=Set-PacketRatChecklistStatus -Store (Get-PacketRatStore -Root $tmp) -Key $key -Status done -Root $tmp
     $r2=New-PacketRatHalyardHandoff -Store (Get-PacketRatStore -Root $tmp) -Key $key -Root $tmp
-    Assert-Handoff ($r2.File -eq $r.File -and $r2.Document.items[0].closed -eq $true -and $r2.Document.items[0].meta.state -eq 'closed') 'rewriting uses the same file and a done action is closed'
+    Assert-Handoff ($r2.File -eq $r.File -and $r2.Document.items[0].body -match 'already done there') 'rewriting uses the same file and a done action says so'
     $null=Set-PacketRatChecklistStatus -Store (Get-PacketRatStore -Root $tmp) -Key $key -Status open -Root $tmp
 
     # --- Refusals ---------------------------------------------------------------------------------------------------------------------
@@ -68,17 +65,17 @@ try{
 
     # --- The page documents the real fields ----------------------------------------------------------------------------------------------
     $page=[IO.File]::ReadAllText((Join-Path $Root 'docs\HALYARD-HANDOFF.md'))
-    $top=@([regex]::Matches([regex]::Match($page,'(?ms)^Schema `packetrat\.halyard-handoff/1`\.(.*?)^Each item:').Groups[1].Value,'(?m)^\| `([A-Za-z]+)` \|') | ForEach-Object { $_.Groups[1].Value })
+    $top=@([regex]::Matches([regex]::Match($page,'(?ms)^Format `fleet-handoff`, version 1\.(.*?)^Each item:').Groups[1].Value,'(?m)^\| `([A-Za-z]+)` \|') | ForEach-Object { $_.Groups[1].Value })
     $per=@([regex]::Matches([regex]::Match($page,'(?ms)^Each item:(.*?)^Example:').Groups[1].Value,'(?m)^\| `([A-Za-z]+)` \|') | ForEach-Object { $_.Groups[1].Value })
     Assert-Handoff ((($top | Sort-Object) -join ',') -eq ((@($doc.PSObject.Properties.Name) | Sort-Object) -join ',')) 'the page lists exactly the top-level fields'
     Assert-Handoff ((($per | Sort-Object) -join ',') -eq ((@($it.PSObject.Properties.Name) | Sort-Object) -join ',')) 'the page lists exactly the fields of an item'
     $ex=[regex]::Match($page,'(?s)```json\r?\n(.*?)```').Groups[1].Value | ConvertFrom-Json
     Assert-Handoff ((@($ex.items[0].PSObject.Properties.Name) -join ',') -eq (@($it.PSObject.Properties.Name) -join ',') -and (@($ex.PSObject.Properties.Name) -join ',') -eq (@($doc.PSObject.Properties.Name) -join ',')) 'the documented example has the same fields in the same order'
-    Assert-Handoff ($page -match 'no reader for the file yet' -and $page -match 'never.*holds the sender') 'the page says Halyard has no reader yet and what is never included'
+    Assert-Handoff ($page -match 'Intake' -and $page -match 'never.*holds the sender') 'the page says where Halyard reads the file and what is never included'
 
     # --- API route and command --------------------------------------------------------------------------------------------------------------
     $api=Invoke-ApiAt $tmp '/api/item/handoff' ([pscustomobject]@{key=$key})
-    Assert-Handoff ($api.ok -eq $true -and $api.file -eq $r.File -and $api.handoff.schema -eq 'packetrat.halyard-handoff/1') 'the route returns the document and the file'
+    Assert-Handoff ($api.ok -eq $true -and $api.file -eq $r.File -and $api.handoff.format -eq 'fleet-handoff') 'the route returns the document and the file'
     Assert-Throws { Invoke-ApiAt $tmp '/api/item/handoff' ([pscustomobject]@{key='id:nothing'}) } 'No tracked action' 'the route refuses an unknown key'
     $c=Find-PacketRatCommand 'item handoff'
     Assert-Handoff ($null -ne $c -and $c.Route -eq '/api/item/handoff' -and $c.Method -eq 'POST' -and -not $c.Destructive -and @($c.Inputs | Where-Object { $_.Required -and $_.Flag -eq 'key' }).Count -eq 1) 'item handoff is a registered command that needs --key'

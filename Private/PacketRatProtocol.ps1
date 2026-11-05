@@ -91,13 +91,13 @@ function ConvertFrom-PacketRatReportV1 {
     for($i=0;$i -lt 6;$i++){
         $section=$sections[$i]
         if([string]$section.id -cne $ids[$i]){throw ('Report protocol: wrong section '+$ids[$i])}
-        if($null -eq $section.items){throw 'Report protocol: section items missing.'}
+        # A model sometimes leaves out "items" on an empty section; the prompt says to use [], so treat a missing key as empty.
         $title=[string]$section.title;$summary=[string]$section.summary
         if($title.Length -gt 120 -or $summary.Length -gt 3500 -or @($section.items).Count -gt 175){
             throw 'Report protocol: section content exceeds limits.'
         }
         $entries=New-Object System.Collections.Generic.List[object]
-        foreach($entry in @($section.items)){
+        foreach($entry in @($section.items|Where-Object{$null -ne $_})){
             $v=[string]$entry.text;$index=0
             if([string]::IsNullOrWhiteSpace($v) -or $v.Length -gt 1200){throw 'Report protocol: invalid item text.'}
             if($null -ne $entry.email_index -and [string]$entry.email_index -ne ''){

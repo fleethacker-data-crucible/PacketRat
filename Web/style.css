@@ -300,3 +300,13 @@ kbd{display:inline-block;min-width:24px;padding:0 4px;border:1px solid var(--fl-
 @media (max-width:860px){.content{padding:24px 16px}.topbar{padding:0 16px}.clock{display:none}.item{align-items:flex-start;flex-wrap:wrap}.item-actions{width:100%;justify-content:flex-start}.hero{grid-template-columns:minmax(0,1fr)}.hero-art{display:none}}
 @media (max-width:650px){.queue-toolbar{flex-direction:column}.settings-grid,.rule-fields{grid-template-columns:minmax(0,1fr)}.page-header{align-items:flex-start;flex-direction:column}.dialog-footer{align-items:flex-start;flex-direction:column}.content-footer span:last-child{display:none}.statusbar .message,.statusbar .session{display:none}}
 .inbox-actions{display:contents}
+
+/* UI review PACKETRAT-01: a returning user sees today's actions first; the introduction stays for first use. */
+#overview.returning .hero,#overview.returning .page-header p{display:none}
+/* UI review PACKETRAT-02: Outlook, Draft, priority and status stay visible; the secondary commands sit in one More menu. */
+.more-actions{position:relative;display:inline-block}
+.more-actions>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border:1px solid var(--fl-border);border-radius:var(--fl-radius-control);background:transparent;color:var(--fl-foreground);font-size:var(--fl-text-caption);font-weight:600}
+.more-actions>summary::-webkit-details-marker{display:none}
+.more-actions[open]>summary{background:var(--fl-muted)}
+.more-menu{position:absolute;right:0;top:36px;z-index:20;display:flex;flex-direction:column;gap:2px;min-width:150px;padding:6px;background:var(--fl-surface);border:1px solid var(--fl-border);border-radius:var(--fl-radius-control);box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.more-menu button{width:100%;text-align:left;justify-content:flex-start}

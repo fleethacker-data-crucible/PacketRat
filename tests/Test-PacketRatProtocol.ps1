@@ -57,6 +57,12 @@ $fakeIndex=$goodReport.Replace('"index":1','"index":999')
 Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $fakeIndex -MaxSourceIndex 2} 'Invalid email index rejected'
 Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $goodReport.Replace('"version":"PACKETRAT_REPORT_V1"','"version":"V0"')} 'Unsupported schema version rejected'
 Expect-ProtocolError {ConvertFrom-PacketRatReportV1 -Text $goodReport.Replace('<<<END_PACKETRAT_REPORT_V1>>>','')} 'Truncated report rejected'
+# A model sometimes leaves out "items" on an empty section: accepted as an empty list, not a failed analysis.
+$noItems=$goodReport.Replace('"summary":"Confirm required action in Outlook.","items":[]','"summary":"Confirm required action in Outlook."')
+Assert-Protocol ($noItems -ne $goodReport) 'Test setup removed the items key'
+$lenient=ConvertFrom-PacketRatReportV1 -Text $noItems -MaxSourceIndex 2
+Assert-Protocol (@($lenient.Sections).Count -eq 6) 'Report with a missing items key still has six sections'
+Assert-Protocol (@($lenient.Sections[5].Items).Count -eq 0) 'Missing items key reads as an empty list'
 $signature='<html><body class="WordSection1"><div id="signature">Authorized Outlook signature<img src="cid:logo.png"></div><blockquote>Prior email</blockquote></body></html>'
 $joined=Join-PacketRatReplyHtml -ExistingHtml $signature -DraftText 'Review <this> & confirm'
 Assert-Protocol ($joined.Contains('Review &lt;this&gt; &amp; confirm')) 'HTML escape message'

@@ -1,13 +1,12 @@
 # PacketRat - hand a tracked mail to Halyard as a backlog item candidate (a plain file; nothing is sent anywhere)
 #requires -Version 5.1
-# Writes Logs\handoff\halyard-<ref>.json for one tracked action: the subject as the title, PacketRat's recommended action
-# as the narrative, the urgency as a label, and the list of things Halyard still has to decide (parent, theme, points,
-# sprint, area). The shape follows the work-item JSON Halyard's own fixtures use. It never carries the sender, the message
-# body, the Outlook id or the item key (a short hash of the key names the file). A person reads the file before Halyard
+# Writes Logs\handoff\halyard-<ref>.json for one tracked action in the fleet-handoff v1 format that Halyard's Intake reads
+# (docs/HANDOFF.md in Halyard): the subject as the title, PacketRat's recommended action as the body, the urgency as a label.
+# It never carries the sender, the message body, the Outlook id or the item key (a short hash of the key names the file).
+# A person reads the file before Halyard
 # uses it; Halyard writes to its sandbox only after a human accepts.
 
-$script:PacketRatHandoffSchema = 'packetrat.halyard-handoff/1'
-$script:PacketRatHandoffNote = 'A candidate backlog item from one mail a person tracked in PacketRat. It holds the subject, the recommended action and the urgency; no sender, no message body, no Outlook id. Halyard still has to place it (parent, theme, points, sprint, area), and a person reviews it before anything is written to a backlog.'
+$script:PacketRatHandoffFormat = 'fleet-handoff'
 
 function Get-PacketRatHandoffHash([string]$Text) {
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -40,28 +39,19 @@ function New-PacketRatHalyardHandoff {
     $why = Limit-PacketRatHandoffText ([string]$item.Why) 600
     $urgency = if (@('High', 'Medium', 'Low') -contains [string]$item.Urgency) { [string]$item.Urgency } else { 'Medium' }
     $closed = ([string]$item.Status -eq 'done')
-    $id = 'STORY-' + (ConvertTo-PacketRatHandoffSlug $name)
-    $narrative = "## Purpose`n" + $(if ($why) { $why } else { 'Follow up on a message tracked in PacketRat.' }) + "`n`n## Source`nTracked in PacketRat (urgency: $urgency). The message itself stays in Outlook."
 
+    $body = $(if ($why) { $why } else { 'Follow up on a message tracked in PacketRat.' }) + "`n`nTracked in PacketRat (urgency: $urgency)" + $(if ($closed) { '; already done there' } else { '' }) + '. The message itself stays in the mailbox.'
+    # fleet-handoff v1: the file Halyard's Intake reads (POST /api/intake/handoff/preview, docs/HANDOFF.md in Halyard).
     $doc = [ordered]@{
-        schema = $script:PacketRatHandoffSchema
-        exportedAt = [DateTime]::UtcNow.ToString('o')
-        source = 'packetrat'
-        note = $script:PacketRatHandoffNote
+        format = $script:PacketRatHandoffFormat
+        version = 1
+        source = [ordered]@{ app = 'packetrat'; exportedAt = [DateTime]::UtcNow.ToString('o') }
         items = @([ordered]@{
-            sourceKey = 'packetrat:' + $ref
-            sourceRepository = 'packetrat'
-            sourceTitle = $name
-            id = $id
-            type = 'STORY'
-            title = 'STORY :: ' + $name
-            labels = @('halyard', 'source::packetrat', 'type::story', ('urgency::' + $urgency.ToLowerInvariant()))
-            closed = $closed
-            meta = [ordered]@{ type = 'STORY'; id = $id; parent = $null; theme = $null; state = $(if ($closed) { 'closed' } else { 'open' }); area = $null; points = $null; sprint = $null }
-            narrative = $narrative
-            confidence = 'low'
-            reason = 'A person tracked this message in PacketRat; Halyard has not placed it in the hierarchy yet.'
-            gaps = @('parent', 'theme', 'area', 'points', 'sprint')
+            ref = 'packetrat-' + $ref
+            title = $name
+            body = $body
+            labels = @('urgency::' + $urgency.ToLowerInvariant())
+            kind = 'story'
         })
     }
 

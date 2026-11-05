@@ -65,8 +65,10 @@ function Invoke-PacketRatApiCore {
       }
       '/api/analyze' {
           $provider=if(@('COM','Graph','Files') -contains $Data.provider){$Data.provider}else{'COM'}
-          $max=[Math]::Max(1,[Math]::Min(150,[int]$Data.maxEmails))
-          $days=[Math]::Max(1,[Math]::Min(90,[int]$Data.daysBack))
+          $maxIn=if($null -ne $Data.maxEmails -and [string]$Data.maxEmails -ne ''){[int]$Data.maxEmails}else{40}
+          $max=[Math]::Max(1,[Math]::Min(150,$maxIn))
+          $daysIn=if($null -ne $Data.daysBack -and [string]$Data.daysBack -ne ''){[int]$Data.daysBack}else{14}
+          $days=[Math]::Max(1,[Math]::Min(90,$daysIn))
           # Fail before scanning Outlook if the Fairlead key for PacketRat is not installed.
           $null=Get-PacketRatFairleadKey
           $extra=@{}
