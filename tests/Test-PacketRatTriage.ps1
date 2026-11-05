@@ -28,6 +28,20 @@ try {
     Assert-PacketRat (@($result.Items | Where-Object Key -eq 'test-one').Count -eq 1) 'direct organization request included'
     Assert-PacketRat (@($result.Items | Where-Object Key -eq 'test-one')[0].Urgency -eq 'High') 'direct organization request escalated'
     Assert-PacketRat (@($result.Items | Where-Object Key -eq 'test-three').Count -eq 0) 'unrequested organization message not escalated'
+    # The built-in direct-request rule is a floor of Medium: a High from the model survives it, a Low is raised to it.
+    $env:PACKETRAT_ORG_DOMAIN=''
+    $floor=@(
+        [pscustomobject]@{Index=1;Fingerprint='floor-high';EntryID='f1';FromName='Ops';FromEmail='ops@other.example';Subject='Approve today';BodyPreview='Please approve this by 15:00';IsDirect=$true;AppearsReplied=$false;ReplyEvidence='';UserDismissed=$false;IsSensitive=$false;UnRead=$true;Importance=1},
+        [pscustomobject]@{Index=2;Fingerprint='floor-low';EntryID='f2';FromName='Ops';FromEmail='ops@other.example';Subject='Question about lunch';BodyPreview='Can you join lunch?';IsDirect=$true;AppearsReplied=$false;ReplyEvidence='';UserDismissed=$false;IsSensitive=$false;UnRead=$true;Importance=1}
+    )
+    $floorSuggest=@(
+        [pscustomobject]@{Index=1;Key='floor-high';EntryID='f1';From='Ops';Subject='Approve today';Why='Deadline today';Urgency='High'},
+        [pscustomobject]@{Index=2;Key='floor-low';EntryID='f2';From='Ops';Subject='Question about lunch';Why='Social';Urgency='Low'}
+    )
+    $floorResult=Invoke-PacketRatRuleTriage -Emails $floor -Suggested $floorSuggest -Store $store
+    Assert-PacketRat (@($floorResult.Items | Where-Object Key -eq 'floor-high')[0].Urgency -eq 'High') 'direct-request rule keeps the stricter High from the model'
+    Assert-PacketRat (@($floorResult.Items | Where-Object Key -eq 'floor-low')[0].Urgency -eq 'Medium') 'direct-request rule raises a Low to Medium'
+    $env:PACKETRAT_ORG_DOMAIN='agency.example'
     Assert-PacketRat (@($result.SuppressedKeys).Count -eq 1) 'automated false positive suppressed'
     $store=Merge-PacketRatChecklist -Store $store -Items @($result.Items) -Root $testRoot
     $store=Set-PacketRatChecklistPriority -Store $store -Key 'test-one' -Urgency Low -Root $testRoot
