@@ -25,9 +25,13 @@ jobs:
           node --check Web/report-experience.js
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_intelligence.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_voice.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_voice_input.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_voice_piper.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node tests/test_gen_icons.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install development browser dependencies
