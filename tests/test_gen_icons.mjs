@@ -14,7 +14,10 @@ assert.equal(evalLiteral(jsSingleQuoted('trail\\')), 'trail\\');
 assert.equal(evalLiteral(jsSingleQuoted("\\'")), "\\'");
 
 const bypass = '<!<!---->-->';
-assert.ok(bypass.replace(/<!--[\s\S]*?-->/g, '').includes('<!--'), 'one pass reassembles <!--');
+const open = bypass.indexOf('<!--');
+const close = bypass.indexOf('-->', open + 4);
+const onePass = bypass.slice(0, open) + bypass.slice(close + 3);
+assert.equal(onePass, '<!-->');
 assert.equal(stripSvgComments(bypass), '');
 assert.equal(stripSvgComments('<!-- closed -->keep'), 'keep');
 assert.equal(stripSvgComments('<!-- a --><!-- b -->tail'), 'tail');
