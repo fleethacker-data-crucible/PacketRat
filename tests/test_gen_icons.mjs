@@ -1,6 +1,6 @@
 // Development-only checks for tools/gen-icons.mjs. Node is not used on the workstation.
 import assert from 'node:assert/strict';
-import { stripSvgComments, jsSingleQuoted, svgInner, iconRecord } from '../tools/gen-icons.mjs';
+import { stripHtmlComments, stripSvgComments, jsSingleQuoted, svgInner, iconRecord } from '../tools/gen-icons.mjs';
 
 function evalLiteral(literal) {
   return Function(`"use strict"; return ${literal};`)();
@@ -26,6 +26,22 @@ assert.equal(stripSvgComments('no comment'), 'no comment');
 assert.equal(stripSvgComments('a<!-->b'), 'ab');
 assert.equal(stripSvgComments('a<!--->b'), 'ab');
 assert.equal(stripSvgComments('a<!--->b<!-->c'), 'abc');
+assert.equal(stripSvgComments, stripHtmlComments);
+
+const shared = [
+  ['a<!-- x -->b', 'ab'],
+  ['a<!-->b', 'ab'],
+  ['a<!--->b', 'ab'],
+  ['a<!-- x --!>b', 'ab'],
+  ['a<!--unclosed <path d="1"/>', 'a'],
+  ['<!<!---->-->x', 'x'],
+  ['<<!-- -->!--<path/>-->y', 'y'],
+  ['<path d="1"/>', '<path d="1"/>'],
+];
+for (const [input, expected] of shared) {
+  assert.equal(stripHtmlComments(input), expected);
+  assert.equal(stripSvgComments(input), expected);
+}
 
 const lucide = [
   '<!-- @license lucide-static -->',
@@ -52,5 +68,6 @@ assert.equal(svgInner('<svg><!<!---->--><path d="M0 0"/></svg>'), '<path d="M0 0
 assert.equal(svgInner('<svg><!--><path d="M0 0"/></svg>'), '<path d="M0 0"/>');
 assert.equal(svgInner('<svg><!---><path d="M0 0"/></svg>'), '<path d="M0 0"/>');
 assert.equal(svgInner('<svg><!-- note --><path d="M0 0" /></svg>'), '<path d="M0 0"/>');
+assert.equal(svgInner('<svg><!-- note --!><path d="M0 0" /></svg>'), '<path d="M0 0"/>');
 
 console.log('gen-icons tests passed');
