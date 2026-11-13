@@ -8,41 +8,37 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Remove HTML comments by scanning, then repeat. One /<!--...-->/ replace turns
-// "<!<!---->-->" into "<!-->", which still starts a comment. "<!-->" and "<!--->"
-// are empty comments in HTML, so markup after them is kept. An unclosed "<!--"
-// drops the rest of the string. Same helper fits the other fleet icon generators.
-export function stripSvgComments(svg) {
-  let previous;
-  do {
-    previous = svg;
-    svg = stripSvgCommentsOnce(svg);
-  } while (svg !== previous);
-  return svg;
-}
-
-function stripSvgCommentsOnce(svg) {
-  const out = [];
-  for (let i = 0; i < svg.length; ) {
-    if (svg.startsWith('<!--', i)) {
-      if (svg[i + 4] === '>') {
-        i += 5;
-        continue;
-      }
-      if (svg[i + 4] === '-' && svg[i + 5] === '>') {
-        i += 6;
-        continue;
-      }
-      const end = svg.indexOf('-->', i + 4);
-      if (end === -1) break;
-      i = end + 3;
-      continue;
-    }
-    out.push(svg[i]);
-    i += 1;
+// Shared fleet comment stripper. stripSvgComments stays exported as an alias.
+function commentEnd(s, from) {
+  for (let j = from; j < s.length - 2; j++) {
+    if (s[j] !== '-' || s[j + 1] !== '-') continue;
+    if (s[j + 2] === '>') return j + 3;
+    if (s[j + 2] === '!' && s[j + 3] === '>') return j + 4;
   }
-  return out.join('');
+  return -1;
 }
+function stripOnce(s) {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const start = s.indexOf('<!--', i);
+    if (start < 0) return out + s.slice(i);
+    out += s.slice(i, start);
+    if (s[start + 4] === '>') { i = start + 5; continue; }
+    if (s[start + 4] === '-' && s[start + 5] === '>') { i = start + 6; continue; }
+    const end = commentEnd(s, start + 4);
+    if (end < 0) return out;
+    i = end;
+  }
+  return out;
+}
+export function stripHtmlComments(input) {
+  let cur = String(input);
+  let prev;
+  do { prev = cur; cur = stripOnce(cur); } while (cur !== prev);
+  return cur;
+}
+export { stripHtmlComments as stripSvgComments };
 
 // JavaScript single-quoted literal. Escape "\" before "'": escaping only the quote
 // turns "\'" into "\\'", and the quote is live again.
@@ -51,7 +47,7 @@ export function jsSingleQuoted(value) {
 }
 
 export function svgInner(svg) {
-  return stripSvgComments(svg)
+  return stripHtmlComments(svg)
     .replace(/^[\s\S]*?<svg[^>]*>/, '')
     .replace(/<\/svg>\s*$/, '')
     .replace(/\s*\n\s*/g, '')
