@@ -13,7 +13,7 @@ One page for a security or workstation reviewer: what PacketRat is, what it touc
 
 | Area | What PacketRat does |
 |---|---|
-| Programs it starts | A hidden `powershell.exe` for the Fairlead router when that router is on and Fairlead is installed next to it; the system browser for its own page. It stops only its own server. |
+| Programs it starts | Fairlead, through FleetPort's `Start-FleetService -Name fairlead`, when that router is on and Fairlead is installed next to it. The helper starts Fairlead hidden, with its tray, and Fairlead keeps running after PacketRat exits. PacketRat does not start a `--console --no-tray` copy. It also opens the system browser for its own page. It stops only its own server. |
 | Compiled code | C# is compiled in memory from source with `Add-Type` (framework assemblies only). No DLL is shipped, loaded or cached on disk. |
 | Listening | One HTTP server bound to loopback only (`127.0.0.1`, default port 8766, or a free port). POST requests need a per-session nonce. |
 | Files it writes | Under `Logs/`: the action queue, rules, dismissals and counts (`packetrat-store.json`), `packetrat.log`, and a runtime file per running server. `Logs/` is not committed. Raw AI responses are written only if `PACKETRAT_SAVE_RAW_AI=1`. |
