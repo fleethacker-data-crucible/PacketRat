@@ -58,8 +58,8 @@ function Invoke-PacketRatApiCore {
           return @{ok=$true;store=$store;credentials=(Get-PacketRatCredentialStatus);report=if($summary){$summary.Report}else{$null};reportStructure=if($summary){@($summary.ReportStructure)}else{@()};responseProtocol=if($summary){[string]$summary.ResponseProtocol}else{''};reportItems=if($summary){@($summary.ReportItems)}else{@()};reportSections=if($summary){@($summary.ReportSections)}else{@()};reportQuality=if($summary){$summary.ReportQuality}else{$null};lastRun=if($summary){@{AnalyzedCount=$summary.AnalyzedCount;Provider=$summary.Provider;Profile=$summary.Profile;Model=$summary.Model;GeneratedAt=$summary.GeneratedAt}}else{$null}}
       }
       '/api/credentials/check' {
-          # Local check only: is the Fairlead key for PacketRat in Windows Credential Manager? Never returns the key
-          # and never contacts Fairlead or reads mail.
+          # Local check only: is a Fairlead key available (Credential Manager, else the local-token file)?
+          # Never returns the key, and never contacts Fairlead or reads mail.
           $status=Get-PacketRatCredentialStatus
           return @{ok=$true;credentialAvailable=[bool]$status.keyInstalled;router='Fairlead';note=[string]$status.message}
       }

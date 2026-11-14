@@ -5,8 +5,12 @@
 #   PACKETRAT_FAIRLEAD_URL      another loopback address for Fairlead (a different port); anything not on this PC is refused.
 #   PACKETRAT_FAIRLEAD_MODEL    the route name to ask for (default 'auto').
 #   PACKETRAT_FAIRLEAD_PRIVACY  'local' adds X-Fairlead-Privacy: local so prompts stay on local models.
-# The key PacketRat sends is read only from Windows Credential Manager (generic credential Fairlead/PacketRat), which
-# Fairlead writes when its Clients page installs a key for PacketRat. There is no environment-variable or vault fallback.
+# The key PacketRat sends is the Windows Credential Manager generic credential Fairlead/PacketRat when that is
+# installed (Fairlead writes it from its Clients page). Otherwise it is the first line of
+# %LOCALAPPDATA%\Fairlead\local-token, the token Fairlead creates for this Windows account (FAIRLEAD_LOCAL_TOKEN=off
+# skips that file; FAIRLEAD_LOCAL_TOKEN_FILE moves it). The key is placed on a request only after
+# GET /__fleethacker/id on that loopback address names fairlead and the reported process holds the port.
+# There is no environment-variable or vault fallback. The key is never printed or logged.
 $script:PacketRatFairleadDefaults = @{
     Url     = 'http://127.0.0.1:8776/v1/chat/completions'
     Model   = 'auto'
@@ -114,6 +118,58 @@ function Set-PacketRatCredentialReader {
     if ($Reader) { $script:PacketRatCredentialReader = $Reader }
 }
 
+function Get-PacketRatFairleadLocalTokenPath {
+    <#
+    .SYNOPSIS
+      The local-token file, or $null when FAIRLEAD_LOCAL_TOKEN=off or this account has no LocalAppData.
+    #>
+    $off = [Environment]::GetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN')
+    if ($off -and $off.Trim() -match '^(?i:off|0|false|no)$') { return $null }
+    $moved = [Environment]::GetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE')
+    if ($moved -and $moved.Trim()) { return $moved.Trim() }
+    $base = [Environment]::GetEnvironmentVariable('LOCALAPPDATA')
+    if ([string]::IsNullOrWhiteSpace($base)) {
+        try { $base = [Environment]::GetFolderPath('LocalApplicationData') } catch { $base = '' }
+    }
+    if ([string]::IsNullOrWhiteSpace($base)) { return $null }
+    return (Join-Path (Join-Path $base 'Fairlead') 'local-token')
+}
+
+function Read-PacketRatLocalTokenFile {
+    <#
+    .SYNOPSIS
+      The first line of a local-token file, or ''. Refuses a file over 4 KB, a blank line, or a line that is not
+      printable ASCII. Never logs the text.
+    #>
+    param([string]$Path)
+    try {
+        if ([string]::IsNullOrWhiteSpace($Path) -or -not [IO.File]::Exists($Path)) { return '' }
+        if ((New-Object IO.FileInfo $Path).Length -gt 4096) { return '' }
+        $text = [IO.File]::ReadAllText($Path)
+        $parts = $text -split "`r?`n", 2
+        $line = $parts[0]
+        if ($null -eq $line) { return '' }
+        $line = $line.Trim().TrimStart([char]0xFEFF)
+        if ($line.Length -eq 0 -or $line -match '[^\x21-\x7E]') { return '' }
+        return $line
+    } catch { return '' }
+}
+
+function Resolve-PacketRatFairleadKey {
+    <#
+    .SYNOPSIS
+      @{ Key; Source } where Source is credential, local-token or ''. Credential Manager wins. Never logs the key.
+    #>
+    $key = ''
+    try { $key = [string](& $script:PacketRatCredentialReader (Get-PacketRatFairleadTarget)) } catch { $key = '' }
+    if ($null -eq $key) { $key = '' }
+    $key = $key.Trim()
+    if (-not [string]::IsNullOrWhiteSpace($key)) { return @{ Key = $key; Source = 'credential' } }
+    $token = Read-PacketRatLocalTokenFile -Path (Get-PacketRatFairleadLocalTokenPath)
+    if (-not [string]::IsNullOrWhiteSpace($token)) { return @{ Key = $token; Source = 'local-token' } }
+    return @{ Key = ''; Source = '' }
+}
+
 function Get-PacketRatFairleadKey {
     <#
     .SYNOPSIS
@@ -121,25 +177,30 @@ function Get-PacketRatFairleadKey {
     #>
     [CmdletBinding()]
     param()
-    $key = ''
-    try { $key = [string](& $script:PacketRatCredentialReader (Get-PacketRatFairleadTarget)) } catch { $key = '' }
-    $key = $key.Trim()
-    if ([string]::IsNullOrWhiteSpace($key)) {
+    $found = Resolve-PacketRatFairleadKey
+    if ([string]::IsNullOrWhiteSpace([string]$found.Key)) {
         throw ('Open Fairlead and install a key for {0}.' -f $script:PacketRatFairleadDefaults.AppName)
     }
-    return $key
+    return [string]$found.Key
 }
 
 function Get-PacketRatCredentialStatus {
     <#
     .SYNOPSIS
-      Where PacketRat sends AI calls and whether its Fairlead key is installed. Never returns the key.
+      Where PacketRat sends AI calls and whether a Fairlead key is available. Never returns the key.
     #>
     [CmdletBinding()]
     param()
     $cfg = Get-PacketRatFairleadConfig
-    $installed = $true
-    try { $null = Get-PacketRatFairleadKey } catch { $installed = $false }
+    $found = Resolve-PacketRatFairleadKey
+    $installed = -not [string]::IsNullOrWhiteSpace([string]$found.Key)
+    $message = $(if ($found.Source -eq 'local-token') {
+            'Fairlead local token found for this Windows account.'
+        } elseif ($installed) {
+            'Fairlead key found for PacketRat.'
+        } else {
+            ('Open Fairlead and install a key for {0}.' -f $script:PacketRatFairleadDefaults.AppName)
+        })
     return @{
         router       = 'Fairlead'
         url          = $cfg.Url
@@ -147,7 +208,8 @@ function Get-PacketRatCredentialStatus {
         privacy      = $cfg.Privacy
         target       = (Get-PacketRatFairleadTarget)
         keyInstalled = $installed
-        message      = $(if ($installed) { 'Fairlead key found for PacketRat.' } else { ('Open Fairlead and install a key for {0}.' -f $script:PacketRatFairleadDefaults.AppName) })
+        keySource    = [string]$found.Source
+        message      = $message
     }
 }
 
@@ -352,10 +414,249 @@ function Invoke-PacketRatChatStream {
     } finally { $resp.Close() }
 }
 
+# --- Who is on the port (the key is sent only after this passes) --------------------------------------------
+# Same rule as edge-ops FleetPort Test-FleetServiceIdentity and Semaphore Test-SemAiIdentity: the address must
+# answer /__fleethacker/id as fairlead, exactly one process above pid 4 must hold the port, and a reported path
+# must be that process's executable or its powershell -File script. Never a substring match. Fail closed.
+
+function ConvertTo-PacketRatAbsolutePath {
+    param([string]$Path)
+    if (-not $Path) { return $null }
+    $p = $Path.Trim().Trim('"').Replace('/', '\')
+    if ($p -notmatch '^(?:[A-Za-z]:\\|\\\\[^\\?.]+\\[^\\]+)') { return $null }
+    if ($env:OS -eq 'Windows_NT') {
+        try { $p = [IO.Path]::GetFullPath($p) } catch { return $null }
+    } elseif ($p -match '\\\.{1,2}(\\|$)') {
+        return $null
+    }
+    return $p.TrimEnd('\')
+}
+
+function Split-PacketRatCommandLine {
+    # CommandLineToArgvW rules, as FleetPort Split-FleetCommandLine states them.
+    param([string]$CommandLine)
+    $out = New-Object System.Collections.Generic.List[string]
+    if (-not $CommandLine) { return , $out.ToArray() }
+    $sb = New-Object System.Text.StringBuilder
+    $inQuote = $false; $have = $false; $i = 0; $n = $CommandLine.Length
+    while ($i -lt $n) {
+        $c = $CommandLine[$i]
+        if ($c -eq '\') {
+            $j = $i; while ($j -lt $n -and $CommandLine[$j] -eq '\') { $j++ }
+            $count = $j - $i
+            if ($j -lt $n -and $CommandLine[$j] -eq '"') {
+                [void]$sb.Append('\', [int][Math]::Floor($count / 2))
+                if ($count % 2 -eq 1) { [void]$sb.Append('"'); $i = $j + 1 } else { $i = $j }
+            } else { [void]$sb.Append('\', $count); $i = $j }
+            $have = $true; continue
+        }
+        if ($c -eq '"') {
+            if ($inQuote -and ($i + 1) -lt $n -and $CommandLine[$i + 1] -eq '"') { [void]$sb.Append('"'); $i += 2; $have = $true; continue }
+            $inQuote = -not $inQuote; $have = $true; $i++; continue
+        }
+        if (-not $inQuote -and ($c -eq ' ' -or $c -eq "`t")) {
+            if ($have) { $out.Add($sb.ToString()); [void]$sb.Clear(); $have = $false }
+            $i++; continue
+        }
+        [void]$sb.Append($c); $have = $true; $i++
+    }
+    if ($have) { $out.Add($sb.ToString()) }
+    return , $out.ToArray()
+}
+
+function Get-PacketRatScriptFromCommandLine {
+    param([string]$CommandLine)
+    [string[]]$argv = Split-PacketRatCommandLine $CommandLine
+    if ($null -eq $argv -or $argv.Count -lt 3) { return $null }
+    $exeLeaf = ($argv[0] -split '[\\/]')[-1]
+    if (@('powershell', 'powershell.exe', 'pwsh', 'pwsh.exe') -notcontains $exeLeaf.ToLowerInvariant()) { return $null }
+    for ($k = 1; $k -lt $argv.Count - 1; $k++) {
+        $a = $argv[$k].ToLowerInvariant()
+        if ($a -eq '-file' -or $a -eq '-f' -or $a -eq '/file') { return $argv[$k + 1] }
+        if ($a -match '^[-/](c|command|e|ec|encodedcommand|commandwithargs|cwa)$') { return $null }
+        if ($a -match '^[-/](executionpolicy|ep|ex|windowstyle|w|version|v|inputformat|if|outputformat|of|psconsolefile|configurationname|workingdirectory|wd|settingsfile)$') { $k++; continue }
+        if ($a -notmatch '^[-/]') { return $null }
+    }
+    return $null
+}
+
+function Test-PacketRatReportedPath {
+    param([string]$Path, [string]$CommandLine, [string]$ExecutablePath)
+    $want = ConvertTo-PacketRatAbsolutePath $Path
+    if (-not $want) { return $false }
+    $exe = ConvertTo-PacketRatAbsolutePath $ExecutablePath
+    if ($exe -and [string]::Equals($exe, $want, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    $scriptPath = ConvertTo-PacketRatAbsolutePath (Get-PacketRatScriptFromCommandLine $CommandLine)
+    if ($scriptPath -and [string]::Equals($scriptPath, $want, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return $false
+}
+
+function Get-PacketRatIdField {
+    param($Id, [string]$Name)
+    if ($null -eq $Id) { return $null }
+    if ($Id -is [System.Collections.IDictionary]) {
+        if ($Id.Contains($Name)) { return $Id[$Name] }
+        return $null
+    }
+    $prop = $Id.PSObject.Properties[$Name]
+    if ($prop) { return $prop.Value }
+    return $null
+}
+
+function Get-PacketRatFairleadOwnPath {
+    # When the id answer has no path: accept only Fairlead's own start script or a Fairlead executable, read from
+    # the process, never from text the listener chose to omit.
+    param($Info)
+    if (-not $Info) { return '' }
+    $cmd = ''; $exe = ''
+    if ($Info -is [System.Collections.IDictionary]) {
+        if ($Info.Contains('CommandLine')) { $cmd = [string]$Info['CommandLine'] }
+        if ($Info.Contains('ExecutablePath')) { $exe = [string]$Info['ExecutablePath'] }
+    } else {
+        $cmd = [string](Get-PacketRatIdField $Info 'CommandLine')
+        $exe = [string](Get-PacketRatIdField $Info 'ExecutablePath')
+    }
+    $scriptPath = ConvertTo-PacketRatAbsolutePath (Get-PacketRatScriptFromCommandLine $cmd)
+    if ($scriptPath -and $scriptPath -match '(?i)\\scripts\\Start-Fairlead\.ps1\z') { return $scriptPath }
+    $exePath = ConvertTo-PacketRatAbsolutePath $exe
+    if ($exePath -and (($exePath -split '[\\/]')[-1]) -match '(?i)\Afairlead[\w.-]*\.exe\z') { return $exePath }
+    return ''
+}
+
+function Get-PacketRatPortOwners {
+    param([int]$Port)
+    $owners = New-Object System.Collections.Generic.List[int]
+    $have = $false
+    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+        $have = $true
+        foreach ($c in @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) {
+            $owners.Add([int]$c.OwningProcess)
+        }
+    } else {
+        $sys = [Environment]::SystemDirectory
+        $netstat = $null
+        if ($sys) {
+            $candidate = Join-Path $sys 'netstat.exe'
+            if (Test-Path -LiteralPath $candidate) { $netstat = $candidate }
+        }
+        if ($netstat) {
+            $have = $true
+            foreach ($line in @(& $netstat -ano -p TCP 2>$null)) {
+                if ([string]$line -match '^\s*TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$' -and [int]$Matches[1] -eq $Port) {
+                    $owners.Add([int]$Matches[2])
+                }
+            }
+        }
+    }
+    if (-not $have) { return @() }
+    return @($owners | Sort-Object -Unique)
+}
+
+function Get-PacketRatProcessInfo {
+    param([int]$ProcessId)
+    if ($ProcessId -le 0) { return $null }
+    if (-not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) { return $null }
+    $proc = $null
+    try { $proc = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId = {0}" -f $ProcessId) -ErrorAction Stop } catch { return $null }
+    if (-not $proc) { return $null }
+    return @{ CommandLine = [string]$proc.CommandLine; ExecutablePath = [string]$proc.ExecutablePath }
+}
+
+function Get-PacketRatFairleadIdDocument {
+    # GET /__fleethacker/id with no key and no redirect. Throws when the answer is missing or unusable.
+    param([Uri]$Uri)
+    if (-not $Uri -or -not $Uri.IsLoopback) { throw 'PacketRat only asks Fairlead to identify itself on this PC, so the Fairlead key was not sent.' }
+    $idUrl = $Uri.GetLeftPart([UriPartial]::Authority) + '/__fleethacker/id'
+    $req = [Net.HttpWebRequest]::Create($idUrl)
+    $req.Method = 'GET'
+    $req.Timeout = 3000
+    $req.ReadWriteTimeout = 3000
+    $req.Proxy = $null
+    $req.AllowAutoRedirect = $false
+    $req.Accept = 'application/json'
+    $resp = $null
+    $text = ''
+    try {
+        $resp = $req.GetResponse()
+        $reader = New-Object IO.StreamReader($resp.GetResponseStream(), [Text.Encoding]::UTF8)
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally { if ($resp) { $resp.Close() } }
+    if ([string]::IsNullOrEmpty($text) -or $text.Length -gt 4096) { throw 'Fairlead did not identify itself, so the Fairlead key was not sent.' }
+    try { return ($text | ConvertFrom-Json) } catch { throw 'Fairlead did not identify itself, so the Fairlead key was not sent.' }
+}
+
+# Replaceable so tests never touch a real port: { param($Uri) -> id object }, { param($Port) -> pids }, { param($ProcessId) -> @{CommandLine;ExecutablePath} }.
+$script:PacketRatFairleadIdReader = { param($Uri) Get-PacketRatFairleadIdDocument -Uri $Uri }
+$script:PacketRatPortOwnerReader = { param($Port) Get-PacketRatPortOwners -Port $Port }
+$script:PacketRatProcessInfoReader = { param($ProcessId) Get-PacketRatProcessInfo -ProcessId $ProcessId }
+
+function Set-PacketRatFairleadReaders {
+    param([scriptblock]$IdReader, [scriptblock]$PortOwners, [scriptblock]$ProcessInfo)
+    if ($IdReader) { $script:PacketRatFairleadIdReader = $IdReader }
+    if ($PortOwners) { $script:PacketRatPortOwnerReader = $PortOwners }
+    if ($ProcessInfo) { $script:PacketRatProcessInfoReader = $ProcessInfo }
+}
+
+function Use-PacketRatFairleadTestIdentity {
+    # A stand-in identity for tests that are not about the check. No network call.
+    $script:PacketRatFairleadIdReader = { param($Uri) [pscustomobject]@{ tool = 'fairlead'; pid = 4242; path = 'C:\Fairlead\scripts\Start-Fairlead.ps1' } }
+    $script:PacketRatPortOwnerReader = { param($Port) ,@(4242) }
+    $script:PacketRatProcessInfoReader = { param($ProcessId) @{ CommandLine = 'powershell.exe -NoProfile -File C:\Fairlead\scripts\Start-Fairlead.ps1'; ExecutablePath = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' } }
+}
+
+function Test-PacketRatFairleadIdentity {
+    <#
+    .SYNOPSIS
+      Throw (and do not send the key) unless the address is Fairlead and that process holds the port.
+    #>
+    param([Parameter(Mandatory)][Uri]$Uri)
+    $refused = 'Something other than Fairlead is answering on that address, so the Fairlead key was not sent.'
+    $owners = @()
+    try { $owners = @(& $script:PacketRatPortOwnerReader $Uri.Port) } catch {
+        throw 'PacketRat could not see which program holds the AI address, so the Fairlead key was not sent.'
+    }
+    $ids = New-Object System.Collections.Generic.List[int]
+    foreach ($owner in @($owners)) {
+        if ($null -eq $owner -or [string]::IsNullOrWhiteSpace([string]$owner)) { continue }
+        $n = 0
+        if ([int]::TryParse([string]$owner, [ref]$n)) { $ids.Add($n) }
+    }
+    $unique = @($ids | Sort-Object -Unique)
+    if ($unique.Count -ne 1 -or $unique[0] -le 4) {
+        throw 'PacketRat could not confirm that Fairlead holds the AI address, so the Fairlead key was not sent.'
+    }
+    $ownerId = [int]$unique[0]
+    $id = $null
+    try { $id = & $script:PacketRatFairleadIdReader $Uri } catch {
+        throw 'Fairlead did not identify itself, so the Fairlead key was not sent.'
+    }
+    $tool = [string](Get-PacketRatIdField $id 'tool')
+    if ($tool -cne 'fairlead') { throw $refused }
+    $idPid = 0
+    if (-not [int]::TryParse([string](Get-PacketRatIdField $id 'pid'), [ref]$idPid) -or $idPid -ne $ownerId) { throw $refused }
+    $info = $null
+    try { $info = & $script:PacketRatProcessInfoReader $ownerId } catch { $info = $null }
+    $reported = [string](Get-PacketRatIdField $id 'path')
+    if ([string]::IsNullOrWhiteSpace($reported)) {
+        $reported = Get-PacketRatFairleadOwnPath -Info $info
+        if (-not $reported) { throw $refused }
+    }
+    $cmd = ''; $exe = ''
+    if ($info -is [System.Collections.IDictionary]) {
+        if ($info.Contains('CommandLine')) { $cmd = [string]$info['CommandLine'] }
+        if ($info.Contains('ExecutablePath')) { $exe = [string]$info['ExecutablePath'] }
+    } elseif ($info) {
+        $cmd = [string](Get-PacketRatIdField $info 'CommandLine')
+        $exe = [string](Get-PacketRatIdField $info 'ExecutablePath')
+    }
+    if (-not (Test-PacketRatReportedPath -Path $reported -CommandLine $cmd -ExecutablePath $exe)) { throw $refused }
+}
+
 function Invoke-PacketRatChat {
     <#
     .SYNOPSIS
       One chat call to Fairlead (OpenAI chat completions). Fairlead picks the model behind the route name.
+      The key is sent only after Fairlead identifies itself on that address.
     #>
     [CmdletBinding()]
     param(
@@ -373,6 +674,11 @@ function Invoke-PacketRatChat {
     $cfg = Get-PacketRatFairleadConfig
     if ($Model) { $cfg.Model = $Model }
     $key = Get-PacketRatFairleadKey
+    $idUri = $null
+    if (-not [Uri]::TryCreate($cfg.Url, [UriKind]::Absolute, [ref]$idUri)) {
+        throw 'PacketRat could not confirm that Fairlead holds the AI address, so the Fairlead key was not sent.'
+    }
+    Test-PacketRatFairleadIdentity -Uri $idUri
 
     $msgList = @()
     foreach ($m in $Messages) {

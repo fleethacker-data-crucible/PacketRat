@@ -61,7 +61,7 @@ When the first argument is an option (for example `PacketRat-CLI.bat -MaxEmails 
 
 ## Tokens
 
-The CLI never takes a key on the command line, where it would land in shell history. It reads PacketRat's Fairlead key from Windows Credential Manager (`Fairlead/PacketRat`), the same as the browser; install it from Fairlead's Clients page.
+The CLI never takes a key on the command line, where it would land in shell history. It reads PacketRat's Fairlead key from Windows Credential Manager (`Fairlead/PacketRat`) and, only when that credential is absent, from the first line of `%LOCALAPPDATA%\Fairlead\local-token`. The key is sent only after Fairlead identifies itself. Install a key from Fairlead's Clients page, or start Fairlead once so it writes the local token.
 
 ## Safety
 

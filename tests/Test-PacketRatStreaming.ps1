@@ -99,6 +99,10 @@ $envNames=@('PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_MODEL','PACKETRAT_FAIRL
 $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
 $msgs=@(@{role='user';content='Say something synthetic.'})
 Set-PacketRatCredentialReader { param([string]$Target) 'fl-synthetic-key' }
+Use-PacketRatFairleadTestIdentity
+$script:IdSeen=0
+$script:PacketRatIdInner=$script:PacketRatFairleadIdReader
+$script:PacketRatFairleadIdReader={ param($Uri) $script:IdSeen++; & $script:PacketRatIdInner $Uri }
 try{
     # Streaming end to end, including a character split across network writes.
     $ep=Start-FakeEndpoint 'normal'
@@ -113,6 +117,7 @@ try{
         Assert-Stream ($sent.stream -eq $true) 'the request asked for stream=true'
         Assert-Stream ($ep.Shared['head'] -match '(?im)^accept:\s*text/event-stream') 'the request accepts an event stream'
         Assert-Stream ($ep.Shared['head'] -match '(?im)^authorization:\s*Bearer fl-synthetic-key' -and $ep.Shared['head'] -match '(?im)^x-fairlead-label:\s*PacketRat') 'the Fairlead key and the app label are sent on a streamed call'
+        Assert-Stream ($script:IdSeen -ge 1) 'the identity check runs before a streamed call'
     }finally{ Stop-FakeEndpoint $ep }
 
     # The environment switch turns streaming on without -Stream.

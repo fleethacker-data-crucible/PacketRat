@@ -79,6 +79,60 @@ try{
 # --- the real port check, against a real loopback listener ---
 Remove-Item function:Test-PacketRatFairleadUp
 . (Join-Path $Root 'Private\PacketRatRouter.ps1')
+
+# --- Fairlead is started through Start-FleetService, never --console --no-tray ---
+$routerSrc=[IO.File]::ReadAllText((Join-Path $Root 'Private\PacketRatRouter.ps1'))
+Assert-Router ($routerSrc -match 'Start-FleetService' -and $routerSrc -match '-Name fairlead' -and $routerSrc -notmatch '--console' -and $routerSrc -notmatch '--no-tray') 'the router source starts Fairlead only through Start-FleetService -Name fairlead'
+$fleetTmp=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-fleet-'+[guid]::NewGuid().ToString('N'))
+$fairlead2=Join-Path $fleetTmp 'Fairlead'
+[void](New-Item -ItemType Directory -Path (Join-Path $fairlead2 'scripts') -Force)
+[IO.File]::WriteAllText((Join-Path $fairlead2 'scripts\Start-Fairlead.ps1'),'# stand-in')
+$log=Join-Path $fleetTmp 'calls.jsonl'
+$psm1=Join-Path $fleetTmp 'FleetPort.psm1'
+[IO.File]::WriteAllText($psm1, @'
+function Start-FleetService {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [string]$Folder = '',
+        [int]$Port = 0,
+        [hashtable]$Environment = @{},
+        [int]$WaitSeconds = 0,
+        [string]$CallerRoot = '',
+        [string]$StateDirectory = '',
+        [int]$ProbeTimeoutMs = 1500,
+        [int]$MutexWaitSeconds = 30
+    )
+    if ($Environment -and $Environment.Count -gt 0) { throw 'Start-FleetService was given an environment' }
+    $line = (@{ name = $Name; folder = $Folder; caller = $CallerRoot; wait = $WaitSeconds } | ConvertTo-Json -Compress)
+    [IO.File]::AppendAllText($env:PACKETRAT_TEST_FLEET_LOG, $line + [Environment]::NewLine)
+    return [pscustomobject]@{ State = 'starting'; Message = 'starting'; Reason = '' }
+}
+Export-ModuleMember -Function Start-FleetService
+'@)
+$fleetEnv=@('PACKETRAT_FAIRLEAD_AUTOSTART','PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_CONFIG','FAIRLEAD_DIR','PACKETRAT_TEST_FLEET_LOG')
+$fleetSaved=@{}; foreach($n in $fleetEnv){ $fleetSaved[$n]=[Environment]::GetEnvironmentVariable($n) }
+try{
+    $env:PACKETRAT_TEST_FLEET_LOG=$log
+    $env:FAIRLEAD_DIR=$fairlead2
+    $env:PACKETRAT_FAIRLEAD_CONFIG=Join-Path $fleetTmp 'missing.json'
+    $env:PACKETRAT_FAIRLEAD_URL='http://127.0.0.1:9/v1/chat/completions'
+    $env:PACKETRAT_FAIRLEAD_AUTOSTART=$null
+    $script:PacketRatFleetPortModule='C:\no\such\FleetPort.psm1'
+    $r=Ensure-PacketRatFairlead -Root $Root -WaitSeconds 1
+    Assert-Router ($r.State -eq 'Failed' -and $r.Message -match 'FleetPort was not found' -and -not (Test-Path $log)) 'without FleetPort, PacketRat does not start Fairlead itself'
+    $script:PacketRatFleetPortModule=$psm1
+    Start-PacketRatFairleadProcess -Dir $fairlead2
+    $call=[IO.File]::ReadAllText($log) | ConvertFrom-Json
+    Assert-Router ($call.name -eq 'fairlead' -and $call.folder -eq $fairlead2 -and [int]$call.wait -eq 0) 'Start-FleetService is called for fairlead, in that folder, without waiting inside the helper'
+    Assert-Router ($call.caller -eq $Root) 'the helper is told PacketRat''s folder'
+    Assert-Router ($log -notmatch '--console' -and $log -notmatch '--no-tray') 'the start record has no console or no-tray switch'
+}finally{
+    $script:PacketRatFleetPortModule=$null
+    Remove-Module FleetPort -Force -ErrorAction SilentlyContinue
+    foreach($n in $fleetEnv){ [Environment]::SetEnvironmentVariable($n,$fleetSaved[$n]) }
+    Remove-Item -LiteralPath $fleetTmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 $listener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); $listener.Start()
 try{
     $port=([Net.IPEndPoint]$listener.LocalEndpoint).Port

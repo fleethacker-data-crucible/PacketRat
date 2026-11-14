@@ -13,7 +13,7 @@ One page for a security or workstation reviewer: what PacketRat is, what it touc
 
 | Area | What PacketRat does |
 |---|---|
-| Programs it starts | A hidden `powershell.exe` for the Fairlead router when that router is on and Fairlead is installed next to it; the system browser for its own page. It stops only its own server. |
+| Programs it starts | Fairlead, by calling edge-ops FleetPort `Start-FleetService -Name fairlead` when nothing is listening and Fairlead is installed next to PacketRat (or `FAIRLEAD_DIR` names it). That helper starts Fairlead hidden, with its tray, and Fairlead keeps running after PacketRat exits. `PACKETRAT_FAIRLEAD_AUTOSTART=off` turns this off. PacketRat also starts the system browser for its own page. It stops only its own server. |
 | Compiled code | C# is compiled in memory from source with `Add-Type` (framework assemblies only). No DLL is shipped, loaded or cached on disk. |
 | Listening | One HTTP server bound to loopback only (`127.0.0.1`, default port 8766, or a free port). POST requests need a per-session nonce. |
 | Files it writes | Under `Logs/`: the action queue, rules, dismissals and counts (`packetrat-store.json`), `packetrat.log`, and a runtime file per running server. `Logs/` is not committed. Raw AI responses are written only if `PACKETRAT_SAVE_RAW_AI=1`. |
@@ -28,11 +28,11 @@ One page for a security or workstation reviewer: what PacketRat is, what it touc
 | Microsoft Graph | Only with the Graph provider selected | Mail read through the signed-in account's Graph modules (scopes Mail.Read, Mail.ReadWrite, User.Read), which needs the organization's authorization. |
 | Anywhere else | Never | No telemetry, no usage data, no update check. The counts stay in the local store. |
 
-Credentials: PacketRat holds one credential, its own Fairlead key, in Windows Credential Manager (`Fairlead/PacketRat`), which Fairlead writes. A key is never taken on a command line, never saved from the browser and never returned by an API.
+Credentials: PacketRat's Fairlead key comes from Windows Credential Manager (`Fairlead/PacketRat`) when that credential is present, otherwise the first line of `%LOCALAPPDATA%\Fairlead\local-token` (Fairlead's token for this Windows account). The key is sent only after `GET /__fleethacker/id` on that loopback address names Fairlead and the reported process holds the port. A key is never taken on a command line, never saved from the browser, never logged and never returned by an API. There is no environment-variable or vault fallback.
 
 ## What is proven and what is not
 
-Proven by offline tests (run in CI on Windows PowerShell 5.1, with fakes for Outlook, Graph and the AI): triage rules and draft parsing, the strict AI wire protocol, the command and API parity, the inbox actions against a fake Outlook, the Files provider on invented mail, the counts export, the Fairlead router setting against a stub.
+Proven by offline tests (run in CI on Windows PowerShell 5.1, with fakes for Outlook, Graph and the AI): triage rules and draft parsing, the strict AI wire protocol, the command and API parity, the inbox actions against a fake Outlook, the Files provider on invented mail, the counts export, the Fairlead router setting against a stub, the Fairlead key order (credential, then local token) and the refusal to send that key until Fairlead's identity check passes, and the call to `Start-FleetService -Name fairlead` (a stand-in module; the real Fairlead process is not started).
 
 Not proven, and needing a person on the target machine: classic Outlook on a managed workstation (COM analysis, draft opening, archive and move), a live run through Fairlead, Microsoft Graph sign-in, and the browser experience under the workstation's policies. The README's status table says the same.
 

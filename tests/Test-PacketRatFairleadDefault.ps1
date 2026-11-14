@@ -25,7 +25,11 @@ $serverScript={
             $body=New-Object byte[] $len; $off=0
             while($off -lt $len){ $r=$net.Read($body,$off,$len-$off); if($r -le 0){break}; $off+=$r }
             [void]$Shared['requests'].Add(@{Head=$head;Body=$enc.GetString($body)})
-            $payload=$enc.GetBytes('{"choices":[{"message":{"role":"assistant","content":"routed by fake fairlead"}}]}')
+            if($head -match '(?m)^GET /__fleethacker/id\s'){
+                $payload=$enc.GetBytes('{"tool":"fairlead","pid":4242,"path":"C:\\Fairlead\\scripts\\Start-Fairlead.ps1"}')
+            }else{
+                $payload=$enc.GetBytes('{"choices":[{"message":{"role":"assistant","content":"routed by fake fairlead"}}]}')
+            }
             $resp=$enc.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`n`r`n")
             $net.Write($resp,0,$resp.Length); $net.Write($payload,0,$payload.Length); $net.Flush()
         }catch{} finally{ try{$client.Close()}catch{} }
@@ -46,6 +50,7 @@ $envNames=@('PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_MODEL','PACKETRAT_FAIRL
 $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
 $msgs=@(@{role='user';content='Synthetic prompt for the router.'})
 Set-PacketRatCredentialReader { param([string]$Target) 'fl-synthetic-key' }
+Set-PacketRatFairleadReaders -PortOwners { param($Port) ,@(4242) } -ProcessInfo { param($ProcessId) @{ CommandLine = 'powershell.exe -NoProfile -File C:\Fairlead\scripts\Start-Fairlead.ps1'; ExecutablePath = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' } }
 $fake=$null
 try{
     $onDefaultPort=$true
@@ -62,9 +67,11 @@ try{
     Assert-Default ($cfg.Url -eq $expectedUri -and $cfg.Model -eq 'auto') 'with nothing set, the config is the default Fairlead address and the auto route'
     $r=Invoke-PacketRatChat -Messages $msgs -TimeoutSec 15
     Assert-Default ($r.Text -eq 'routed by fake fairlead') 'the answer comes back from the fake Fairlead'
-    Assert-Default ($reqs.Count -eq 1) 'exactly one request reached the fake'
-    $q=$reqs[0]
-    Assert-Default ($q.Head -match '(?m)^POST /v1/chat/completions HTTP') 'it is an OpenAI-style chat completion request'
+    Assert-Default ($reqs.Count -eq 2) 'the identity check runs, then one chat request'
+    Assert-Default ($reqs[0].Head -match '(?m)^GET /__fleethacker/id ') 'the first request asks Fairlead to identify itself'
+    Assert-Default ($reqs[0].Head -notmatch '(?im)^authorization:') 'the identity check carries no key'
+    $q=$reqs[1]
+    Assert-Default ($q.Head -match '(?m)^POST /v1/chat/completions HTTP') 'the chat request follows the identity check'
     Assert-Default (($q.Body | ConvertFrom-Json).model -eq 'auto' -and ($q.Body | ConvertFrom-Json).messages[0].content -eq 'Synthetic prompt for the router.') 'the body asks for the auto route and carries the prompt'
     Assert-Default ($q.Head -match '(?im)^authorization:\s*Bearer fl-synthetic-key' -and $q.Head -match '(?im)^x-fairlead-label:\s*PacketRat') 'the key from Credential Manager and the app label are sent'
     Assert-Default ($q.Head -notmatch '(?im)^x-fairlead-privacy:') 'no privacy header unless asked for'
@@ -72,7 +79,7 @@ try{
     # --- The privacy header and the route name -------------------------------------------------------------------------------------
     $env:PACKETRAT_FAIRLEAD_PRIVACY='local'; $env:PACKETRAT_FAIRLEAD_MODEL='fast'
     $null=Invoke-PacketRatChat -Messages $msgs -TimeoutSec 15
-    $q=$reqs[1]
+    $q=$reqs[3]
     Assert-Default ($q.Head -match '(?im)^x-fairlead-privacy:\s*local') 'the local-privacy header is sent when set'
     Assert-Default (($q.Body | ConvertFrom-Json).model -eq 'fast') 'the route name can be changed'
     $env:PACKETRAT_FAIRLEAD_PRIVACY=$null; $env:PACKETRAT_FAIRLEAD_MODEL=$null

@@ -38,8 +38,9 @@ Assert-Fleet ($src['Start-PacketRat-Web.ps1'] -match '\[int\]\$Port=8766' -and $
 
 # --- Programs started -------------------------------------------------------------------------------------------------------------------------
 $started=Get-FilesMatching 'Start-Process'
-Assert-Fleet ((($started | Sort-Object) -join ',') -eq ((@('PacketRatRouter.ps1','Start-PacketRat-Web.ps1','Start-PacketRat.ps1') | Sort-Object) -join ',')) "Start-Process appears only in the router, the web launcher and the console launcher (found: $($started -join ', '))"
-Assert-Fleet ($src['PacketRatRouter.ps1'] -match "FilePath 'powershell\.exe'" -and $src['PacketRatRouter.ps1'] -match 'WindowStyle Hidden') 'the router starts Fairlead as a hidden powershell.exe, as the page says'
+Assert-Fleet ((($started | Sort-Object) -join ',') -eq ((@('Start-PacketRat-Web.ps1','Start-PacketRat.ps1') | Sort-Object) -join ',')) "Start-Process appears only in the web launcher and the console launcher (found: $($started -join ', '))"
+Assert-Fleet ($src['PacketRatRouter.ps1'] -match 'Start-FleetService' -and $src['PacketRatRouter.ps1'] -match '-Name fairlead' -and $src['PacketRatRouter.ps1'] -notmatch '--console' -and $src['PacketRatRouter.ps1'] -notmatch '--no-tray') 'the router starts Fairlead only through Start-FleetService -Name fairlead'
+Assert-Fleet ($page -match 'Start-FleetService') 'the page names Start-FleetService as the way Fairlead is started'
 
 # --- No prebuilt code loaded; C# only from source with framework assemblies --------------------------------------------------------------------
 Assert-Fleet ((Get-FilesMatching '(?i)Add-Type\s+(-Path|-LiteralPath)|Assembly\]::(LoadFrom|LoadFile|Load)\(|\[Reflection\.Assembly\]::Load').Count -eq 0) 'no prebuilt DLL or assembly is loaded'
