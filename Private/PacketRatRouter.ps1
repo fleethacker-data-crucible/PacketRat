@@ -5,7 +5,10 @@
 #   running already          -> use it, no prompt
 #   not running, not set up  -> start it and open its setup page once (add keys, add a client)
 #   not running, set up      -> ask: use the previous setup, or reconfigure (non-interactive runs just use it)
+# The start itself is FleetPort's Start-FleetService -Name fairlead: hidden, with Fairlead's tray,
+# and it keeps running after PacketRat exits. PacketRat does not launch Fairlead's script itself.
 # PACKETRAT_FAIRLEAD_AUTOSTART=off turns this off. FAIRLEAD_DIR names the Fairlead folder when it is not a sibling.
+# FLEETPORT_MODULE names FleetPort.psm1 when edge-ops is not a sibling and not under Projects.
 
 function Get-PacketRatFairleadDir {
     param([string]$Root)
@@ -13,7 +16,7 @@ function Get-PacketRatFairleadDir {
     $cands = @()
     foreach ($n in 'FAIRLEAD_DIR', 'FAIRLEAD_PATH') { $v = [Environment]::GetEnvironmentVariable($n); if ($v) { $cands += $v } }
     $cands += (Join-Path (Split-Path $Root -Parent) 'Fairlead')
-    $cands += (Join-Path $env:USERPROFILE 'Projects\Fairlead')
+    if ($env:USERPROFILE) { $cands += (Join-Path $env:USERPROFILE 'Projects\Fairlead') }
     foreach ($c in $cands) {
         if ($c -and (Test-Path -LiteralPath (Join-Path $c 'scripts\Start-Fairlead.ps1') -PathType Leaf)) { return (Resolve-Path -LiteralPath $c).Path }
     }
@@ -60,11 +63,38 @@ function Show-PacketRatFairleadChoice {
     switch ($r) { 'Yes' { 'use' } 'No' { 'reconfigure' } default { 'cancel' } }
 }
 
+function Get-PacketRatFleetPortModule {
+    # FleetPort.psm1 from edge-ops. FLEETPORT_MODULE wins, then a sibling edge-ops, then Projects\edge-ops.
+    param([string]$Root)
+    if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
+    $cands = @()
+    $named = [Environment]::GetEnvironmentVariable('FLEETPORT_MODULE')
+    if ($named) { $cands += $named }
+    $parent = Split-Path $Root -Parent
+    if ($parent) { $cands += (Join-Path $parent 'edge-ops\tools\fleet-port\FleetPort.psm1') }
+    if ($env:USERPROFILE) { $cands += (Join-Path $env:USERPROFILE 'Projects\edge-ops\tools\fleet-port\FleetPort.psm1') }
+    foreach ($c in $cands) {
+        if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { return (Resolve-Path -LiteralPath $c).Path }
+    }
+    return $null
+}
+
+# Tests replace this. The real body asks FleetPort to start Fairlead and does not build a console command.
+$script:PacketRatFleetServiceStart = {
+    param([string]$Name, [string]$Folder, [int]$WaitSeconds)
+    $mod = Get-PacketRatFleetPortModule
+    if (-not $mod) {
+        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat, or set FLEETPORT_MODULE to tools\fleet-port\FleetPort.psm1.' }
+    }
+    Import-Module -Name $mod -ErrorAction Stop
+    return (Start-FleetService -Name $Name -Folder $Folder -WaitSeconds $WaitSeconds)
+}
+
 function Start-PacketRatFairleadProcess {
-    param([string]$Dir, [switch]$OpenSetup)
-    $argList = @('-STA', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Dir 'scripts\Start-Fairlead.ps1'), '--console', '--no-tray')
-    if ($OpenSetup) { $argList += '--open' } else { $argList += '--no-browser' }
-    $null = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -WindowStyle Hidden -WorkingDirectory $Dir
+    param([string]$Dir, [switch]$OpenSetup, [int]$WaitSeconds = 0)
+    # -OpenSetup is honored by Ensure-PacketRatFairlead, which opens the page once Fairlead answers.
+    # Start-FleetService starts Fairlead hidden, with its tray, and without opening a browser.
+    return (& $script:PacketRatFleetServiceStart -Name 'fairlead' -Folder $Dir -WaitSeconds $WaitSeconds)
 }
 
 function Ensure-PacketRatFairlead {
@@ -89,7 +119,12 @@ function Ensure-PacketRatFairlead {
         if ($choice -eq 'cancel') { return @{ State = 'Declined'; Message = 'Fairlead was not started.' } }
         if ($choice -eq 'reconfigure') { $openSetup = $true }
     }
-    Start-PacketRatFairleadProcess -Dir $dir -OpenSetup:$openSetup
+    $started = Start-PacketRatFairleadProcess -Dir $dir -OpenSetup:$openSetup
+    if ($started -and [string]$started.State -eq 'unavailable') {
+        $why = [string]$started.Message
+        if (-not $why) { $why = 'Fairlead could not be started.' }
+        return @{ State = 'Failed'; Message = $why }
+    }
     $deadline = (Get-Date).AddSeconds($WaitSeconds)
     while ((Get-Date) -lt $deadline) {
         if (Test-PacketRatFairleadUp -Uri $uri) {

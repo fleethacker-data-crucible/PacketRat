@@ -87,4 +87,54 @@ try{
     Assert-Router (-not (Test-PacketRatFairleadUp -Uri ([Uri]"http://127.0.0.1:$port/"))) 'the port check sees a closed port'
     Assert-Router (-not (Test-PacketRatFairleadUp -Uri $null)) 'no address means not up'
 }finally{ try{$listener.Stop()}catch{} }
+
+# --- Start-FleetService, not a hand-rolled console start ----------------------------------------------
+$tmp2=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-fleetstart-'+[guid]::NewGuid().ToString('N'))
+$fair2=Join-Path $tmp2 'Fairlead'
+[void](New-Item -ItemType Directory -Path (Join-Path $fair2 'scripts') -Force)
+[IO.File]::WriteAllText((Join-Path $fair2 'scripts\Start-Fairlead.ps1'),'# stand-in')
+$cfg2=Join-Path $tmp2 'fairlead.json'
+'{"setupComplete":true}' | Set-Content $cfg2
+$names2='PACKETRAT_FAIRLEAD_AUTOSTART','PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_CONFIG','FAIRLEAD_DIR','FLEETPORT_MODULE'
+$saved2=@{};foreach($n in $names2){$saved2[$n]=[Environment]::GetEnvironmentVariable($n)}
+function Test-PacketRatFairleadUp { param([Uri]$Uri) return [bool]$script:Up2 }
+try{
+    foreach($n in $names2){[Environment]::SetEnvironmentVariable($n,$null)}
+    $env:PACKETRAT_FAIRLEAD_CONFIG=$cfg2
+    $env:FAIRLEAD_DIR=(Resolve-Path $fair2).Path
+    $script:FleetCalls=@()
+    $script:PacketRatFleetServiceStart={ param($Name,$Folder,$WaitSeconds) $script:FleetCalls+=[pscustomobject]@{Name=$Name;Folder=$Folder;Wait=$WaitSeconds}; $script:Up2=$true; return @{ State='starting'; Message='Fairlead is starting.' } }
+    $script:Up2=$false
+    $r=Ensure-PacketRatFairlead -Root $Root -WaitSeconds 2
+    Assert-Router ($r.State -eq 'Started' -and $script:FleetCalls.Count -eq 1 -and $script:FleetCalls[0].Name -eq 'fairlead' -and $script:FleetCalls[0].Wait -eq 0) 'a start asks Start-FleetService for fairlead and does not wait inside the helper'
+    Assert-Router ($script:FleetCalls[0].Folder -eq (Resolve-Path $fair2).Path) 'the Fairlead folder is passed through'
+
+    $script:FleetCalls=@(); $script:Up2=$false
+    $env:PACKETRAT_FAIRLEAD_AUTOSTART='off'
+    $r=Ensure-PacketRatFairlead -Root $Root -WaitSeconds 5
+    Assert-Router ($r.State -eq 'Skipped' -and $script:FleetCalls.Count -eq 0) 'PACKETRAT_FAIRLEAD_AUTOSTART=off never calls Start-FleetService'
+    $env:PACKETRAT_FAIRLEAD_AUTOSTART=$null
+
+    $script:PacketRatFleetServiceStart={ param($Name,$Folder,$WaitSeconds) return @{ State='unavailable'; Message='FleetPort was not found, so Fairlead was not started.' } }
+    $t0=Get-Date
+    $r=Ensure-PacketRatFairlead -Root $Root -WaitSeconds 30
+    Assert-Router ($r.State -eq 'Failed' -and $r.Message -match 'FleetPort was not found' -and ((Get-Date)-$t0).TotalSeconds -lt 3) 'an unavailable helper fails at once with its own sentence'
+
+    $mod=Join-Path $tmp2 'FleetPort.psm1'
+    @'
+function Start-FleetService { param([Parameter(Mandatory)][string]$Name,[string]$Folder,[int]$WaitSeconds=0) return @{ State='running'; Name=$Name; Folder=$Folder; Wait=$WaitSeconds } }
+Export-ModuleMember -Function Start-FleetService
+'@ | Set-Content -LiteralPath $mod -Encoding UTF8
+    $env:FLEETPORT_MODULE=$mod
+    Assert-Router ((Get-PacketRatFleetPortModule -Root $Root) -eq (Resolve-Path $mod).Path) 'FLEETPORT_MODULE is the module that is imported'
+    . (Join-Path $Root 'Private\PacketRatRouter.ps1')
+    $called=& $script:PacketRatFleetServiceStart -Name 'fairlead' -Folder (Resolve-Path $fair2).Path -WaitSeconds 0
+    Assert-Router ($called.State -eq 'running' -and $called.Name -eq 'fairlead' -and $called.Folder -eq (Resolve-Path $fair2).Path) 'the real starter imports FleetPort and calls Start-FleetService'
+
+    $src=[IO.File]::ReadAllText((Join-Path $Root 'Private\PacketRatRouter.ps1'))
+    Assert-Router ($src -match 'Start-FleetService' -and $src -notmatch '--console' -and $src -notmatch '--no-tray' -and $src -notmatch "FilePath 'powershell.exe'") 'the router source no longer starts a console copy of Fairlead'
+}finally{
+    foreach($n in $names2){[Environment]::SetEnvironmentVariable($n,$saved2[$n])}
+    Remove-Item -LiteralPath $tmp2 -Recurse -Force -ErrorAction SilentlyContinue
+}
 'Router tests passed.'
