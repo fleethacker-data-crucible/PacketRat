@@ -3,17 +3,30 @@
 # Config\voice-assets.json lists every file the page may load, with its SHA-256. The server serves /voice-assets/<name> only
 # for a listed name whose bytes still match the hash, so a swapped or truncated file is refused, never executed.
 # Names starting "tts/" are TalkForge's assets folder (its vendor\, wasm\ and models\ trees, same layout); PACKETRAT_TTS_DIR
-# points at that folder (default <voice dir>\tts). Every other name lives in the voice dir (PACKETRAT_VOICE_DIR, default
-# Web\vendor\voice) and is used for speech input.
+# points at that folder (default <voice dir>\tts). Every other name is speech input. That folder is PACKETRAT_VOICE_DIR
+# when set, otherwise %LOCALAPPDATA%\FleetHacker\models\whisper when that folder exists (shared with other Fleet apps,
+# next to %LOCALAPPDATA%\FleetHacker\apps), otherwise Web\vendor\voice.
 
 $script:PacketRatVoiceCache = @{}
+
+function Get-PacketRatSharedWhisperDir {
+    # The Fleet share for Whisper files. Empty when this process has no local-app-data folder.
+    $base = $env:LOCALAPPDATA
+    if ([string]::IsNullOrWhiteSpace($base)) {
+        try { $base = [Environment]::GetFolderPath('LocalApplicationData') } catch { $base = '' }
+    }
+    if ([string]::IsNullOrWhiteSpace($base)) { return '' }
+    return (Join-Path (Join-Path (Join-Path $base 'FleetHacker') 'models') 'whisper')
+}
 
 function Get-PacketRatVoiceDir {
     param([string]$Root)
     if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
-    $dir = [string]$env:PACKETRAT_VOICE_DIR
-    if (-not $dir) { $dir = Join-Path $Root 'Web\vendor\voice' }
-    return $dir
+    $dir = ([string]$env:PACKETRAT_VOICE_DIR).Trim()
+    if ($dir) { return $dir }
+    $shared = Get-PacketRatSharedWhisperDir
+    if ($shared -and (Test-Path -LiteralPath $shared -PathType Container)) { return $shared }
+    return (Join-Path $Root 'Web\vendor\voice')
 }
 
 function Get-PacketRatVoiceDocument {
@@ -45,8 +58,9 @@ function Resolve-PacketRatVoicePath {
         if (-not $base) { $base = Join-Path (Get-PacketRatVoiceDir -Root $Root) 'tts' }
         $rel = $Name.Substring(4)
     } else { $base = Get-PacketRatVoiceDir -Root $Root; $rel = $Name }
-    $baseFull = [IO.Path]::GetFullPath($base).TrimEnd('\') + '\'
-    $full = [IO.Path]::GetFullPath((Join-Path $base ($rel -replace '/', '\')))
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $baseFull = [IO.Path]::GetFullPath($base).TrimEnd('\', '/') + $sep
+    $full = [IO.Path]::GetFullPath((Join-Path $base ($rel -replace '[\\/]', $sep)))
     if (-not $full.StartsWith($baseFull, [StringComparison]::OrdinalIgnoreCase)) { return $null }
     return @{ Base = $baseFull; Full = $full }
 }

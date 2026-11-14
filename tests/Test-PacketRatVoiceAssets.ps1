@@ -91,3 +91,32 @@ try{
     $env:PACKETRAT_VOICE_DIR=$saved
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+# Speech-input folder: the override, then the shared Whisper directory, then Web\vendor\voice.
+$savedLocal=$env:LOCALAPPDATA
+$savedVoice2=$env:PACKETRAT_VOICE_DIR
+$local=Join-Path ([IO.Path]::GetTempPath()) ('packetrat-whisper-'+[guid]::NewGuid().ToString('N'))
+$shared=Join-Path (Join-Path (Join-Path $local 'FleetHacker') 'models') 'whisper'
+$repoVoice=Join-Path $Root 'Web\vendor\voice'
+$voiceDoc=[IO.File]::ReadAllText((Join-Path $Root 'docs\VOICE.md'))
+try{
+    Remove-Item Env:PACKETRAT_VOICE_DIR -ErrorAction SilentlyContinue
+    $env:LOCALAPPDATA=$local
+    Assert-Voice ((Get-PacketRatSharedWhisperDir) -eq $shared) 'the shared Whisper directory is under FleetHacker\models\whisper'
+    Assert-Voice ((Get-PacketRatVoiceDir -Root $Root) -eq $repoVoice) 'with no override and no shared folder, speech input uses Web\vendor\voice'
+    [void](New-Item -ItemType Directory -Path $shared -Force)
+    $bytes=[Text.Encoding]::UTF8.GetBytes('shared-whisper')
+    [IO.File]::WriteAllBytes((Join-Path $shared 'transformers.min.js'),$bytes)
+    Assert-Voice ((Get-PacketRatVoiceDir -Root $Root) -eq $shared) 'an existing shared folder is the speech-input directory'
+    $env:PACKETRAT_VOICE_DIR='   '
+    Assert-Voice ((Get-PacketRatVoiceDir -Root $Root) -eq $shared) 'a blank PACKETRAT_VOICE_DIR does not hide the shared folder'
+    $override=Join-Path $local 'override'
+    $env:PACKETRAT_VOICE_DIR=$override
+    Assert-Voice ((Get-PacketRatVoiceDir -Root $Root) -eq $override) 'PACKETRAT_VOICE_DIR wins over the shared folder'
+    Assert-Voice ($voiceDoc.Contains('%LOCALAPPDATA%\FleetHacker\models\whisper') -and $voiceDoc.Contains('%LOCALAPPDATA%\FleetHacker\apps') -and $voiceDoc.Contains('PACKETRAT_VOICE_DIR') -and $voiceDoc.Contains('Web\vendor\voice')) 'VOICE.md names the override, the shared folder, and the fallback'
+}finally{
+    if($null -eq $savedVoice2){ Remove-Item Env:PACKETRAT_VOICE_DIR -ErrorAction SilentlyContinue } else { $env:PACKETRAT_VOICE_DIR=$savedVoice2 }
+    if($null -eq $savedLocal){ Remove-Item Env:LOCALAPPDATA -ErrorAction SilentlyContinue } else { $env:LOCALAPPDATA=$savedLocal }
+    Remove-Item -LiteralPath $local -Recurse -Force -ErrorAction SilentlyContinue
+}
+Write-Host 'Voice directory tests passed.'
