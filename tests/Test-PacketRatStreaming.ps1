@@ -99,6 +99,8 @@ $envNames=@('PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_MODEL','PACKETRAT_FAIRL
 $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
 $msgs=@(@{role='user';content='Say something synthetic.'})
 Set-PacketRatCredentialReader { param([string]$Target) 'fl-synthetic-key' }
+Set-PacketRatLocalTokenPath (Join-Path ([IO.Path]::GetTempPath()) ('packetrat-no-token-'+[guid]::NewGuid().ToString('N')))
+Set-PacketRatFairleadIdentity { $null }
 try{
     # Streaming end to end, including a character split across network writes.
     $ep=Start-FakeEndpoint 'normal'
