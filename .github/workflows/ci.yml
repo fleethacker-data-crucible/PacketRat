@@ -90,6 +90,7 @@ jobs:
           .\tests\Test-PacketRatDataSources.ps1
           .\tests\Test-PacketRatActionLog.ps1
           .\tests\Test-PacketRatRouter.ps1
+          .\tests\Test-PacketRatFleetPort.Tests.ps1
           .\tests\Test-PacketRatAssistant.ps1
           .\tests\Test-PacketRatVoiceAssets.ps1
           .\tests\Test-PacketRatBurden.ps1

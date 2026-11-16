@@ -8,8 +8,8 @@
 # The start itself is FleetPort's Start-FleetService -Name fairlead: hidden, with Fairlead's tray,
 # and it keeps running after PacketRat exits. PacketRat does not launch Fairlead's script itself.
 # PACKETRAT_FAIRLEAD_AUTOSTART=off turns this off. FAIRLEAD_DIR names the Fairlead folder when it is not a sibling.
-# FLEETPORT_MODULE is used only when it resolves to edge-ops\tools\fleet-port\FleetPort.psm1
-# under a sibling edge-ops folder or %USERPROFILE%\Projects\edge-ops.
+# FLEETPORT_MODULE may name FleetPort.psm1 only when that file is the edge-ops copy next to PacketRat
+# or under %USERPROFILE%\Projects. Any other path is ignored.
 
 function Get-PacketRatFairleadDir {
     param([string]$Root)
@@ -64,41 +64,52 @@ function Show-PacketRatFairleadChoice {
     switch ($r) { 'Yes' { 'use' } 'No' { 'reconfigure' } default { 'cancel' } }
 }
 
-function Get-PacketRatFleetPortFile {
-    # edge-ops\tools\fleet-port\FleetPort.psm1 under one fixed root.
-    param([string]$EdgeRoot)
-    $path = $EdgeRoot
-    foreach ($part in @('tools', 'fleet-port', 'FleetPort.psm1')) { $path = Join-Path $path $part }
-    return $path
+function Resolve-PacketRatFleetPortPath {
+    # A full path with . and .. removed, or ''. The file does not have to exist. A link is not followed.
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
+    try { return [IO.Path]::GetFullPath($Path.Trim()) } catch { return '' }
 }
 
-function Get-PacketRatFleetPortModule {
-    # The FleetPort module from a sibling edge-ops folder or %USERPROFILE%\Projects\edge-ops.
-    # FLEETPORT_MODULE is accepted only when it resolves to that same file. Any other path is refused.
+function Get-PacketRatFleetPortAllowedPaths {
+    # The only files PacketRat will load: edge-ops\tools\fleet-port\FleetPort.psm1 beside this repo, or under Projects.
     param([string]$Root)
-    if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
-    $allowed = @()
-    $roots = @()
+    $paths = @()
     $parent = Split-Path $Root -Parent
-    if ($parent) { $roots += (Join-Path $parent 'edge-ops') }
-    if ($env:USERPROFILE) { $roots += (Join-Path $env:USERPROFILE 'Projects\edge-ops') }
-    foreach ($edge in $roots) {
-        $candidate = Get-PacketRatFleetPortFile -EdgeRoot $edge
-        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-            $allowed += (Resolve-Path -LiteralPath $candidate).Path
-        }
+    if ($parent) { $paths += (Join-Path $parent 'edge-ops\tools\fleet-port\FleetPort.psm1') }
+    if ($env:USERPROFILE) { $paths += (Join-Path $env:USERPROFILE 'Projects\edge-ops\tools\fleet-port\FleetPort.psm1') }
+    return @($paths)
+}
+
+# Tests set this to a fake PacketRat folder. Production leaves it empty, so the search starts at this repo.
+$script:PacketRatFleetPortRoot = $null
+
+function Get-PacketRatFleetPortModule {
+    # $null unless the file is one of the two allowed FleetPort.psm1 paths. FLEETPORT_MODULE cannot name any other file.
+    param([string]$Root)
+    if (-not $Root) {
+        if ($script:PacketRatFleetPortRoot) { $Root = [string]$script:PacketRatFleetPortRoot }
+        else { $Root = Split-Path $PSScriptRoot -Parent }
     }
+    $allowed = @()
+    foreach ($p in @(Get-PacketRatFleetPortAllowedPaths -Root $Root)) {
+        $full = Resolve-PacketRatFleetPortPath $p
+        if ($full) { $allowed += $full }
+    }
+    $cands = @()
     $named = [Environment]::GetEnvironmentVariable('FLEETPORT_MODULE')
-    if (-not [string]::IsNullOrWhiteSpace($named)) {
-        $named = $named.Trim()
-        if (-not (Test-Path -LiteralPath $named -PathType Leaf)) { return $null }
-        $resolved = (Resolve-Path -LiteralPath $named).Path
-        foreach ($ok in $allowed) {
-            if ([string]::Equals($resolved, $ok, [StringComparison]::OrdinalIgnoreCase)) { return $ok }
+    if ($named) { $cands += $named }
+    foreach ($p in $allowed) { $cands += $p }
+    foreach ($c in $cands) {
+        $full = Resolve-PacketRatFleetPortPath $c
+        if (-not $full) { continue }
+        $ok = $false
+        foreach ($a in $allowed) {
+            if ([string]::Equals($full, $a, [StringComparison]::OrdinalIgnoreCase)) { $ok = $true; break }
         }
-        return $null
+        if (-not $ok) { continue }
+        if (Test-Path -LiteralPath $full -PathType Leaf) { return $full }
     }
-    if ($allowed.Count -gt 0) { return $allowed[0] }
     return $null
 }
 
@@ -107,7 +118,7 @@ $script:PacketRatFleetServiceStart = {
     param([string]$Name, [string]$Folder, [int]$WaitSeconds)
     $mod = Get-PacketRatFleetPortModule
     if (-not $mod) {
-        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat or in %USERPROFILE%\Projects\edge-ops.' }
+        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat, or under Projects.' }
     }
     Import-Module -Name $mod -Force -ErrorAction Stop
     return (Start-FleetService -Name $Name -Folder $Folder -WaitSeconds $WaitSeconds)
