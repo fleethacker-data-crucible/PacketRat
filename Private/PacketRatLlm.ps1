@@ -532,11 +532,114 @@ function Wait-PacketRatTask {
     try { return $Task.Wait($Milliseconds) } catch { return $true }
 }
 
+function Test-PacketRatHttpRedirect {
+    # Any 3xx. PacketRat does not follow it: a redirect can carry the key to a host that was never checked.
+    param([int]$StatusCode)
+    return ($StatusCode -ge 300 -and $StatusCode -lt 400)
+}
+
+function Get-PacketRatRedirectRefusal {
+    param([int]$StatusCode)
+    return ('Fairlead answered with a redirect (HTTP {0}), so PacketRat did not follow it.' -f $StatusCode)
+}
+
+function Close-PacketRatHttpResponse {
+    param($Response)
+    if ($null -ne $Response) { try { $Response.Close() } catch {} }
+}
+
+function Protect-PacketRatSecretText {
+    # Drop the bearer value from a sentence before it is shown. The key is never written on purpose.
+    param([AllowEmptyString()][string]$Text, [hashtable]$Headers)
+    if (-not $Text) { return '' }
+    $out = $Text
+    if ($Headers) {
+        foreach ($name in @($Headers.Keys)) {
+            $value = [string]$Headers[$name]
+            if ($value.Length -lt 8) { continue }
+            if ($out.IndexOf($value, [StringComparison]::Ordinal) -ge 0) { $out = $out.Replace($value, '[redacted]') }
+            if ($value.StartsWith('Bearer ')) {
+                $token = $value.Substring(7)
+                if ($token.Length -ge 8 -and $out.IndexOf($token, [StringComparison]::Ordinal) -ge 0) { $out = $out.Replace($token, '[redacted]') }
+            }
+        }
+    }
+    return $out
+}
+
+function Get-PacketRatWebException {
+    param($Failure)
+    $ex = $Failure
+    if ($ex -is [System.Management.Automation.ErrorRecord]) { $ex = $ex.Exception }
+    if ($ex -is [System.AggregateException]) {
+        foreach ($inner in @($ex.InnerExceptions)) {
+            if ($inner -is [System.Net.WebException]) { return $inner }
+            if ($inner.InnerException -is [System.Net.WebException]) { return $inner.InnerException }
+        }
+        $base = $ex.GetBaseException()
+        if ($base -is [System.Net.WebException]) { return $base }
+    }
+    if ($ex -is [System.Net.WebException]) { return $ex }
+    if ($ex -and $ex.InnerException -is [System.Net.WebException]) { return $ex.InnerException }
+    return $null
+}
+
+function Get-PacketRatHttpRefusalMessage {
+    # A sentence when $Failure is an HTTP status, else $null. A 3xx is a refusal and its Location is not used.
+    param($Failure, [hashtable]$Headers)
+    $web = Get-PacketRatWebException $Failure
+    if (-not $web) { return $null }
+    $code = 0
+    $resp = $null
+    try { $resp = $web.Response } catch { $resp = $null }
+    if ($resp) {
+        try { $code = [int]$resp.StatusCode } catch { $code = 0 }
+        Close-PacketRatHttpResponse $resp
+    }
+    if (Test-PacketRatHttpRedirect $code) { return (Get-PacketRatRedirectRefusal $code) }
+    if ($code -gt 0) {
+        $detail = Protect-PacketRatSecretText -Text ([string]$web.Message) -Headers $Headers
+        return ('Fairlead refused the request (HTTP ' + $code + '): ' + $detail)
+    }
+    return $null
+}
+
+function New-PacketRatFairleadRequest {
+    # The request that carries the key. No system proxy, and no automatic redirect.
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][string]$Method,
+        [hashtable]$Headers,
+        [string]$Accept,
+        [string]$ContentType,
+        [int]$TimeoutMs = 0,
+        [int]$ReadWriteTimeoutMs = 0
+    )
+    $req = [Net.HttpWebRequest]::Create($Url)
+    $req.Method = $Method
+    $req.Proxy = $null
+    $req.AllowAutoRedirect = $false
+    $req.UserAgent = 'PacketRat'
+    if ($Accept) { $req.Accept = $Accept }
+    if ($ContentType) { $req.ContentType = $ContentType }
+    if ($TimeoutMs -gt 0) { $req.Timeout = $TimeoutMs }
+    if ($ReadWriteTimeoutMs -gt 0) { $req.ReadWriteTimeout = $ReadWriteTimeoutMs }
+    try { $req.ServicePoint.Expect100Continue = $false } catch {}
+    if ($Headers) {
+        foreach ($name in @($Headers.Keys)) {
+            if ($name -eq 'Accept' -or $name -eq 'Content-Type' -or $name -eq 'User-Agent') { continue }
+            $req.Headers[[string]$name] = [string]$Headers[$name]
+        }
+    }
+    return $req
+}
+
 function Invoke-PacketRatChatStream {
     <#
     .SYNOPSIS
       POST a chat request with "stream": true and return the joined text. HttpWebRequest is used because
-      Invoke-RestMethod cannot hand back a half-read body. Polls -ShouldCancel while waiting for the first byte too.
+      the body is read as it arrives. Polls -ShouldCancel while waiting for the first byte too.
+      A redirect is refused. The Location header is not followed, and the system proxy is not used.
     #>
     param(
         [Parameter(Mandatory)][string]$Url,
@@ -546,13 +649,7 @@ function Invoke-PacketRatChatStream {
         [scriptblock]$ShouldCancel,
         [int]$TimeoutSec = 180
     )
-    $req = [Net.HttpWebRequest]::Create($Url)
-    $req.Method = 'POST'
-    $req.ContentType = 'application/json; charset=utf-8'
-    $req.Accept = 'text/event-stream'
-    $req.ReadWriteTimeout = 500
-    $req.ServicePoint.Expect100Continue = $false
-    foreach ($k in $Headers.Keys) { if ($k -ne 'Accept') { $req.Headers[$k] = [string]$Headers[$k] } }
+    $req = New-PacketRatFairleadRequest -Url $Url -Method 'POST' -Headers $Headers -Accept 'text/event-stream' -ContentType 'application/json; charset=utf-8' -ReadWriteTimeoutMs 500
     $req.ContentLength = $Body.Length
     $out = $req.GetRequestStream()
     try { $out.Write($Body, 0, $Body.Length) } finally { $out.Close() }
@@ -563,13 +660,16 @@ function Invoke-PacketRatChatStream {
         if ([DateTime]::UtcNow -gt $deadline) { $req.Abort(); throw 'Fairlead did not answer (timed out).' }
     }
     if ($task.IsFaulted) {
+        $why = Get-PacketRatHttpRefusalMessage -Failure $task.Exception -Headers $Headers
+        if ($why) { throw $why }
         $err = $task.Exception.GetBaseException()
-        $status = ''
-        if ($err -is [System.Net.WebException] -and $err.Response) { $status = ' (HTTP ' + [int]$err.Response.StatusCode + ')' }
-        throw ('Fairlead refused the request' + $status + ': ' + $err.Message)
+        throw ('Fairlead refused the request: ' + (Protect-PacketRatSecretText -Text ([string]$err.Message) -Headers $Headers))
     }
     $resp = $task.Result
     try {
+        $code = [int]$resp.StatusCode
+        if (Test-PacketRatHttpRedirect $code) { throw (Get-PacketRatRedirectRefusal $code) }
+        if ($code -lt 200 -or $code -ge 300) { throw ('Fairlead refused the request (HTTP ' + $code + ').') }
         $stream = $resp.GetResponseStream()
         try {
             return (Read-PacketRatSseStream -Stream $stream -OnToken $OnToken -ShouldCancel $ShouldCancel -TimeoutSec $TimeoutSec)
@@ -578,6 +678,37 @@ function Invoke-PacketRatChatStream {
             throw
         } finally { $stream.Close() }
     } finally { $resp.Close() }
+}
+
+function Invoke-PacketRatFairleadPost {
+    # The non-streaming chat POST. Same rules as the stream: no proxy, no redirect, any 3xx is a refusal.
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [Parameter(Mandatory)][byte[]]$Body,
+        [int]$TimeoutSec = 180
+    )
+    $timeoutMs = $TimeoutSec * 1000
+    if ($timeoutMs -lt 1000) { $timeoutMs = 1000 }
+    $req = New-PacketRatFairleadRequest -Url $Url -Method 'POST' -Headers $Headers -Accept 'application/json' -ContentType 'application/json; charset=utf-8' -TimeoutMs $timeoutMs -ReadWriteTimeoutMs $timeoutMs
+    $req.ContentLength = $Body.Length
+    $out = $req.GetRequestStream()
+    try { $out.Write($Body, 0, $Body.Length) } finally { $out.Close() }
+    $resp = $null
+    try {
+        try { $resp = $req.GetResponse() } catch {
+            $why = Get-PacketRatHttpRefusalMessage -Failure $_ -Headers $Headers
+            if ($why) { throw $why }
+            throw
+        }
+        $code = [int]$resp.StatusCode
+        if (Test-PacketRatHttpRedirect $code) { throw (Get-PacketRatRedirectRefusal $code) }
+        if ($code -lt 200 -or $code -ge 300) { throw ('Fairlead refused the request (HTTP ' + $code + ').') }
+        $reader = New-Object IO.StreamReader($resp.GetResponseStream(), (New-Object System.Text.UTF8Encoding $false), $true)
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+        return ($text | ConvertFrom-Json)
+    } finally { Close-PacketRatHttpResponse $resp }
 }
 
 function Invoke-PacketRatChat {
@@ -657,11 +788,7 @@ function Invoke-PacketRatChat {
         }
     }
 
-    $resp = Invoke-RestMethod -Uri $cfg.Url -Method Post `
-        -Headers $headers `
-        -Body $bytes `
-        -ContentType 'application/json; charset=utf-8' `
-        -TimeoutSec $TimeoutSec
+    $resp = Invoke-PacketRatFairleadPost -Url $cfg.Url -Headers $headers -Body $bytes -TimeoutSec $TimeoutSec
 
     # Responses may return a string, text block array or content.parts.
     # Avoid casting arrays into "System.Object[]" instead of real report text.

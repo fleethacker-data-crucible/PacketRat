@@ -61,6 +61,11 @@ $serverScript={
         switch($Mode){
             'hang' { Start-Sleep -Seconds 20 }
             'error' { Send ($enc.GetBytes("HTTP/1.1 500 Internal Server Error`r`nContent-Length: 0`r`nConnection: close`r`n`r`n")) }
+            'json' {
+                $payload=$enc.GetBytes('{"choices":[{"message":{"content":"ok"}}]}')
+                Send ($enc.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`n`r`n"))
+                Send $payload
+            }
             default {
                 Send ($enc.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: text/event-stream`r`nTransfer-Encoding: chunked`r`nConnection: close`r`n`r`n"))
                 if($Mode -eq 'normal'){
@@ -175,12 +180,13 @@ try{
     }finally{ Stop-FakeEndpoint $ep }
 
     # Default stays non-streaming with stream=false.
-    $global:plainBody=$null
-    function global:Invoke-RestMethod { param($Uri,$Method,$Headers,$Body,$ContentType,$TimeoutSec) $global:plainBody=[Text.Encoding]::UTF8.GetString($Body); [pscustomobject]@{choices=@([pscustomobject]@{message=[pscustomobject]@{content='ok'}})} }
+    $ep=Start-FakeEndpoint 'json'
     try{
-        $null=Invoke-PacketRatChat -Messages $msgs
-        Assert-Stream (($global:plainBody | ConvertFrom-Json).stream -eq $false) 'streaming is off by default (stream=false)'
-    }finally{ Remove-Item Function:\Invoke-RestMethod -ErrorAction SilentlyContinue }
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
+        $r=Invoke-PacketRatChat -Messages $msgs -TimeoutSec 20
+        Assert-Stream ($r.Text -eq 'ok') 'a non-streaming call returns the completion'
+        Assert-Stream (($ep.Shared['body'] | ConvertFrom-Json).stream -eq $false) 'streaming is off by default (stream=false)'
+    }finally{ Stop-FakeEndpoint $ep }
 }finally{
     foreach($n in $envNames){[Environment]::SetEnvironmentVariable($n,$savedEnv[$n])}
     Clear-PacketRatCancel
