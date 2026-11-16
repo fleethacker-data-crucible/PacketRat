@@ -6,7 +6,8 @@
 #   PACKETRAT_FAIRLEAD_MODEL    the route name to ask for (default 'auto').
 #   PACKETRAT_FAIRLEAD_PRIVACY  'local' adds X-Fairlead-Privacy: local so prompts stay on local models.
 # The key PacketRat sends is the Windows Credential Manager generic credential Fairlead/PacketRat when that is installed,
-# and otherwise the first line of Fairlead's local token (%LOCALAPPDATA%\Fairlead\local-token, or FAIRLEAD_LOCAL_TOKEN_FILE).
+# and otherwise the first line of Fairlead's local token (%LOCALAPPDATA%\Fairlead\local-token).
+# FAIRLEAD_LOCAL_TOKEN_FILE is used only when that path stays inside %LOCALAPPDATA%\Fairlead.
 # There is no environment-variable or vault fallback. The key is sent only after /__fleethacker/id names Fairlead.
 $script:PacketRatFairleadDefaults = @{
     Url     = 'http://127.0.0.1:8776/v1/chat/completions'
@@ -52,22 +53,48 @@ function Get-PacketRatFairleadConfig {
 $script:PacketRatUseDefaultLocalToken = $true
 $script:PacketRatLocalTokenPath = ''
 
-function Get-PacketRatFairleadLocalTokenPath {
-    <#
-    .SYNOPSIS
-      Where Fairlead keeps the local token for this Windows account.
-    #>
-    [CmdletBinding()]
-    param()
-    if (-not $script:PacketRatUseDefaultLocalToken) { return [string]$script:PacketRatLocalTokenPath }
-    $custom = [Environment]::GetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE')
-    if (-not [string]::IsNullOrWhiteSpace($custom)) { return $custom.Trim() }
+function Join-PacketRatChildPath {
+    # Join a child onto a Windows path without requiring that drive to exist (tests use synthetic paths).
+    param([string]$Base, [string]$Child)
+    if ($Base -match '^[A-Za-z]:\\' -or $Base.StartsWith('\\')) { return ($Base.TrimEnd('\') + '\' + $Child) }
+    return (Join-Path $Base $Child)
+}
+
+function Get-PacketRatFairleadLocalAppDir {
     $base = $env:LOCALAPPDATA
     if ([string]::IsNullOrWhiteSpace($base)) {
         try { $base = [Environment]::GetFolderPath('LocalApplicationData') } catch { $base = '' }
     }
     if ([string]::IsNullOrWhiteSpace($base)) { return '' }
-    return (Join-Path (Join-Path $base 'Fairlead') 'local-token')
+    return (Join-PacketRatChildPath $base 'Fairlead')
+}
+
+function Test-PacketRatPathInside {
+    # True when $Path is $Root or a file under it. Compared as normalized absolute Windows paths, never a substring.
+    param([string]$Path, [string]$Root)
+    $full = ConvertTo-PacketRatNormalPath $Path
+    $base = ConvertTo-PacketRatNormalPath $Root
+    if (-not $full -or -not $base) { return $false }
+    if ([string]::Equals($full, $base, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return $full.StartsWith($base.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-PacketRatFairleadLocalTokenPath {
+    <#
+    .SYNOPSIS
+      Where Fairlead keeps the local token for this Windows account.
+      An override is used only when it stays inside %LOCALAPPDATA%\Fairlead.
+    #>
+    [CmdletBinding()]
+    param()
+    if (-not $script:PacketRatUseDefaultLocalToken) { return [string]$script:PacketRatLocalTokenPath }
+    $appDir = Get-PacketRatFairleadLocalAppDir
+    $custom = [Environment]::GetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE')
+    if ($appDir -and -not [string]::IsNullOrWhiteSpace($custom) -and (Test-PacketRatPathInside -Path $custom.Trim() -Root $appDir)) {
+        return (ConvertTo-PacketRatNormalPath $custom.Trim())
+    }
+    if (-not $appDir) { return '' }
+    return (Join-PacketRatChildPath $appDir 'local-token')
 }
 
 function Set-PacketRatLocalTokenPath {
@@ -209,12 +236,18 @@ function Get-PacketRatJsonField($Obj, [string]$Name) {
     return $null
 }
 
+function Get-PacketRatIdHost {
+    # DnsSafeHost has no brackets. Uri.Host already wraps [::1], and wrapping it again builds an address nothing answers.
+    param([Uri]$Uri)
+    $hostName = $Uri.DnsSafeHost
+    if ($hostName.Contains(':')) { return ('[' + $hostName + ']') }
+    return $hostName
+}
+
 function Get-PacketRatFairleadIdDocument {
     # The JSON from GET /__fleethacker/id, or $null. The request carries no key.
     param([Uri]$Uri, [int]$TimeoutSec = 3)
-    $hostName = $Uri.Host
-    if ($hostName.Contains(':')) { $hostName = '[' + $hostName + ']' }
-    $idUrl = '{0}://{1}:{2}/__fleethacker/id' -f $Uri.Scheme, $hostName, $Uri.Port
+    $idUrl = '{0}://{1}:{2}/__fleethacker/id' -f $Uri.Scheme, (Get-PacketRatIdHost $Uri), $Uri.Port
     $req = [Net.HttpWebRequest]::Create($idUrl)
     $req.Method = 'GET'
     $req.Timeout = $TimeoutSec * 1000
@@ -532,6 +565,60 @@ function Wait-PacketRatTask {
     try { return $Task.Wait($Milliseconds) } catch { return $true }
 }
 
+function Test-PacketRatRedirectStatus {
+    param($Response)
+    if ($null -eq $Response) { return $false }
+    $code = [int]$Response.StatusCode
+    return ($code -ge 300 -and $code -lt 400)
+}
+
+function Invoke-PacketRatFairleadPost {
+    <#
+    .SYNOPSIS
+      POST to Fairlead with no proxy and no redirects. A 3xx is a refusal: the Location is not requested.
+      Returns the response body for a 2xx. The key, if it is in the headers, is never put in an error.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [Parameter(Mandatory)][byte[]]$Body,
+        [string]$Accept = 'application/json',
+        [int]$TimeoutSec = 180
+    )
+    $req = [Net.HttpWebRequest]::Create($Url)
+    $req.Method = 'POST'
+    $req.Proxy = $null
+    $req.AllowAutoRedirect = $false
+    $req.ContentType = 'application/json; charset=utf-8'
+    $req.Accept = $Accept
+    $req.Timeout = $TimeoutSec * 1000
+    $req.ReadWriteTimeout = $TimeoutSec * 1000
+    $req.ServicePoint.Expect100Continue = $false
+    foreach ($k in @($Headers.Keys)) {
+        if ([string]$k -eq 'Accept') { continue }
+        $req.Headers[[string]$k] = [string]$Headers[$k]
+    }
+    $req.ContentLength = $Body.Length
+    $out = $req.GetRequestStream()
+    try { $out.Write($Body, 0, $Body.Length) } finally { $out.Close() }
+    $resp = $null
+    try {
+        try { $resp = $req.GetResponse() }
+        catch [System.Net.WebException] {
+            if ($_.Exception.Response) { $resp = $_.Exception.Response }
+            elseif ($_.Exception.Message -match '(?i)timed out|timeout') { throw 'Fairlead did not answer (timed out).' }
+            else { throw ('Fairlead refused the request: ' + $_.Exception.Message) }
+        }
+        if (Test-PacketRatRedirectStatus $resp) { throw 'Fairlead redirected the request, so it was refused.' }
+        $code = [int]$resp.StatusCode
+        if ($code -lt 200 -or $code -ge 300) { throw ('Fairlead refused the request (HTTP ' + $code + ').') }
+        $reader = New-Object IO.StreamReader($resp.GetResponseStream(), [Text.Encoding]::UTF8)
+        try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } finally {
+        if ($null -ne $resp) { try { $resp.Close() } catch {} }
+    }
+}
+
 function Invoke-PacketRatChatStream {
     <#
     .SYNOPSIS
@@ -548,6 +635,8 @@ function Invoke-PacketRatChatStream {
     )
     $req = [Net.HttpWebRequest]::Create($Url)
     $req.Method = 'POST'
+    $req.Proxy = $null
+    $req.AllowAutoRedirect = $false
     $req.ContentType = 'application/json; charset=utf-8'
     $req.Accept = 'text/event-stream'
     $req.ReadWriteTimeout = 500
@@ -565,10 +654,20 @@ function Invoke-PacketRatChatStream {
     if ($task.IsFaulted) {
         $err = $task.Exception.GetBaseException()
         $status = ''
-        if ($err -is [System.Net.WebException] -and $err.Response) { $status = ' (HTTP ' + [int]$err.Response.StatusCode + ')' }
+        $redirect = $false
+        if ($err -is [System.Net.WebException] -and $err.Response) {
+            $redirect = Test-PacketRatRedirectStatus $err.Response
+            $status = ' (HTTP ' + [int]$err.Response.StatusCode + ')'
+            try { $err.Response.Close() } catch {}
+        }
+        if ($redirect) { throw 'Fairlead redirected the request, so it was refused.' }
         throw ('Fairlead refused the request' + $status + ': ' + $err.Message)
     }
     $resp = $task.Result
+    if (Test-PacketRatRedirectStatus $resp) {
+        try { $resp.Close() } catch {}
+        throw 'Fairlead redirected the request, so it was refused.'
+    }
     try {
         $stream = $resp.GetResponseStream()
         try {
@@ -657,11 +756,8 @@ function Invoke-PacketRatChat {
         }
     }
 
-    $resp = Invoke-RestMethod -Uri $cfg.Url -Method Post `
-        -Headers $headers `
-        -Body $bytes `
-        -ContentType 'application/json; charset=utf-8' `
-        -TimeoutSec $TimeoutSec
+    $raw = Invoke-PacketRatFairleadPost -Url $cfg.Url -Headers $headers -Body $bytes -Accept 'application/json' -TimeoutSec $TimeoutSec
+    $resp = $raw | ConvertFrom-Json
 
     # Responses may return a string, text block array or content.parts.
     # Avoid casting arrays into "System.Object[]" instead of real report text.
