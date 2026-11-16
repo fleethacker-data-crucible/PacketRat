@@ -44,8 +44,8 @@ When the first argument is an option (for example `PacketRat-CLI.bat -MaxEmails 
 | `log verify` | Check the action log hash chain. Exits 1 and names the first broken line if the log was edited, reordered or cut in the middle. | |
 | `assist brief` | A short spoken-style briefing of the open actions, built from the queue with no AI call (the Bridge panel reads it aloud with a local voice). | |
 | `assist ask` | Ask about the queue. The AI answers from the queue only and may propose actions (dismiss, status, priority); nothing is run, and each proposal comes with the exact command to confirm. | `--question` (required), `--profile` |
-| `voice status` | Whether the local speech-input assets listed in `Config/voice-assets.json` are present and match their SHA-256. Nothing is downloaded or sent. | |
-| `credentials status` | Where AI calls go (Fairlead) and whether a key is available: Credential Manager `Fairlead/PacketRat`, otherwise Fairlead's local token. The key is never shown. | |
+| `voice status` | Whether the local speech-input assets listed in `Config/voice-assets.json` are present and match their SHA-256. The folder is `PACKETRAT_VOICE_DIR` when set, otherwise `%LOCALAPPDATA%\FleetHacker\models\whisper` when that folder exists, otherwise `Web\vendor\voice`. Nothing is downloaded or sent. | |
+| `credentials status` | Where AI calls go (Fairlead) and whether a key is available: Credential Manager `Fairlead/PacketRat`, otherwise Fairlead's local token inside `%LOCALAPPDATA%\Fairlead`. The key is never shown. | |
 | `credentials check` | Check locally that a Fairlead key is available (no AI call, no mail read, the key is never shown). | |
 
 `PacketRat-CLI.bat commands --json` prints the same list as JSON (schema `packetrat.commands/1`), with every option's type, whether it is required, and its allowed values. The browser server answers the same document at `GET /api/commands`.
