@@ -97,9 +97,12 @@ $cfg2=Join-Path $tmp2 'fairlead.json'
 '{"setupComplete":true}' | Set-Content $cfg2
 $names2='PACKETRAT_FAIRLEAD_AUTOSTART','PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_CONFIG','FAIRLEAD_DIR','FLEETPORT_MODULE'
 $saved2=@{};foreach($n in $names2){$saved2[$n]=[Environment]::GetEnvironmentVariable($n)}
+$savedProfile=$env:USERPROFILE
 function Test-PacketRatFairleadUp { param([Uri]$Uri) return [bool]$script:Up2 }
 try{
     foreach($n in $names2){[Environment]::SetEnvironmentVariable($n,$null)}
+    $env:USERPROFILE=Join-Path $tmp2 'home'
+    [void](New-Item -ItemType Directory -Path $env:USERPROFILE -Force)
     $env:PACKETRAT_FAIRLEAD_CONFIG=$cfg2
     $env:FAIRLEAD_DIR=(Resolve-Path $fair2).Path
     $script:FleetCalls=@()
@@ -120,21 +123,28 @@ try{
     $r=Ensure-PacketRatFairlead -Root $Root -WaitSeconds 30
     Assert-Router ($r.State -eq 'Failed' -and $r.Message -match 'FleetPort was not found' -and ((Get-Date)-$t0).TotalSeconds -lt 3) 'an unavailable helper fails at once with its own sentence'
 
-    $mod=Join-Path $tmp2 'FleetPort.psm1'
+    $evil=Join-Path $tmp2 'not-fleetport.psm1'
     @'
-function Start-FleetService { param([Parameter(Mandatory)][string]$Name,[string]$Folder,[int]$WaitSeconds=0) return @{ State='running'; Name=$Name; Folder=$Folder; Wait=$WaitSeconds } }
+$global:PacketRatFleetPortEvil = $true
+function Start-FleetService { param([Parameter(Mandatory)][string]$Name,[string]$Folder,[int]$WaitSeconds=0) return @{ State='running'; Name='evil' } }
 Export-ModuleMember -Function Start-FleetService
-'@ | Set-Content -LiteralPath $mod -Encoding UTF8
-    $env:FLEETPORT_MODULE=$mod
-    Assert-Router ((Get-PacketRatFleetPortModule -Root $Root) -eq (Resolve-Path $mod).Path) 'FLEETPORT_MODULE is the module that is imported'
+'@ | Set-Content -LiteralPath $evil -Encoding UTF8
+    $env:FLEETPORT_MODULE=$evil
+    $global:PacketRatFleetPortEvil=$false
+    $isolated=Join-Path $tmp2 'PacketRat'
+    [void](New-Item -ItemType Directory -Path $isolated -Force)
+    Assert-Router ($null -eq (Get-PacketRatFleetPortModule -Root $isolated)) 'FLEETPORT_MODULE cannot name a file outside edge-ops'
     . (Join-Path $Root 'Private\PacketRatRouter.ps1')
+    $script:PacketRatFleetPortRoot=$isolated
     $called=& $script:PacketRatFleetServiceStart -Name 'fairlead' -Folder (Resolve-Path $fair2).Path -WaitSeconds 0
-    Assert-Router ($called.State -eq 'running' -and $called.Name -eq 'fairlead' -and $called.Folder -eq (Resolve-Path $fair2).Path) 'the real starter imports FleetPort and calls Start-FleetService'
+    Assert-Router ($called.State -eq 'unavailable' -and -not $global:PacketRatFleetPortEvil) 'an arbitrary module is not imported into the process that holds the key'
 
     $src=[IO.File]::ReadAllText((Join-Path $Root 'Private\PacketRatRouter.ps1'))
     Assert-Router ($src -match 'Start-FleetService' -and $src -notmatch '--console' -and $src -notmatch '--no-tray' -and $src -notmatch "FilePath 'powershell.exe'") 'the router source no longer starts a console copy of Fairlead'
 }finally{
     foreach($n in $names2){[Environment]::SetEnvironmentVariable($n,$saved2[$n])}
+    $env:USERPROFILE=$savedProfile
+    Remove-Module FleetPort -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $tmp2 -Recurse -Force -ErrorAction SilentlyContinue
 }
 'Router tests passed.'

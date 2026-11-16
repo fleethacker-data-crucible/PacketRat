@@ -8,7 +8,8 @@
 # The start itself is FleetPort's Start-FleetService -Name fairlead: hidden, with Fairlead's tray,
 # and it keeps running after PacketRat exits. PacketRat does not launch Fairlead's script itself.
 # PACKETRAT_FAIRLEAD_AUTOSTART=off turns this off. FAIRLEAD_DIR names the Fairlead folder when it is not a sibling.
-# FLEETPORT_MODULE names FleetPort.psm1 when edge-ops is not a sibling and not under Projects.
+# FLEETPORT_MODULE may name FleetPort.psm1 only when that file is the edge-ops copy next to PacketRat
+# or under %USERPROFILE%\Projects. Any other path is ignored.
 
 function Get-PacketRatFairleadDir {
     param([string]$Root)
@@ -63,18 +64,51 @@ function Show-PacketRatFairleadChoice {
     switch ($r) { 'Yes' { 'use' } 'No' { 'reconfigure' } default { 'cancel' } }
 }
 
-function Get-PacketRatFleetPortModule {
-    # FleetPort.psm1 from edge-ops. FLEETPORT_MODULE wins, then a sibling edge-ops, then Projects\edge-ops.
+function Resolve-PacketRatFleetPortPath {
+    # A full path with . and .. removed, or ''. The file does not have to exist. A link is not followed.
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
+    try { return [IO.Path]::GetFullPath($Path.Trim()) } catch { return '' }
+}
+
+function Get-PacketRatFleetPortAllowedPaths {
+    # The only files PacketRat will load: edge-ops\tools\fleet-port\FleetPort.psm1 beside this repo, or under Projects.
     param([string]$Root)
-    if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
+    $paths = @()
+    $parent = Split-Path $Root -Parent
+    if ($parent) { $paths += (Join-Path $parent 'edge-ops\tools\fleet-port\FleetPort.psm1') }
+    if ($env:USERPROFILE) { $paths += (Join-Path $env:USERPROFILE 'Projects\edge-ops\tools\fleet-port\FleetPort.psm1') }
+    return @($paths)
+}
+
+# Tests set this to a fake PacketRat folder. Production leaves it empty, so the search starts at this repo.
+$script:PacketRatFleetPortRoot = $null
+
+function Get-PacketRatFleetPortModule {
+    # $null unless the file is one of the two allowed FleetPort.psm1 paths. FLEETPORT_MODULE cannot name any other file.
+    param([string]$Root)
+    if (-not $Root) {
+        if ($script:PacketRatFleetPortRoot) { $Root = [string]$script:PacketRatFleetPortRoot }
+        else { $Root = Split-Path $PSScriptRoot -Parent }
+    }
+    $allowed = @()
+    foreach ($p in @(Get-PacketRatFleetPortAllowedPaths -Root $Root)) {
+        $full = Resolve-PacketRatFleetPortPath $p
+        if ($full) { $allowed += $full }
+    }
     $cands = @()
     $named = [Environment]::GetEnvironmentVariable('FLEETPORT_MODULE')
     if ($named) { $cands += $named }
-    $parent = Split-Path $Root -Parent
-    if ($parent) { $cands += (Join-Path $parent 'edge-ops\tools\fleet-port\FleetPort.psm1') }
-    if ($env:USERPROFILE) { $cands += (Join-Path $env:USERPROFILE 'Projects\edge-ops\tools\fleet-port\FleetPort.psm1') }
+    foreach ($p in $allowed) { $cands += $p }
     foreach ($c in $cands) {
-        if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { return (Resolve-Path -LiteralPath $c).Path }
+        $full = Resolve-PacketRatFleetPortPath $c
+        if (-not $full) { continue }
+        $ok = $false
+        foreach ($a in $allowed) {
+            if ([string]::Equals($full, $a, [StringComparison]::OrdinalIgnoreCase)) { $ok = $true; break }
+        }
+        if (-not $ok) { continue }
+        if (Test-Path -LiteralPath $full -PathType Leaf) { return $full }
     }
     return $null
 }
@@ -84,9 +118,9 @@ $script:PacketRatFleetServiceStart = {
     param([string]$Name, [string]$Folder, [int]$WaitSeconds)
     $mod = Get-PacketRatFleetPortModule
     if (-not $mod) {
-        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat, or set FLEETPORT_MODULE to tools\fleet-port\FleetPort.psm1.' }
+        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat, or under Projects.' }
     }
-    Import-Module -Name $mod -ErrorAction Stop
+    Import-Module -Name $mod -Force -ErrorAction Stop
     return (Start-FleetService -Name $Name -Folder $Folder -WaitSeconds $WaitSeconds)
 }
 
