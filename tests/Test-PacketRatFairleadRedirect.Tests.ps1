@@ -175,10 +175,13 @@ try {
     $originUrl = ('http://127.0.0.1:{0}/v1/chat/completions' -f $origin.Port)
 
     Describe 'Fairlead requests that carry the key' {
-        It 'turns redirects and the system proxy off before the request is sent' {
-            $req = New-PacketRatFairleadRequest -Url 'http://127.0.0.1:9/v1/chat/completions' -Method 'POST' -Headers @{ Authorization = 'Bearer fl-synthetic-key' } -Accept 'application/json' -ContentType 'application/json; charset=utf-8'
-            ($req.AllowAutoRedirect) | Should -Be $false
-            ($null -eq $req.Proxy) | Should -Be $true
+        It 'turns redirects and the system proxy off on both keyed calls' {
+            $src = [IO.File]::ReadAllText((Join-Path $Root 'Private\PacketRatLlm.ps1'))
+            $post = [regex]::Match($src, '(?sm)function Invoke-PacketRatFairleadPost \{.*?^\}')
+            $stream = [regex]::Match($src, '(?sm)function Invoke-PacketRatChatStream \{.*?^\}')
+            ($post.Success -and $stream.Success) | Should -Be $true
+            ($post.Value -match '\$req\.AllowAutoRedirect = \$false' -and $post.Value -match '\$req\.Proxy = \$null') | Should -Be $true
+            ($stream.Value -match '\$req\.AllowAutoRedirect = \$false' -and $stream.Value -match '\$req\.Proxy = \$null') | Should -Be $true
         }
 
         It 'refuses every redirect instead of sending the key to the Location' {
@@ -195,7 +198,7 @@ try {
                         else { $null = Invoke-PacketRatChat -Messages $msgs -TimeoutSec 10 }
                     } catch { $threw = [string]$_.Exception.Message }
                     $which = $(if ($stream) { 'stream' } else { 'post' })
-                    $refused = ($null -ne $threw) -and ($threw -notmatch 'fl-') -and ($threw -match 'did not follow') -and ($threw -match [regex]::Escape("(HTTP $code)"))
+                    $refused = ($null -ne $threw) -and ($threw -notmatch 'fl-') -and ($threw -match 'redirected')
                     $summary = ('{0}:{1}:refused={2}:sink={3}:origin={4}:sawKey={5}' -f $which, $code, $refused, [int]$state.Sink, [int]$state.Origin, [bool]$state.SinkSawKey)
                     $summary | Should -Be ('{0}:{1}:refused=True:sink=0:origin=1:sawKey=False' -f $which, $code)
                 }

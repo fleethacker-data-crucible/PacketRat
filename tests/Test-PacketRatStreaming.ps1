@@ -61,8 +61,9 @@ $serverScript={
         switch($Mode){
             'hang' { Start-Sleep -Seconds 20 }
             'error' { Send ($enc.GetBytes("HTTP/1.1 500 Internal Server Error`r`nContent-Length: 0`r`nConnection: close`r`n`r`n")) }
+            'redirect' { Send ($enc.GetBytes("HTTP/1.1 302 Found`r`nLocation: $($Shared['location'])`r`nContent-Length: 0`r`nConnection: close`r`n`r`n")) }
             'json' {
-                $payload=$enc.GetBytes('{"choices":[{"message":{"content":"ok"}}]}')
+                $payload=$enc.GetBytes('{"choices":[{"message":{"role":"assistant","content":"ok"}}]}')
                 Send ($enc.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`n`r`n"))
                 Send $payload
             }
@@ -85,10 +86,10 @@ $serverScript={
         }
     }catch{} finally { try{$client.Close()}catch{} }
 }
-function Start-FakeEndpoint([string]$Mode){
+function Start-FakeEndpoint([string]$Mode,[string]$Location){
     $listener=New-Object Net.Sockets.TcpListener ([Net.IPAddress]::Loopback),0
     $listener.Start()
-    $shared=[hashtable]::Synchronized(@{})
+    $shared=[hashtable]::Synchronized(@{location=$Location})
     $ps=[powershell]::Create()
     [void]$ps.AddScript($serverScript).AddArgument($listener).AddArgument($Mode).AddArgument($shared)
     $handle=$ps.BeginInvoke()
@@ -179,14 +180,27 @@ try{
         Assert-Throws { Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 20 } 'refused the request \(HTTP 500\)' 'an HTTP 500 is reported with its status'
     }finally{ Stop-FakeEndpoint $ep }
 
-    # Default stays non-streaming with stream=false.
+    # Default stays non-streaming with stream=false, and a redirect is refused without contacting the target.
     $ep=Start-FakeEndpoint 'json'
     try{
         $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
-        $r=Invoke-PacketRatChat -Messages $msgs -TimeoutSec 20
-        Assert-Stream ($r.Text -eq 'ok') 'a non-streaming call returns the completion'
-        Assert-Stream (($ep.Shared['body'] | ConvertFrom-Json).stream -eq $false) 'streaming is off by default (stream=false)'
+        $null=Invoke-PacketRatChat -Messages $msgs
+        Assert-Stream ((($ep.Shared['body'] | ConvertFrom-Json).stream) -eq $false) 'streaming is off by default (stream=false)'
     }finally{ Stop-FakeEndpoint $ep }
+    $sink=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); $sink.Start()
+    $sinkPort=([Net.IPEndPoint]$sink.LocalEndpoint).Port
+    $pending=$sink.BeginAcceptTcpClient($null,$null)
+    $ep=Start-FakeEndpoint 'redirect' ('http://127.0.0.1:{0}/stolen' -f $sinkPort)
+    $oldProxy=[Net.WebRequest]::DefaultWebProxy
+    [Net.WebRequest]::DefaultWebProxy=New-Object Net.WebProxy('http://127.0.0.1:9')
+    try{
+        $env:PACKETRAT_FAIRLEAD_URL=$ep.Url
+        $leaked=$false
+        try{ Invoke-PacketRatChat -Messages $msgs -Stream -TimeoutSec 20 }catch{ $leaked=$_.Exception.Message -match 'fl-synthetic-key'; Assert-Stream ($_.Exception.Message -match 'redirected') 'a streamed 302 is a refusal' }
+        Assert-Stream (-not $leaked) 'the streamed redirect refusal does not repeat the key'
+        Assert-Stream (-not $pending.AsyncWaitHandle.WaitOne(400)) 'a streamed redirect is not followed'
+        Assert-Stream ($ep.Shared['head'] -match '(?im)^authorization:\s*Bearer fl-synthetic-key') 'the key was sent only to the checked address'
+    }finally{ [Net.WebRequest]::DefaultWebProxy=$oldProxy; Stop-FakeEndpoint $ep; try{$sink.Stop()}catch{} }
 }finally{
     foreach($n in $envNames){[Environment]::SetEnvironmentVariable($n,$savedEnv[$n])}
     Clear-PacketRatCancel

@@ -1,7 +1,7 @@
 #requires -Version 5.1
 # Offline tests for the Fairlead client: the address, the route name, the key (Credential Manager, else the local token),
-# the id check before that key is sent, the headers and the error messages. Chat calls hit a loopback stub. The id check
-# in the chat tests is a stand-in; the real check is exercised against a loopback stub at the end. No router runs.
+# the id check before that key is sent, the headers and the error messages. Chat calls hit a loopback stub (no proxy,
+# no redirect). The id check in the chat tests is a stand-in; the real check is exercised against a loopback stub at the end.
 $ErrorActionPreference='Stop'
 $Root=Split-Path $PSScriptRoot -Parent
 foreach($name in @('PacketRatStore','PacketRatLlm')){ . (Join-Path $Root "Private\$name.ps1") }
@@ -21,59 +21,42 @@ $missingToken=Join-Path $tokenDir 'missing-local-token'
 Set-PacketRatLocalTokenPath $missingToken
 $script:IdChecks=0
 Set-PacketRatFairleadIdentity { $script:IdChecks++; $null }
-# A loopback stub records each chat request and answers with a fixed completion. Nothing leaves this PC.
-$wireScript={
+$chatScript={
     param($Listener,$Shared)
     $enc=New-Object System.Text.UTF8Encoding $false
     while($true){
         try{ $client=$Listener.AcceptTcpClient() }catch{ break }
         try{
             $net=$client.GetStream()
-            $net.ReadTimeout=8000
             $buf=New-Object System.Collections.Generic.List[byte]
             $one=New-Object byte[] 1
-            while($true){ if($net.Read($one,0,1) -le 0){break}; $buf.Add($one[0]); if($buf.Count -ge 4 -and $enc.GetString($buf.ToArray()).EndsWith("`r`n`r`n")){break}; if($buf.Count -gt 65536){break} }
+            while($true){ if($net.Read($one,0,1) -le 0){break}; $buf.Add($one[0]); if($buf.Count -ge 4 -and $enc.GetString($buf.ToArray()).EndsWith("`r`n`r`n")){break} }
             $head=$enc.GetString($buf.ToArray())
             $len=0; if($head -match '(?im)^content-length:\s*(\d+)'){$len=[int]$Matches[1]}
-            $bodyBytes=New-Object byte[] $len; $off=0
-            while($off -lt $len){ $r=$net.Read($bodyBytes,$off,$len-$off); if($r -le 0){break}; $off+=$r }
-            $body=$enc.GetString($bodyBytes,0,$off)
-            $headers=New-Object System.Collections.Hashtable
-            foreach($line in ($head -split "`r`n")){ if($line -match '^(?<n>[^:]+):\s*(?<v>.*)$'){ $headers[$Matches.n.Trim()]=$Matches.v.Trim() } }
-            $path='/'; if($head -match '^\S+\s+(\S+)\s+HTTP'){ $path=$Matches[1] }
-            if($path -match '^https?://'){ $uri=$path } else { $uri=('http://' + [string]$headers['Host'] + $path) }
-            $Shared['Last']=@{Uri=$uri;Headers=$headers;Body=$body;Head=$head}
-            $Shared['Count']=1+[int]$Shared['Count']
-            $payload=$enc.GetBytes('{"choices":[{"message":{"role":"assistant","content":"routed"}}]}')
-            $resp=$enc.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/json; charset=utf-8`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`n`r`n")
-            $net.Write($resp,0,$resp.Length); $net.Write($payload,0,$payload.Length); $net.Flush()
+            $body=New-Object byte[] $len; $off=0
+            while($off -lt $len){ $r=$net.Read($body,$off,$len-$off); if($r -le 0){break}; $off+=$r }
+            [void]$Shared['requests'].Add(@{Head=$head;Body=$enc.GetString($body)})
+            if($Shared['mode'] -eq 'redirect'){
+                $code=[int]$Shared['status']; if($code -lt 300){$code=302}
+                $resp=$enc.GetBytes(("HTTP/1.1 $code Redirect`r`nLocation: $($Shared['location'])`r`nContent-Length: 0`r`nConnection: close`r`n`r`n"))
+                $net.Write($resp,0,$resp.Length)
+            }else{
+                $payload=$enc.GetBytes('{"choices":[{"message":{"role":"assistant","content":"routed"}}]}')
+                $resp=$enc.GetBytes("HTTP/1.1 200 OK`r`nContent-Type: application/json`r`nContent-Length: $($payload.Length)`r`nConnection: close`r`n`r`n")
+                $net.Write($resp,0,$resp.Length); $net.Write($payload,0,$payload.Length)
+            }
+            $net.Flush()
         }catch{} finally{ try{$client.Close()}catch{} }
     }
 }
-function Start-WireStub([int]$Port){
-    $listener=New-Object Net.Sockets.TcpListener ([Net.IPAddress]::Loopback),$Port
-    $listener.Start()
-    $shared=[hashtable]::Synchronized(@{Last=$null;Count=0})
-    $ps=[powershell]::Create()
-    [void]$ps.AddScript($wireScript).AddArgument($listener).AddArgument($shared)
-    $handle=$ps.BeginInvoke()
-    $script:WireListener=$listener
-    $script:WireShell=$ps
-    $script:WirePort=[int]([Net.IPEndPoint]$listener.LocalEndpoint).Port
-    return [pscustomobject]@{Listener=$listener;Shell=$ps;Handle=$handle;Shared=$shared;Bound=$script:WirePort}
-}
-function Stop-WireStub($Ep){
-    if($script:WireListener){ try{$script:WireListener.Stop()}catch{} }
-    if($script:WireShell){ try{$script:WireShell.Stop()}catch{}; try{$script:WireShell.Dispose()}catch{} }
-    $script:WireListener=$null
-    $script:WireShell=$null
-}
-$wire=$null
-$onDefaultPort=$true
-try{ $wire=Start-WireStub 8776 }catch{ $onDefaultPort=$false; $wire=Start-WireStub 0 }
-$script:Wire=$wire.Shared
-$wirePort=[int]$script:WirePort
-$wireUrl=('http://127.0.0.1:' + [string]$wirePort + '/v1/chat/completions')
+$chatListener=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
+$chatListener.Start()
+$chatPort=([Net.IPEndPoint]$chatListener.LocalEndpoint).Port
+$chatShared=[hashtable]::Synchronized(@{requests=[System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList));mode='ok';status=302;location='http://127.0.0.1:9/stolen'})
+$chatPs=[powershell]::Create(); [void]$chatPs.AddScript($chatScript).AddArgument($chatListener).AddArgument($chatShared); $chatHandle=$chatPs.BeginInvoke()
+$chatUrl=('http://127.0.0.1:{0}/v1/chat/completions' -f $chatPort)
+function Get-ChatCount { return $chatShared['requests'].Count }
+function Get-ChatLast { $n=$chatShared['requests'].Count; if($n -eq 0){return $null}; return $chatShared['requests'][$n-1] }
 $msgs=@(@{role='user';content='Synthetic prompt.'})
 $script:Asked=@()
 Set-PacketRatCredentialReader { param([string]$Target) $script:Asked+=$Target; 'fl-synthetic-key' }
@@ -81,16 +64,17 @@ try{
     # The default: nothing set, so the call goes to Fairlead on this PC with the auto route and the stored key.
     $cfg=Get-PacketRatFairleadConfig
     Assert-Router ($cfg.Url -eq 'http://127.0.0.1:8776/v1/chat/completions' -and $cfg.Model -eq 'auto' -and $cfg.Privacy -eq '') 'the default address, route and privacy'
-    if(-not $onDefaultPort){ $env:PACKETRAT_FAIRLEAD_URL=$wireUrl }
+    $env:PACKETRAT_FAIRLEAD_URL=$chatUrl
     $r=Invoke-PacketRatChat -Messages $msgs
+    $hit=Get-ChatLast
     Assert-Router ($r.Text -eq 'routed' -and $r.Model -eq 'auto') 'a call returns the text and the route'
-    Assert-Router ($script:Wire.Last.Uri -eq $(if($onDefaultPort){'http://127.0.0.1:8776/v1/chat/completions'}else{$wireUrl})) 'the call goes to Fairlead'
+    Assert-Router ($hit.Head -match 'POST /v1/chat/completions ') 'the call is a chat completion on the configured Fairlead address'
     Assert-Router ($script:Asked[-1] -eq 'Fairlead/PacketRat') 'the key is read from the Fairlead/PacketRat credential'
-    Assert-Router ($script:Wire.Last.Headers['Authorization'] -eq 'Bearer fl-synthetic-key') 'the key is sent as a bearer token'
-    Assert-Router ($script:Wire.Last.Headers['X-Fairlead-Label'] -eq 'PacketRat') 'the app says who it is'
+    Assert-Router ($hit.Head -match '(?im)^authorization:\s*Bearer fl-synthetic-key') 'the key is sent as a bearer token'
+    Assert-Router ($hit.Head -match '(?im)^x-fairlead-label:\s*PacketRat') 'the app says who it is'
     Assert-Router ($script:IdChecks -eq 1) 'the id is checked before the key is sent'
-    Assert-Router (-not $script:Wire.Last.Headers.ContainsKey('X-Fairlead-Privacy')) 'no privacy header unless asked for'
-    $body=$script:Wire.Last.Body | ConvertFrom-Json
+    Assert-Router ($hit.Head -notmatch '(?im)^x-fairlead-privacy:') 'no privacy header unless asked for'
+    $body=$hit.Body | ConvertFrom-Json
     Assert-Router ($body.model -eq 'auto' -and $body.stream -eq $false -and $body.messages[0].content -eq 'Synthetic prompt.') 'the request body asks for the auto route, without streaming'
     Assert-Router ($r.PSObject.Properties['Profile'] -eq $null) 'there is no provider profile in the result'
 
@@ -102,32 +86,31 @@ try{
     # Route, privacy and address overrides.
     $env:PACKETRAT_FAIRLEAD_PRIVACY='local'
     $env:PACKETRAT_FAIRLEAD_MODEL='fast'
-    $env:PACKETRAT_FAIRLEAD_URL='http://localhost:9000/v1/chat/completions/'
-    Assert-Router ((Get-PacketRatFairleadConfig).Url -eq 'http://localhost:9000/v1/chat/completions') 'PACKETRAT_FAIRLEAD_URL overrides the address (trailing slash trimmed)'
-    $env:PACKETRAT_FAIRLEAD_URL=($wireUrl + '/')
+    $env:PACKETRAT_FAIRLEAD_URL=($chatUrl + '/')
     $null=Invoke-PacketRatChat -Messages $msgs
-    Assert-Router ($script:Wire.Last.Headers['X-Fairlead-Privacy'] -eq 'local') 'privacy=local adds the Fairlead header'
-    Assert-Router (($script:Wire.Last.Body | ConvertFrom-Json).model -eq 'fast') 'PACKETRAT_FAIRLEAD_MODEL picks the route'
-    Assert-Router ($script:Wire.Last.Uri -eq $wireUrl) 'the trimmed address is the one the call uses'
+    $hit=Get-ChatLast
+    Assert-Router ($hit.Head -match '(?im)^x-fairlead-privacy:\s*local') 'privacy=local adds the Fairlead header'
+    Assert-Router (($hit.Body | ConvertFrom-Json).model -eq 'fast') 'PACKETRAT_FAIRLEAD_MODEL picks the route'
+    Assert-Router ($hit.Head -match 'POST /v1/chat/completions ') 'PACKETRAT_FAIRLEAD_URL overrides the address (trailing slash trimmed)'
     $null=Invoke-PacketRatChat -Messages $msgs -Model 'smart'
-    Assert-Router (($script:Wire.Last.Body | ConvertFrom-Json).model -eq 'smart') 'an explicit -Model wins for one call'
+    Assert-Router (((Get-ChatLast).Body | ConvertFrom-Json).model -eq 'smart') 'an explicit -Model wins for one call'
 
     # Only an address on this PC is accepted.
     foreach($bad in 'https://fairlead.example.org/v1/chat/completions','http://10.1.2.3:8776/v1/chat/completions','not a url'){
         $env:PACKETRAT_FAIRLEAD_URL=$bad
-        $script:Wire.Last=$null
+        $before=Get-ChatCount
         Assert-Throws { Invoke-PacketRatChat -Messages $msgs } 'on this PC' "a non-loopback address is refused ($bad)"
-        Assert-Router ($null -eq $script:Wire.Last) 'nothing is sent to a refused address'
+        Assert-Router ((Get-ChatCount) -eq $before) 'nothing is sent to a refused address'
     }
-    if($onDefaultPort){ $env:PACKETRAT_FAIRLEAD_URL=$null } else { $env:PACKETRAT_FAIRLEAD_URL=$wireUrl }
+    $env:PACKETRAT_FAIRLEAD_URL=$chatUrl
 
     # No key installed: a plain instruction, and no request at all. There is no environment or vault fallback.
     $env:AI_ENDPOINT_TOKEN='provider-token-should-not-travel'; $env:DATABRICKS_TOKEN='another-provider-token'; $env:FAIRLEAD_TOKEN='not-a-source'
     Set-PacketRatCredentialReader { param([string]$Target) $null }
-    $script:Wire.Last=$null
+    $before=Get-ChatCount
     $checksBefore=$script:IdChecks
     Assert-Throws { Invoke-PacketRatChat -Messages $msgs } 'Open Fairlead and install a key for PacketRat' 'a missing key is explained'
-    Assert-Router ($null -eq $script:Wire.Last) 'nothing is sent without a key'
+    Assert-Router ((Get-ChatCount) -eq $before) 'nothing is sent without a key'
     Assert-Router ($script:IdChecks -eq $checksBefore) 'a missing key does not ask the port who it is'
     $st=Get-PacketRatCredentialStatus
     Assert-Router (-not $st.keyInstalled -and $st.keySource -eq 'none' -and $st.message -match 'install a key for PacketRat') 'status says the key is missing'
@@ -142,12 +125,12 @@ try{
     $st=Get-PacketRatCredentialStatus
     Assert-Router ($st.keyInstalled -and $st.keySource -eq 'local-token' -and $st.message -match 'local token') 'a local token counts as a key when Credential Manager has none'
     Assert-Router (((ConvertTo-Json -InputObject $st -Depth 4)) -notmatch [regex]::Escape($localKey)) 'status never contains the local token'
-    $script:Wire.Last=$null
     $r=Invoke-PacketRatChat -Messages $msgs
-    Assert-Router ($r.Text -eq 'routed' -and $script:Wire.Last.Headers['Authorization'] -eq ('Bearer ' + $localKey) -and $script:Wire.Last.Headers['X-Fairlead-Label'] -eq 'PacketRat') 'the local token is sent as the bearer, with the app label'
+    $hit=Get-ChatLast
+    Assert-Router ($r.Text -eq 'routed' -and $hit.Head -match ('(?im)^authorization:\s*Bearer ' + [regex]::Escape($localKey)) -and $hit.Head -match '(?im)^x-fairlead-label:\s*PacketRat') 'the local token is sent as the bearer, with the app label'
     Set-PacketRatCredentialReader { param([string]$Target) 'fl-from-credential-store' }
     $null=Invoke-PacketRatChat -Messages $msgs
-    Assert-Router ($script:Wire.Last.Headers['Authorization'] -eq 'Bearer fl-from-credential-store') 'an installed credential wins over the local token'
+    Assert-Router ((Get-ChatLast).Head -match '(?im)^authorization:\s*Bearer fl-from-credential-store') 'an installed credential wins over the local token'
     [IO.File]::WriteAllText($tokenFile, "not-a-fairlead-key`n")
     Set-PacketRatCredentialReader { param([string]$Target) $null }
     Assert-Throws { Get-PacketRatFairleadKey } 'install a key for PacketRat' 'a file that is not a Fairlead client key is not a token'
@@ -158,14 +141,44 @@ try{
     # A failed id check sends nothing, and the error does not repeat the key.
     Set-PacketRatCredentialReader { param([string]$Target) 'fl-synthetic-key' }
     Set-PacketRatFairleadIdentity { 'Something other than Fairlead is answering, so the key was not sent. fl-synthetic-key' }
-    $script:Wire.Last=$null
+    $before=Get-ChatCount
     $leaked=$false; $threwId=$false
     try { Invoke-PacketRatChat -Messages $msgs } catch { $threwId=$true; $leaked = $_.Exception.Message -match 'fl-synthetic-key' }
     Assert-Router ($threwId -and -not $leaked) 'a failed id check refuses the call and does not repeat the key'
-    Assert-Router ($null -eq $script:Wire.Last) 'nothing is sent when the id check fails'
+    Assert-Router ((Get-ChatCount) -eq $before) 'nothing is sent when the id check fails'
+
+    # A keyed call does not follow a redirect or use the system proxy.
+    Set-PacketRatFairleadIdentity { $null }
+    $sink=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); $sink.Start()
+    $sinkPort=([Net.IPEndPoint]$sink.LocalEndpoint).Port
+    $pending=$sink.BeginAcceptTcpClient($null,$null)
+    $chatShared['mode']='redirect'; $chatShared['status']=302; $chatShared['location']=('http://127.0.0.1:{0}/stolen' -f $sinkPort)
+    $oldProxy=[Net.WebRequest]::DefaultWebProxy
+    [Net.WebRequest]::DefaultWebProxy=New-Object Net.WebProxy('http://127.0.0.1:9')
+    $redirected=$false; $leaked=$false
+    try{
+        try{ Invoke-PacketRatChat -Messages $msgs }catch{ $redirected=$true; $leaked=$_.Exception.Message -match 'fl-synthetic-key'; Assert-Router ($_.Exception.Message -match 'redirected') 'a 302 is a refusal' }
+        Assert-Router ($redirected -and -not $leaked) 'the redirect refusal does not repeat the key'
+        Assert-Router (-not $pending.AsyncWaitHandle.WaitOne(400)) 'the redirect target is not contacted'
+        $chatShared['status']=307
+        Assert-Throws { Invoke-PacketRatChat -Messages $msgs } 'redirected' 'a 307 is a refusal and the body is not resent'
+        Assert-Router (-not $pending.AsyncWaitHandle.WaitOne(200)) 'the 307 target is not contacted'
+    }finally{
+        $chatShared['mode']='ok'
+        [Net.WebRequest]::DefaultWebProxy=$oldProxy
+        try{$sink.Stop()}catch{}
+    }
+    $before=Get-ChatCount
+    [Net.WebRequest]::DefaultWebProxy=New-Object Net.WebProxy('http://127.0.0.1:9')
+    try{
+        $r=Invoke-PacketRatChat -Messages $msgs
+        Assert-Router ($r.Text -eq 'routed' -and (Get-ChatCount) -eq ($before+1)) 'a dead system proxy is not used for the keyed call'
+    }finally{ [Net.WebRequest]::DefaultWebProxy=$oldProxy }
     $env:AI_ENDPOINT_TOKEN=$null; $env:DATABRICKS_TOKEN=$null; $env:FAIRLEAD_TOKEN=$null
 }finally{
-    Stop-WireStub $wire
+    try{$chatListener.Stop()}catch{}
+    try{$chatPs.Stop()}catch{}
+    try{$chatPs.Dispose()}catch{}
     foreach($n in $envNames){[Environment]::SetEnvironmentVariable($n,$savedEnv[$n])}
     Set-PacketRatLocalTokenPath $null
     Remove-Item -LiteralPath $tokenDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -182,12 +195,21 @@ Assert-Router ((ConvertFrom-PacketRatCredentialBlob -Blob $null) -eq '') 'no blo
 Assert-Router ((ConvertTo-PacketRatNormalPath 'C:\Fleet\Fairlead\scripts\..\scripts\Start-Fairlead.ps1') -eq 'C:\Fleet\Fairlead\scripts\Start-Fairlead.ps1') 'a Windows path is normalized'
 Assert-Router ((ConvertTo-PacketRatNormalPath 'relative\Start-Fairlead.ps1') -eq '') 'a relative path is not a path'
 Assert-Router ((ConvertTo-PacketRatNormalPath '\\files\share\Fairlead\scripts\Start-Fairlead.ps1') -eq '\\files\share\Fairlead\scripts\Start-Fairlead.ps1') 'a UNC path is kept'
+Assert-Router ((Get-PacketRatIdHost ([Uri]'http://[::1]:8776/v1/chat/completions')) -eq '[::1]') 'an IPv6 loopback host is bracketed once'
+Assert-Router ((Get-PacketRatIdHost ([Uri]'http://127.0.0.1:8776/v1/chat/completions')) -eq '127.0.0.1') 'an IPv4 loopback host is unchanged'
 
 $savedTokenEnv=[Environment]::GetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE')
+$savedLocal=$env:LOCALAPPDATA
 Set-PacketRatLocalTokenPath $null
+$env:LOCALAPPDATA='C:\Users\me\AppData\Local'
+[Environment]::SetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE','C:\Users\me\AppData\Local\Fairlead\moved-token')
+Assert-Router ((Get-PacketRatFairleadLocalTokenPath) -eq 'C:\Users\me\AppData\Local\Fairlead\moved-token') 'FAIRLEAD_LOCAL_TOKEN_FILE is used when it stays inside the Fairlead folder'
+[Environment]::SetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE','C:\Users\me\AppData\Local\Fairlead\..\Outside\token')
+Assert-Router ((Get-PacketRatFairleadLocalTokenPath) -eq 'C:\Users\me\AppData\Local\Fairlead\local-token') 'a token path that leaves the Fairlead folder is ignored'
 [Environment]::SetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE','C:\Fleet\moved-local-token')
-Assert-Router ((Get-PacketRatFairleadLocalTokenPath) -eq 'C:\Fleet\moved-local-token') 'FAIRLEAD_LOCAL_TOKEN_FILE names the local token file'
+Assert-Router ((Get-PacketRatFairleadLocalTokenPath) -eq 'C:\Users\me\AppData\Local\Fairlead\local-token') 'a token path outside %LOCALAPPDATA%\Fairlead is ignored'
 [Environment]::SetEnvironmentVariable('FAIRLEAD_LOCAL_TOKEN_FILE',$savedTokenEnv)
+if($null -eq $savedLocal){ Remove-Item Env:LOCALAPPDATA -ErrorAction SilentlyContinue } else { $env:LOCALAPPDATA=$savedLocal }
 Set-PacketRatLocalTokenPath 'C:\Fleet\pinned-by-test'
 Assert-Router ((Get-PacketRatFairleadLocalTokenPath) -eq 'C:\Fleet\pinned-by-test') 'a test path overrides the real local token file'
 Set-PacketRatLocalTokenPath $null
