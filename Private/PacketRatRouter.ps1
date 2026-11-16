@@ -8,7 +8,8 @@
 # The start itself is FleetPort's Start-FleetService -Name fairlead: hidden, with Fairlead's tray,
 # and it keeps running after PacketRat exits. PacketRat does not launch Fairlead's script itself.
 # PACKETRAT_FAIRLEAD_AUTOSTART=off turns this off. FAIRLEAD_DIR names the Fairlead folder when it is not a sibling.
-# FLEETPORT_MODULE names FleetPort.psm1 when edge-ops is not a sibling and not under Projects.
+# FLEETPORT_MODULE is used only when it resolves to edge-ops\tools\fleet-port\FleetPort.psm1
+# under a sibling edge-ops folder or %USERPROFILE%\Projects\edge-ops.
 
 function Get-PacketRatFairleadDir {
     param([string]$Root)
@@ -63,19 +64,41 @@ function Show-PacketRatFairleadChoice {
     switch ($r) { 'Yes' { 'use' } 'No' { 'reconfigure' } default { 'cancel' } }
 }
 
+function Get-PacketRatFleetPortFile {
+    # edge-ops\tools\fleet-port\FleetPort.psm1 under one fixed root.
+    param([string]$EdgeRoot)
+    $path = $EdgeRoot
+    foreach ($part in @('tools', 'fleet-port', 'FleetPort.psm1')) { $path = Join-Path $path $part }
+    return $path
+}
+
 function Get-PacketRatFleetPortModule {
-    # FleetPort.psm1 from edge-ops. FLEETPORT_MODULE wins, then a sibling edge-ops, then Projects\edge-ops.
+    # The FleetPort module from a sibling edge-ops folder or %USERPROFILE%\Projects\edge-ops.
+    # FLEETPORT_MODULE is accepted only when it resolves to that same file. Any other path is refused.
     param([string]$Root)
     if (-not $Root) { $Root = Split-Path $PSScriptRoot -Parent }
-    $cands = @()
-    $named = [Environment]::GetEnvironmentVariable('FLEETPORT_MODULE')
-    if ($named) { $cands += $named }
+    $allowed = @()
+    $roots = @()
     $parent = Split-Path $Root -Parent
-    if ($parent) { $cands += (Join-Path $parent 'edge-ops\tools\fleet-port\FleetPort.psm1') }
-    if ($env:USERPROFILE) { $cands += (Join-Path $env:USERPROFILE 'Projects\edge-ops\tools\fleet-port\FleetPort.psm1') }
-    foreach ($c in $cands) {
-        if ($c -and (Test-Path -LiteralPath $c -PathType Leaf)) { return (Resolve-Path -LiteralPath $c).Path }
+    if ($parent) { $roots += (Join-Path $parent 'edge-ops') }
+    if ($env:USERPROFILE) { $roots += (Join-Path $env:USERPROFILE 'Projects\edge-ops') }
+    foreach ($edge in $roots) {
+        $candidate = Get-PacketRatFleetPortFile -EdgeRoot $edge
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            $allowed += (Resolve-Path -LiteralPath $candidate).Path
+        }
     }
+    $named = [Environment]::GetEnvironmentVariable('FLEETPORT_MODULE')
+    if (-not [string]::IsNullOrWhiteSpace($named)) {
+        $named = $named.Trim()
+        if (-not (Test-Path -LiteralPath $named -PathType Leaf)) { return $null }
+        $resolved = (Resolve-Path -LiteralPath $named).Path
+        foreach ($ok in $allowed) {
+            if ([string]::Equals($resolved, $ok, [StringComparison]::OrdinalIgnoreCase)) { return $ok }
+        }
+        return $null
+    }
+    if ($allowed.Count -gt 0) { return $allowed[0] }
     return $null
 }
 
@@ -84,9 +107,9 @@ $script:PacketRatFleetServiceStart = {
     param([string]$Name, [string]$Folder, [int]$WaitSeconds)
     $mod = Get-PacketRatFleetPortModule
     if (-not $mod) {
-        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat, or set FLEETPORT_MODULE to tools\fleet-port\FleetPort.psm1.' }
+        return @{ State = 'unavailable'; Reason = 'not-found'; Message = 'FleetPort was not found, so Fairlead was not started. Put edge-ops next to PacketRat or in %USERPROFILE%\Projects\edge-ops.' }
     }
-    Import-Module -Name $mod -ErrorAction Stop
+    Import-Module -Name $mod -Force -ErrorAction Stop
     return (Start-FleetService -Name $Name -Folder $Folder -WaitSeconds $WaitSeconds)
 }
 
