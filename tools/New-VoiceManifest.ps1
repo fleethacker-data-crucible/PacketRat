@@ -12,7 +12,7 @@
   is sent anywhere. Entries of the part you did not pass are kept.
 .EXAMPLE
   .\tools\New-VoiceManifest.ps1 -TalkForgeAssets C:\Users\me\Projects\TalkForge\assets -Model en_US-lessac-high
-  .\tools\New-VoiceManifest.ps1 -VoiceInputDir .\Web\vendor\voice
+  .\tools\New-VoiceManifest.ps1 -VoiceInputDir "$env:LOCALAPPDATA\FleetHacker\models\whisper"
 #>
 param(
     [string]$TalkForgeAssets,
