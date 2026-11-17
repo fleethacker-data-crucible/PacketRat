@@ -28,7 +28,7 @@ One page for a security or workstation reviewer: what PacketRat is, what it touc
 | Microsoft Graph | Only with the Graph provider selected | Mail read through the signed-in account's Graph modules (scopes Mail.Read, Mail.ReadWrite, User.Read), which needs the organization's authorization. |
 | Anywhere else | Never | No telemetry, no usage data, no update check. The counts stay in the local store. |
 
-Credentials: PacketRat holds one credential, its own Fairlead key, in Windows Credential Manager (`Fairlead/PacketRat`), which Fairlead writes. A key is never taken on a command line, never saved from the browser and never returned by an API.
+Credentials: PacketRat's Fairlead key comes from Windows Credential Manager (`Fairlead/PacketRat`) when Fairlead has installed one, and otherwise from the first line of Fairlead's local token (`%LOCALAPPDATA%\Fairlead\local-token`, or `FAIRLEAD_LOCAL_TOKEN_FILE` when that is set). The key is sent only after `GET /__fleethacker/id` on that same loopback address names Fairlead, the reported pid holds the port, and the reported path is that process. A key is never taken on a command line, never saved from the browser and never returned by an API.
 
 ## What is proven and what is not
 

@@ -46,6 +46,8 @@ $envNames=@('PACKETRAT_FAIRLEAD_URL','PACKETRAT_FAIRLEAD_MODEL','PACKETRAT_FAIRL
 $savedEnv=@{};foreach($n in $envNames){$savedEnv[$n]=[Environment]::GetEnvironmentVariable($n);[Environment]::SetEnvironmentVariable($n,$null)}
 $msgs=@(@{role='user';content='Synthetic prompt for the router.'})
 Set-PacketRatCredentialReader { param([string]$Target) 'fl-synthetic-key' }
+Set-PacketRatLocalTokenPath (Join-Path ([IO.Path]::GetTempPath()) ('packetrat-no-token-'+[guid]::NewGuid().ToString('N')))
+Set-PacketRatFairleadIdentity { $null }
 $fake=$null
 try{
     $onDefaultPort=$true
